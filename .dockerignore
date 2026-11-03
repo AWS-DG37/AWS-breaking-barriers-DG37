@@ -1,0 +1,12 @@
+.git
+.venv
+.aws-sam
+.env
+__pycache__
+.DS_Store
+outputs
+tests
+docs/*.docx
+docs/participant-pack/spreadsheets
+docs/participant-pack/data/insights*
+docs/participant-pack/data/golden*

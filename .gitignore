@@ -10,3 +10,9 @@ __pycache__/
 build/
 dist/
 outputs/
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/farmerchat-mel.iml
+/.idea/modules.xml
+/.idea/vcs.xml
