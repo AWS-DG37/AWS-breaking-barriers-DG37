@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MEL Survey Agent System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the system figure breaks wider and scrolls on its own at phone width. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #1c2331;
+  --muted: #596273;
+  --line: #cdd2db;
+  --dg: #2d5a87;
+  --dg-tint: #e5edf6;
+  --team: #a87600;
+  --team-tint: #fcf1d2;
+  --oos: #858c99;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+    --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --oos: #7f8796;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+  --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --oos: #7f8796;
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+.wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 40px;
+}
+.col { max-width: 760px; min-width: 0; }
+header { display: grid; gap: 10px; }
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1, h2 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; }
+h2 { font-size: 22px; font-weight: 600; }
+p { margin: 0; }
+.lede { font-size: 18px; color: var(--ink); max-width: 66ch; }
+section { display: grid; gap: 14px; }
+section > p, section li { max-width: 68ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 14px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.sw.dg { background: var(--dg-tint); border-color: var(--dg); }
+.sw.team { background: var(--team-tint); border-color: var(--team); }
+.sw.oos { background: transparent; border-color: var(--oos); border-style: dashed; }
+
+figure { margin: 0; display: grid; gap: 12px; min-width: 0; }
+.scroll {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.scroll svg { display: block; width: 100%; min-width: 960px; height: auto; color: var(--ink); }
+figcaption { font-size: 14px; color: var(--muted); max-width: 80ch; }
+
+/* SVG classes, all from tokens so both themes read */
+.b-dg { fill: var(--dg-tint); stroke: var(--dg); stroke-width: 1.5; }
+.b-team { fill: var(--team-tint); stroke: var(--team); stroke-width: 1.5; }
+.b-team-in { fill: var(--surface); stroke: var(--team); stroke-width: 1.2; }
+.b-oos { fill: none; stroke: var(--oos); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.b-oos-in { fill: none; stroke: var(--oos); stroke-width: 1; }
+.t-h { font-family: var(--f-display); font-weight: 600; font-size: 15px; fill: var(--ink); }
+.t-b { font-family: var(--f-body); font-size: 13px; fill: var(--ink); }
+.t-s { font-family: var(--f-body); font-size: 12px; fill: var(--muted); }
+.t-m { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+.t-lab { font-family: var(--f-mono); font-size: 11px; fill: var(--ink); }
+.t-oos { font-family: var(--f-body); font-size: 12px; fill: var(--oos); }
+.w { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.w-dash { fill: none; stroke: var(--oos); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.w-dot { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 2 4; stroke-linecap: round; }
+.ah { fill: var(--ink); }
+.ah-m { fill: var(--oos); }
+
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.tbl { overflow-x: auto; min-width: 0; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+td:first-child { white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; text-align: right; padding-right: 16px; }
+
+.rules { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 10px 20px; margin: 0; }
+.rules dt { font-weight: 600; }
+.rules dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) {
+  .rules { grid-template-columns: 1fr; gap: 2px; }
+  .rules dd { margin-bottom: 10px; }
+}
+blockquote {
+  margin: 0;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--team);
+  color: var(--muted);
+  font-style: italic;
+}
+ul, ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.pill {
+  display: inline-block; font-family: var(--f-mono); font-size: 12px;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+}
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="col">
+    <div class="eyebrow">Digital Green · FarmerChat · AWS Breaking Barriers 2026</div>
+    <h1>MEL Survey Agent</h1>
+    <p class="lede">The agent reads what FarmerChat learned from a farmer's conversation. It decides if the advice needs a follow-up, writes a short tap-answer survey in the farmer's language, and hands it to a scheduler. Then the team simulates how the farmer answers, failures included.</p>
+  </header>
+
+  <figure>
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw dg"></i>Digital Green provides or receives</span>
+      <span><i class="sw team"></i>The team builds</span>
+      <span><i class="sw oos"></i>Out of scope: real delivery</span>
+    </div>
+    <div class="scroll">
+      <svg viewBox="0 0 1190 720" role="img" aria-label="System diagram. Digital Green supplies insights, practice data and rules. The team's agent decides survey or no survey, writes the survey, sets the send window and builds a scheduler hand-off. No-survey records go to Digital Green reports. Real delivery through the scheduler and channels is out of scope, so a team-built simulator stands in for them and writes answer records back to FarmerChat's answer store and follow-up queue.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-m" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- Digital Green provides -->
+        <rect class="b-dg" x="20" y="108" width="230" height="58" rx="6"/>
+        <text class="t-h" x="34" y="132">Insight extractor</text>
+        <text class="t-s" x="34" y="152">one insight per conversation</text>
+
+        <rect class="b-dg" x="20" y="190" width="230" height="200" rx="6"/>
+        <text class="t-h" x="34" y="214">Practice pack</text>
+        <text class="t-s" x="34" y="232">synthetic, version 1</text>
+        <text class="t-lab" x="34" y="260">insights.jsonl</text>
+        <text class="t-s" x="34" y="275">6,999 rows, some junk on purpose</text>
+        <text class="t-lab" x="34" y="299">farmers.csv</text>
+        <text class="t-s" x="34" y="314">300 farmers in Bihar</text>
+        <text class="t-lab" x="34" y="338">crop_calendar_bihar_rabi.csv</text>
+        <text class="t-lab" x="34" y="358">rules.json · outcome_codes.json</text>
+        <text class="t-lab" x="34" y="378">golden_set.jsonl <tspan class="t-s">150 expected</tspan></text>
+
+        <!-- Agent -->
+        <rect class="b-team" x="360" y="50" width="480" height="350" rx="8"/>
+        <text class="t-h" x="380" y="78">MEL survey agent</text>
+        <text class="t-s" x="380" y="96">The brief's jobs, in order. How to build or split them is open.</text>
+
+        <rect class="b-team-in" x="380" y="114" width="270" height="46" rx="5"/>
+        <text class="t-b" x="394" y="135"><tspan font-weight="600">1</tspan>  Decide: survey or no survey</text>
+        <text class="t-s" x="394" y="151">junk rows and general info get none</text>
+
+        <rect class="b-team-in" x="380" y="184" width="270" height="46" rx="5"/>
+        <text class="t-b" x="394" y="205"><tspan font-weight="600">2</tspan>  Write 1 to 3 tap questions</text>
+        <text class="t-s" x="394" y="221">in the farmer's language, no new advice</text>
+
+        <rect class="b-team-in" x="380" y="254" width="270" height="46" rx="5"/>
+        <text class="t-b" x="394" y="275"><tspan font-weight="600">3</tspan>  Set the send window</text>
+        <text class="t-s" x="394" y="291">after the action window, 07:00 to 19:00</text>
+
+        <rect class="b-team-in" x="380" y="324" width="270" height="46" rx="5"/>
+        <text class="t-b" x="394" y="345"><tspan font-weight="600">4</tspan>  Build the scheduler hand-off</text>
+        <text class="t-s" x="394" y="361">channel order, cap, priority, expiry</text>
+
+        <rect class="b-team-in" x="680" y="114" width="150" height="46" rx="5"/>
+        <text class="t-b" x="694" y="135">No survey</text>
+        <text class="t-m" x="694" y="151">no_survey.schema.json</text>
+
+        <!-- step arrows -->
+        <line class="w" x1="515" y1="160" x2="515" y2="182" marker-end="url(#ah)"/>
+        <text class="t-lab" x="524" y="176">yes</text>
+        <line class="w" x1="515" y1="230" x2="515" y2="252" marker-end="url(#ah)"/>
+        <text class="t-lab" x="524" y="246">survey.schema.json</text>
+        <line class="w" x1="515" y1="300" x2="515" y2="322" marker-end="url(#ah)"/>
+        <text class="t-lab" x="524" y="316">send_window</text>
+        <line class="w" x1="650" y1="137" x2="678" y2="137" marker-end="url(#ah)"/>
+        <text class="t-lab" x="656" y="130">no</text>
+
+        <!-- inputs -->
+        <line class="w" x1="250" y1="137" x2="378" y2="137" marker-end="url(#ah)"/>
+        <text class="t-lab" x="314" y="129" text-anchor="middle">insight.schema.json</text>
+        <line class="w" x1="250" y1="290" x2="358" y2="290" marker-end="url(#ah)"/>
+        <text class="t-lab" x="304" y="282" text-anchor="middle">rules + data</text>
+
+        <!-- Out of scope column + reports -->
+        <rect class="b-dg" x="870" y="112" width="300" height="50" rx="6"/>
+        <text class="t-h" x="884" y="134">Reports</text>
+        <text class="t-s" x="884" y="152">why an insight got nothing</text>
+        <line class="w" x1="830" y1="137" x2="868" y2="137" marker-end="url(#ah)"/>
+
+        <rect class="b-oos" x="870" y="200" width="300" height="58" rx="6"/>
+        <text class="t-h" x="884" y="224">Scheduler and broadcaster</text>
+        <text class="t-oos" x="884" y="244">sends inside the window, channel by channel</text>
+
+        <rect class="b-oos" x="870" y="286" width="300" height="110" rx="6"/>
+        <text class="t-h" x="884" y="308">Channels to the farmer</text>
+        <g class="t-s">
+          <rect class="b-oos-in" x="884" y="318" width="56" height="24" rx="12"/><text class="t-s" x="912" y="334" text-anchor="middle">App</text>
+          <rect class="b-oos-in" x="948" y="318" width="84" height="24" rx="12"/><text class="t-s" x="990" y="334" text-anchor="middle">Web chat</text>
+          <rect class="b-oos-in" x="1040" y="318" width="90" height="24" rx="12"/><text class="t-s" x="1085" y="334" text-anchor="middle">WhatsApp</text>
+          <rect class="b-oos-in" x="884" y="348" width="84" height="24" rx="12"/><text class="t-s" x="926" y="364" text-anchor="middle">Telegram</text>
+          <rect class="b-oos-in" x="976" y="348" width="90" height="24" rx="12"/><text class="t-s" x="1021" y="364" text-anchor="middle">Voice call</text>
+        </g>
+        <text class="t-oos" x="884" y="388">real delivery is out of scope</text>
+        <line class="w-dash" x1="1020" y1="258" x2="1020" y2="284" marker-end="url(#ahm)"/>
+        <text class="t-m" x="1028" y="276">channel_order</text>
+
+        <!-- hand-off -->
+        <polyline class="w" points="650,347 850,347 850,229 868,229" marker-end="url(#ah)"/>
+        <text class="t-lab" x="750" y="364" text-anchor="middle">schedule_handoff</text>
+        <text class="t-lab" x="750" y="378" text-anchor="middle">.schema.json</text>
+
+        <!-- simulator -->
+        <rect class="b-team" x="360" y="440" width="480" height="130" rx="8"/>
+        <text class="t-h" x="380" y="466">Answer simulator</text>
+        <text class="t-s" x="380" y="484">stands in for the scheduler, the channels and the farmer</text>
+        <text class="t-b" x="380" y="510">App and web chat show a bottom sheet  <tspan class="t-m">bottom_sheet.schema.json</tspan></text>
+        <text class="t-b" x="380" y="532">Successes: completed, partial, negative outcome</text>
+        <text class="t-b" x="380" y="554">Failures: 20 outcome codes, each with a retry decision</text>
+        <line class="w" x1="515" y1="370" x2="515" y2="438" marker-end="url(#ah)"/>
+        <text class="t-lab" x="524" y="424">same hand-off</text>
+        <polyline class="w-dash" points="1020,396 1020,505 842,505" marker-end="url(#ahm)"/>
+        <text class="t-m" x="1028" y="456">simulated,</text>
+        <text class="t-m" x="1028" y="470">not sent</text>
+
+        <!-- demo -->
+        <rect class="b-team" x="20" y="440" width="230" height="130" rx="8"/>
+        <text class="t-h" x="34" y="466">Demo</text>
+        <text class="t-s" x="34" y="486">shows the surveys and</text>
+        <text class="t-s" x="34" y="502">the simulated answers</text>
+        <text class="t-s" x="34" y="530">The brief says a Streamlit app</text>
+        <text class="t-s" x="34" y="546">or a command-line tool is enough.</text>
+        <line class="w-dot" x1="250" y1="505" x2="358" y2="505" marker-end="url(#ahm)"/>
+        <text class="t-m" x="304" y="497" text-anchor="middle">shows</text>
+
+        <!-- Digital Green receives -->
+        <rect class="b-dg" x="360" y="610" width="230" height="70" rx="6"/>
+        <text class="t-h" x="374" y="636">FarmerChat answer store</text>
+        <text class="t-m" x="374" y="658">/v1/surveys/{flow_id}/responses</text>
+        <rect class="b-dg" x="620" y="610" width="220" height="70" rx="6"/>
+        <text class="t-h" x="634" y="636">FarmerChat follow-up</text>
+        <text class="t-s" x="634" y="656">bad outcomes go back for help</text>
+        <line class="w" x1="475" y1="570" x2="475" y2="608" marker-end="url(#ah)"/>
+        <text class="t-lab" x="484" y="594">response.schema.json</text>
+        <line class="w" x1="730" y1="570" x2="730" y2="608" marker-end="url(#ah)"/>
+        <text class="t-lab" x="739" y="594">needs_follow_up</text>
+      </svg>
+    </div>
+    <figcaption>Each arrow names the schema file in <code>json/schemas/</code> that governs the data it carries. Real delivery is out of scope, so a simulator takes the place of the scheduler, the channels and the farmer, and writes one answer record per attempt. The practice pack stands in for the live insight extractor.</figcaption>
+  </figure>
+
+  <section class="col">
+    <h2>The contract</h2>
+    <p>Five files pass between the parts. The schemas in <code>json/schemas/</code> define each one.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>File</th><th>What it carries</th><th>Written by</th><th>Read by</th></tr></thead>
+        <tbody>
+          <tr><td><code>insight</code></td><td>What the farmer asked and was told</td><td>Insight extractor</td><td>The agent</td></tr>
+          <tr><td><code>survey</code></td><td>One to three tap questions</td><td>The agent</td><td>Scheduler</td></tr>
+          <tr><td><code>no_survey</code></td><td>Why an insight gets nothing</td><td>The agent</td><td>Reports</td></tr>
+          <tr><td><code>schedule_handoff</code></td><td>When, where and how often to send</td><td>The agent</td><td>Scheduler</td></tr>
+          <tr><td><code>response</code></td><td>What one survey attempt produced, success or failure</td><td>The simulator</td><td>Digital Green</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A sixth schema, <code>bottom_sheet</code>, is the suggested way for the app and web chat to show a survey: one question per step, with Skip and Close.</p>
+  </section>
+
+  <section class="col">
+    <h2>Rules the agent starts from</h2>
+    <blockquote>"Use them as the baseline, and improve on them if your evaluation shows a better choice." From the brief, about <code>rules.json</code>.</blockquote>
+    <dl class="rules">
+      <dt>Survey or not</dt>
+      <dd>Direct action, wait and monitor, do not act, plan created and escalate to expert get a survey. General information and unfinished conversations do not. Junk rows get none.</dd>
+      <dt>Survey shape</dt>
+      <dd>One to three questions: pick one, yes or no, or a scale of up to 10 steps. Prompts under 400 characters, two to ten answers, labels of 20 characters or fewer. One file per language. No new advice and no personal information.</dd>
+      <dt>Send window</dt>
+      <dd>Opens after the farmer's action window ends, never on the day of the advice. At least two days wide. Sent only from 07:00 to 19:00 India time. Nothing after 31 March, the end of rabi.</dd>
+      <dt>Channel order</dt>
+      <dd>The farmer's preferred channel, then the channel the check method names, then WhatsApp, then voice for high priority only. Wait 6, 24 or 48 hours between channels for high, normal or low priority.</dd>
+      <dt>Priority</dt>
+      <dd>High for escalate to expert, high or critical severity, or an emergency. Low for plan created and do not act. Normal for the rest.</dd>
+      <dt>Weekly cap</dt>
+      <dd>One survey per farmer per 7 days, across every channel. High priority goes out when the cap is full, and still counts.</dd>
+      <dt>Expiry</dt>
+      <dd>The survey is dropped 2 days after its window closes.</dd>
+    </dl>
+  </section>
+
+  <section class="col">
+    <h2>What one answer attempt can produce</h2>
+    <p>Every simulated attempt writes one record. The record says what happened, what to do next, and if it counts toward the weekly cap. A survey counts once the farmer saw it, answered or not.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Status</th><th class="num">Codes</th><th>For example</th></tr></thead>
+        <tbody>
+          <tr><td>completed, partial, negative_outcome</td><td class="num">3</td><td>Successes. A negative outcome means the advice failed or harm happened, and it goes to follow-up.</td></tr>
+          <tr><td>delivery_failed</td><td class="num">8</td><td>Push address gone, WhatsApp undelivered, bot blocked, no answer, line busy, call dropped</td></tr>
+          <tr><td>declined</td><td class="num">3</td><td>Not now, opted out, sheet dismissed</td></tr>
+          <tr><td>invalid_input</td><td class="num">3</td><td>Typed text instead of a tap, wrong key, speech not understood</td></tr>
+          <tr><td>expired</td><td class="num">2</td><td>No answer before expiry, notification never opened</td></tr>
+          <tr><td>stale</td><td class="num">2</td><td>A tap after the survey closed or was replaced</td></tr>
+          <tr><td>duplicate, identity_mismatch</td><td class="num">2</td><td>A second answer, or an answer from a number that now belongs to another farmer</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Each failure code carries a retry decision: none, retry the same channel, fall back to the next channel, or give up. The full list is in <code>outcome_codes.json</code>.</p>
+  </section>
+
+  <section class="col">
+    <h2>Not decided yet</h2>
+    <p>The brief does not pick these, and this page does not either. The team decides them.</p>
+    <ul>
+      <li>The model and where it runs</li>
+      <li>An agent framework, or none</li>
+      <li>How the four agent jobs split into components</li>
+      <li>How the simulator keeps track of the weekly cap across surveys</li>
+      <li>The demo surface: a Streamlit app or a command-line tool</li>
+      <li>How to evaluate decisions and surveys</li>
+      <li>Hosting and deployment</li>
+    </ul>
+  </section>
+
+  <section class="col">
+    <h2>Out of scope</h2>
+    <p>Real delivery on WhatsApp, Telegram, phone calls or app notifications, and real farmers. All data in the pack is synthetic.</p>
+  </section>
+
+  <footer class="col">Source: Digital Green participant brief, version 1. All data in the pack is synthetic. The pack itself is not in this repo.</footer>
+</div>
+</body>
+</html>
