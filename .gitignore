@@ -1,0 +1,12 @@
+.DS_Store
+.venv/
+.uv-cache/
+.aws-sam/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+.env
+build/
+dist/
+outputs/
