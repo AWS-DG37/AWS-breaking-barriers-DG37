@@ -321,13 +321,36 @@ def main() -> None:
     bundle.add_argument("--config", type=Path, default=Path("config/agent.yaml"))
     bundle.add_argument("--output", type=Path, required=True)
     sub.add_parser("check-model", help="One small Bedrock access check; no database or dataset")
+    evaluation = sub.add_parser("eval", help="Offline evaluation; no model or database calls")
+    evaluation_sub = evaluation.add_subparsers(dest="evaluation_command", required=True)
+    policy = evaluation_sub.add_parser("policy", help="Score the declared held-out policy cases")
+    policy.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
+    policy.add_argument("--split", type=Path, default=Path("eval/prompt_example_split.json"))
+    policy.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
+    policy.add_argument("--output", type=Path, help="New report path; existing files are preserved")
     args = parser.parse_args()
     if args.command == "bundle-config":
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(local_bundle(args.config), indent=2, ensure_ascii=False))
     else:
         try:
-            if args.command == "check-model":
+            if args.command == "eval":
+                from mel.evaluation import score_policy
+
+                settings = Settings(config_path=args.config) if args.config else Settings()
+                report = score_policy(
+                    bundle=Bundle.load(settings), golden_path=args.golden, split_path=args.split,
+                )
+                output = args.output or Path("outputs/eval") / f"policy-{uuid4()}.json"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                with output.open("x") as target:
+                    target.write(report.model_dump_json(indent=2) + "\n")
+                print(json.dumps({
+                    "event": "policy_evaluated", "output": str(output),
+                    "eligibility": report.eligibility.model_dump(),
+                    "legacy_eligibility": report.legacy.eligibility.model_dump(),
+                }))
+            elif args.command == "check-model":
                 asyncio.run(check_model(Settings()))
             elif args.command == "preview":
                 raise SystemExit(asyncio.run(preview(args, Settings())))

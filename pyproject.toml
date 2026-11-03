@@ -29,7 +29,7 @@ dev = ["ruff>=0.11,<1", "cfn-lint>=1,<2", "pytest>=9,<10", "streamlit>=1.66.1,<2
 mel-worker = "mel.worker:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mel"]
+packages = ["src/mel", "dg_agent"]
 
 [tool.ruff]
 target-version = "py312"

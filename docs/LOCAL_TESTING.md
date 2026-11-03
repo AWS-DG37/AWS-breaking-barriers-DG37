@@ -18,6 +18,17 @@ workflow behavior, not real Bedrock availability or question quality. The legacy
 `dg_agent` tests use the same tracked `docs/participant-pack/` contracts as the
 worker, so a fresh checkout needs no separate ignored pack copy.
 
+Run the policy scorecard without credentials, model calls or PostgreSQL:
+
+```bash
+uv run --locked mel-worker eval policy
+```
+
+It prints a new JSON report path under `outputs/eval/`. See the
+[evaluation guide](../eval/README.md) for the dataset checks, separate legacy
+baseline, metric coverage and current disagreements. This is a repository-local
+evaluation path; golden data is deliberately excluded from the Fargate image.
+
 ## Iterate on prompts with real Bedrock
 
 On **macdaddy-laptop**, the workshop credentials are in AWS profile
@@ -90,7 +101,8 @@ configuration, never in the image, committed files or command-line values.
 
 On `ben/evals-and-checks`, after integrating upstream `9ad0578`:
 
-- 251 combined tests passed, including a fresh-checkout schema-validation test.
+- 251 combined tests passed before the offline scorer was added, including a
+  fresh-checkout schema-validation test.
 - Worker/launcher Python lint, deployment shell syntax and CloudFormation lint
   passed. The unchanged documentation builder has 44 pre-existing E501/E741 lint
   findings; those are separate from the worker checks.
@@ -106,3 +118,12 @@ This proves a local integration path, not production delivery or a validated MEL
 quality score. The live worker reported `usage_complete=false`; no token total
 or dollar estimate is inferred from its zero-valued counters. No cloud resources
 were deployed for these checks.
+
+After adding the offline policy scorer, 276 combined tests passed. The scorer
+also ran with a nonexistent AWS profile, reporting 132/138 held-out eligibility
+agreement and the independent 145/150 legacy baseline. Worker/launcher lint and
+the new evaluation tests passed. The scorecard's unassessed quality dimensions
+and unresolved policy/timing diagnostics are documented in the evaluation guide.
+The updated AMD64 image built, printed CLI help, and imported both the scorer
+and retained reference package as user `10001`. No new live inference run was
+needed for this policy-only slice.

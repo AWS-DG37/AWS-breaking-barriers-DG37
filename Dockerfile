@@ -3,6 +3,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
+COPY dg_agent ./dg_agent
 RUN pip install . && useradd --uid 10001 --create-home worker
 COPY config ./config
 COPY prompts ./prompts

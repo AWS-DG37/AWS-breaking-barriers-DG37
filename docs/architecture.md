@@ -35,14 +35,14 @@ AWS_PROFILE=digital-green MEL_AWS_REGION=us-east-1 MEL_DATABASE_SSLMODE=disable 
 Both commands select the first three records by default; `--full` is explicit.
 See [local testing](LOCAL_TESTING.md) for setup and the verified Docker path.
 
-Proposed first addition, not implemented:
+The first evaluation slice is implemented on this branch:
 
 ```bash
 # Offline policy comparison; no model calls or deployment.
-uv run mel-worker eval policy
+uv run --locked mel-worker eval policy
 ```
 
-Its single programmatic entry point would look like this:
+Its single programmatic entry point is:
 
 ```python
 from pathlib import Path
@@ -75,7 +75,8 @@ flowchart LR
     Review -->|reject or fail| Results
     Handoff --> Results
     Handoff --> Outbox[PostgreSQL scheduler outbox]
-    Results -.-> Eval[Proposed offline evaluation]
+    Select -.-> Eval[Offline policy evaluation]
+    Results -.-> FutureEval[Later survey artifact evaluation]
     Holdout[Held-out expectations] -.-> Eval
 ```
 
@@ -92,7 +93,7 @@ simulation and reporting remain separate workstreams.
 | Question content and rationale | `agents.py`, `graph.py`, `models.py` | Models do not assign identity or delivery metadata |
 | Official JSON contracts | `src/mel/contracts.py`, tracked pack schemas | Full validation after generation |
 | Execution, checkpoints and accepted handoffs | `worker.py`, `store.py` | Existing preview/run paths, no third generation loop |
-| Proposed evaluation and expected labels | `src/mel/evaluation/` | Offline scoring; labels never reach agents |
+| Policy evaluation and expected labels | `src/mel/evaluation/` | Offline scoring; labels never reach agents |
 | Legacy regression comparator | `dg_agent`, existing tests | Historical baseline, not another production policy owner |
 
 The public evaluation interface hides case loading, split validation, label
@@ -152,58 +153,22 @@ heuristic. Its own prompt says, “human review is still needed”
 (`prompts/review.txt:57`). Missing human/rubric evidence is `not_assessed`, never
 a pass. Missing usage or role-specific prices means cost is unavailable.
 
-## Proposed type sketch
+## Evaluation contract
 
-These are design declarations, not a new runtime module. Existing `Bundle` and
-worker `Outcome` remain in use; no replacement insight/survey class hierarchy is
-required.
+The implemented Pydantic report types live in `src/mel/evaluation/`. Existing
+`Bundle` and worker `Outcome` remain in use; no replacement insight/survey class
+hierarchy is required. `score_policy(*, bundle, golden_path, split_path)` returns
+a `PolicyReport`:
 
-```python
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Literal
-from pydantic import BaseModel, Field
-from mel.bundle import Bundle
-
-class Assessed(BaseModel):
-    kind: Literal["assessed"] = "assessed"
-    numerator: int = Field(ge=0)
-    denominator: int = Field(gt=0)
-
-class NotAssessed(BaseModel):
-    kind: Literal["not_assessed"] = "not_assessed"
-    reason: str
-
-Measurement = Assessed | NotAssessed
-# No evidence or a zero denominator produces NotAssessed, not a numeric score.
-
-@dataclass(frozen=True)
-class CaseComparison:
-    golden_id: str
-    expected_survey: bool
-    predicted_survey: bool
-    expected_reason: str | None
-    predicted_reason: str | None
-    rule: str
-
-@dataclass(frozen=True)
-class PolicyReport:
-    source_sha256: str
-    split_sha256: str
-    scorer_sha256: str
-    bundle_fingerprint: str
-    eligibility: Measurement
-    reason_agreement: Measurement
-    cases: tuple[CaseComparison, ...]
-
-def score_policy(
-    *, bundle: Bundle, golden_path: Path, split_path: Path,
-) -> PolicyReport:
-    # Verify source/split provenance and exclusions; keep labels private.
-    # Evaluate production policy, with all-case denominators and diagnostics.
-    # Report the legacy comparator under its own dataset/denominator.
-    raise NotImplementedError
-```
+- `Assessed` carries a numerator and a positive denominator; impossible counts
+  are rejected. No evidence or a zero denominator produces `NotAssessed` with a
+  reason, rather than a numeric score.
+- `CaseComparison` preserves each golden ID, rule, raw expected/predicted
+  decision, reason and window, with separate reason/window assessments.
+- `PolicyReport` carries dataset/split/scorer/bundle hashes, confusion counts,
+  per-rule eligibility, reason coverage, unresolved diagnostics and all cases.
+- `LegacyReport` records the independent full-source denominator, reference
+  implementation/rules hashes and disagreement IDs.
 
 Evaluation has its own fingerprint and output artifacts. Scorer edits must not
 invalidate generation resume. The current generation implementation hash scans
@@ -261,9 +226,16 @@ shared null-ID fallbacks can change both resolved roles.
 - Confirm the team's authority for tracked participant-pack distribution before
   any new publication. This proposal adds no copies or participant records.
 
-## Next implementation step
+## Implemented first slice and next boundary
 
-After agreement, add the offline policy scorer over the documented holdout,
-reusing the existing production policy and reference comparator, with tests for
-label isolation, provenance, denominators and unresolved reason mappings. Do not
-change generation acceptance or deploy AWS resources in that first slice.
+The offline policy scorer uses the documented holdout, existing production policy
+and reference comparator. Tests cover provenance, denominators, unresolved reasons,
+offline execution and parity with the actual worker selection boundary. The first
+run reports 132/138 holdout eligibility agreement and the separate historical
+145/150 baseline; see the [evaluation guide](../eval/README.md) for coverage and
+the unresolved policy/timing differences. Generation acceptance is unchanged.
+
+The next slice can score recorded survey artifacts with shared deterministic
+checks and independent MEL/language evidence. It should not add another inference
+loop, silently turn English regex checks into a Hindi-quality gate, or deploy AWS
+resources as part of offline evaluation.

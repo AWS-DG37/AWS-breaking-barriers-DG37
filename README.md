@@ -373,13 +373,18 @@ foundation; this is separate from the current `mel` worker's production policy.
 The current 145/150 golden score measures eligibility only, not question quality.
 
 ```bash
-uv run pytest -q
+uv run --locked pytest -q
+uv run --locked mel-worker eval policy
 ```
 
 The retained reference tests and worker both use `docs/participant-pack/`, so a
 fresh checkout needs no extra ignored copy of the schemas. The original
-`data/pack/` directory remains untouched. Evaluation integration must reconcile
-the legacy all-150 score with the worker's held-out split.
+`data/pack/` directory remains untouched. The offline scorer reports current-worker
+eligibility on the 138-case holdout alongside the independent all-150 reference
+baseline. It writes a new JSON report under `outputs/eval/`, without model or
+database calls. See the [evaluation guide](eval/README.md) for provenance,
+denominators and unresolved policy/timing differences; generated-question quality
+is explicitly unassessed in this first slice.
 
 ## Simple Bedrock chat smoke test
 

@@ -36,3 +36,71 @@ labels, and agreement with human reviewers.
 Do not score the prompt examples as independent evaluation cases. The golden
 questions are reference evidence rather than an infallible rubric, and these
 English examples do not replace Hindi-speaking review.
+
+## Run the offline policy comparison
+
+From the repository root, after `uv sync --locked`:
+
+```bash
+uv run --locked mel-worker eval policy
+# Or select an explicit config and a new output file:
+uv run --locked mel-worker eval policy --config config/agent.yaml \
+  --output outputs/eval/policy-comparison.json
+```
+
+This command makes no Bedrock or database calls. It saves a JSON scorecard under
+`outputs/eval/policy-<uuid>.json` by default and prints its path with the two
+eligibility counts. An explicit output path must be new; existing files are never
+overwritten. Evaluation is descriptive: a nonzero process exit indicates invalid
+inputs or another execution failure, rather than a minimum score threshold.
+
+`--golden` defaults to `eval/golden_holdout.jsonl`; `--split` defaults to
+`eval/prompt_example_split.json`. The split's `source` path is resolved relative
+to the project directory containing `eval/`. The scorer verifies the source
+SHA-256, the complete holdout/exclusion partition, prompt exclusions, and exact
+agreement between held-out records and their source records before scoring.
+Use this with local project files; it does not download datasets or config.
+
+The report records source, holdout, split, scorer and resolved bundle hashes;
+case-level expected/predicted decisions, reasons and windows; a confusion matrix;
+and per-rule eligibility counts. The bundle fingerprint uses `offline-policy` as
+its evaluation context, rather than an AWS region. Scorer-only edits do not
+change generation resume identity.
+
+The primary score uses the current worker's schema and policy functions on all
+declared held-out cases. The separate `dg_agent_all_source` comparator reuses the
+original `decide()` on the complete source, including prompt examples, and records
+its implementation and actual reference-rules hashes. Its denominator is not
+interchangeable with the primary score. The reference package is installed with
+the worker; its pack assets still come from the repository. If those assets are
+unavailable in another installation, the comparator is explicitly `not_assessed`.
+
+## Initial policy evidence, 3 November 2026
+
+With the checked-in rules and split:
+
+| Dimension | Result | Interpretation |
+| --- | --- | --- |
+| Current worker eligibility | 132/138 (95.7%) | Includes every holdout case; 87 true positives, 45 true negatives, 5 false positives, 1 false negative |
+| Legacy eligibility | 145/150 (96.7%) | Reproduces the historical full-source regression |
+| Reason agreement | 43/43 | Only explicitly mapped no-survey reasons |
+| Reason coverage | 43/50 | Seven no-survey expectations have unresolved reason/policy equivalence |
+| Exact send-window agreement | 0/88 | Descriptive disagreement with golden timestamps; does not resolve golden/rule precedence |
+
+The holdout eligibility misses are `G-0016`, `G-0030`, `G-0078`, `G-0138`
+(critical-case expectations), `G-0136` (harvested-crop expectation) and `G-0145`
+(season-window expectation). All remain in the denominator. Two more critical
+cases have matching binary decisions for other reasons, so they also remain
+unresolved in the reason diagnostics.
+
+Golden windows generally open at 09:00, while the configured worker opens at
+07:00; other date differences also exist. The report compares timezone-aware
+instants and preserves both windows for inspection. No timing policy is changed
+to improve this diagnostic score.
+
+This slice assesses policy before inference. Relevance/grounding, actual language
+quality, follow-up semantics, channel precedence and generation reliability are
+separate `not_assessed` dimensions. It does not score generated questions or add
+new runtime acceptance gates. The next evaluation slice can consume recorded
+worker artifacts, reuse suitable deterministic survey checks, and add independent
+MEL and Hindi review without introducing another inference loop.
