@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MEL Survey Agent System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; the system figure breaks wider and scrolls on its own at phone width. */
+:root {
+  --bg: #f5f6f8;
+  --surface: #ffffff;
+  --ink: #1c2331;
+  --muted: #596273;
+  --line: #cdd2db;
+  --dg: #2d5a87;
+  --dg-tint: #e5edf6;
+  --team: #a87600;
+  --team-tint: #fcf1d2;
+  --oos: #858c99;
+  --warn: #a4471c;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+    --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --oos: #7f8796; --warn: #f0a37e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+  --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --oos: #7f8796; --warn: #f0a37e;
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 40px;
+}
+.col { max-width: 780px; min-width: 0; }
+header { display: grid; gap: 10px; }
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; }
+h2 { font-size: 22px; font-weight: 600; }
+h3 { font-size: 16px; font-weight: 600; }
+p { margin: 0; }
+.lede { font-size: 18px; color: var(--ink); max-width: 66ch; }
+.note { font-size: 15px; color: var(--muted); max-width: 72ch; }
+section { display: grid; gap: 14px; }
+section > p, section li { max-width: 70ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.86em; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 14px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 3px; border: 1.5px solid; display: inline-block; }
+.sw.dg { background: var(--dg-tint); border-color: var(--dg); }
+.sw.team { background: var(--team-tint); border-color: var(--team); }
+.sw.explore { background: var(--team-tint); border-color: var(--team); border-style: dashed; }
+.sw.oos { background: transparent; border-color: var(--oos); border-style: dashed; }
+
+figure { margin: 0; display: grid; gap: 12px; min-width: 0; }
+.scroll {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+}
+.scroll svg { display: block; width: 100%; min-width: 1000px; height: auto; color: var(--ink); }
+figcaption { font-size: 14px; color: var(--muted); max-width: 84ch; }
+
+/* SVG classes, all from tokens so both themes read */
+.b-dg { fill: var(--dg-tint); stroke: var(--dg); stroke-width: 1.5; }
+.b-team { fill: var(--team-tint); stroke: var(--team); stroke-width: 1.5; }
+.b-explore { fill: var(--team-tint); stroke: var(--team); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.b-team-in { fill: var(--surface); stroke: var(--team); stroke-width: 1.2; }
+.b-oos { fill: none; stroke: var(--oos); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.t-h { font-family: var(--f-display); font-weight: 600; font-size: 15px; fill: var(--ink); }
+.t-b { font-family: var(--f-body); font-size: 13px; fill: var(--ink); }
+.t-s { font-family: var(--f-body); font-size: 12px; fill: var(--muted); }
+.t-m { font-family: var(--f-mono); font-size: 11px; fill: var(--muted); }
+.t-lab { font-family: var(--f-mono); font-size: 11px; fill: var(--ink); }
+.t-tag { font-family: var(--f-mono); font-size: 10px; letter-spacing: 0.08em; fill: var(--team); font-weight: 500; }
+.t-oos { font-family: var(--f-body); font-size: 12px; fill: var(--oos); }
+.w { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.w-dash { fill: none; stroke: var(--oos); stroke-width: 1.4; stroke-dasharray: 5 4; }
+.ah { fill: var(--ink); }
+.ah-m { fill: var(--oos); }
+
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+.tbl { overflow-x: auto; min-width: 0; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 12px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+td:first-child { white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; text-align: right; padding-right: 16px; }
+.prio { font-family: var(--f-mono); font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--team); white-space: nowrap; }
+.prio.must { background: var(--team-tint); }
+.prio.explore { border-style: dashed; }
+
+.rules { display: grid; grid-template-columns: minmax(120px, 160px) 1fr; gap: 12px 20px; margin: 0; }
+.rules dt { font-weight: 600; }
+.rules dd { margin: 0; min-width: 0; display: grid; gap: 8px; }
+@media (max-width: 560px) {
+  .rules { grid-template-columns: 1fr; gap: 2px; }
+  .rules dd { margin-bottom: 10px; }
+}
+.conflict { border-left: 3px solid var(--warn); padding-left: 10px; font-size: 15px; }
+.conflict b { color: var(--warn); font-weight: 600; }
+blockquote {
+  margin: 0;
+  padding: 4px 0 4px 14px;
+  border-left: 3px solid var(--team);
+  color: var(--muted);
+  font-style: italic;
+}
+ul, ol { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+.pill {
+  display: inline-block; font-family: var(--f-mono); font-size: 12px;
+  padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+}
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 6px; }
+footer a { color: var(--dg); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="col">
+    <div class="eyebrow">Digital Green · FarmerChat · AWS Breaking Barriers 2026</div>
+    <h1>MEL Survey Agent</h1>
+    <p class="lede">The agent reads what FarmerChat learned from a farmer's conversation. It decides if the advice deserves a follow-up, writes a short tap-answer survey in the farmer's language, checks its own output, and hands it to a scheduler. A broadcaster stub and a simulated app then show how farmers answer, failures included.</p>
+    <p class="note">Sources: the participant pack (brief, rules, schemas and data, 31 October) and Digital Green's Vision and Technical documents (17 October). Formats and rules on this page follow the pack. Scope and priorities follow the Vision document. Where the sources disagree, the page says so.</p>
+  </header>
+
+  <figure>
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw dg"></i>Digital Green provides</span>
+      <span><i class="sw team"></i>The team builds (MUST or SHOULD)</span>
+      <span><i class="sw explore"></i>The team can explore</span>
+      <span><i class="sw oos"></i>Out of scope for the MVP</span>
+    </div>
+    <div class="scroll">
+      <svg viewBox="0 0 1250 730" role="img" aria-label="System diagram. Digital Green provides synthetic insights, rules, a crop calendar, schemas and a golden dataset. The team builds a survey agent behind a REST API: it ingests insights, decides survey or not, generates a survey and checks it. Passing surveys go to a team-built scheduler, then a broadcaster stub and a simulated app, which simulates answers and failures. An evaluation harness scores the agent against the golden dataset. Production FarmerChat and real delivery are out of scope.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-m" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- Digital Green provides -->
+        <rect class="b-dg" x="20" y="89" width="210" height="70" rx="6"/>
+        <text class="t-h" x="34" y="113">Synthetic insights</text>
+        <text class="t-lab" x="34" y="133">insights.jsonl · 6,999</text>
+        <text class="t-s" x="34" y="150">replaces the live extractor</text>
+
+        <rect class="b-dg" x="20" y="190" width="210" height="110" rx="6"/>
+        <text class="t-h" x="34" y="214">Rules and reference</text>
+        <text class="t-lab" x="34" y="238">rules.json</text>
+        <text class="t-lab" x="34" y="256">outcome_codes.json</text>
+        <text class="t-lab" x="34" y="274">crop_calendar_bihar_rabi.csv</text>
+        <text class="t-lab" x="34" y="292">json/schemas/ (6 files)</text>
+
+        <rect class="b-dg" x="20" y="560" width="210" height="80" rx="6"/>
+        <text class="t-h" x="34" y="584">Golden dataset</text>
+        <text class="t-lab" x="34" y="604">golden_set.jsonl · 150</text>
+        <text class="t-s" x="34" y="622">expected decisions and surveys</text>
+
+        <!-- Agent -->
+        <rect class="b-team" x="300" y="40" width="420" height="440" rx="8"/>
+        <text class="t-h" x="320" y="66">MEL survey agent</text>
+        <text class="t-tag" x="706" y="64" text-anchor="end">MUST</text>
+        <text class="t-s" x="320" y="84">behind a REST API and a JSON contract</text>
+
+        <rect class="b-team-in" x="320" y="100" width="250" height="48" rx="5"/>
+        <text class="t-b" x="334" y="121">Ingest insights</text>
+        <text class="t-s" x="334" y="138">query by farmer, crop, topic, date</text>
+
+        <rect class="b-team-in" x="320" y="172" width="250" height="48" rx="5"/>
+        <text class="t-b" x="334" y="193">Decide: survey or not</text>
+        <text class="t-s" x="334" y="210">no meaningful question, no survey</text>
+
+        <rect class="b-team-in" x="320" y="244" width="250" height="48" rx="5"/>
+        <text class="t-b" x="334" y="265">Generate 1 to 3 tap questions</text>
+        <text class="t-s" x="334" y="282">language is a parameter: en-IN, hi-IN</text>
+
+        <rect class="b-team-in" x="320" y="316" width="250" height="48" rx="5"/>
+        <text class="t-b" x="334" y="337">Self-evaluate</text>
+        <text class="t-s" x="334" y="354">schema, relevance, language, safety</text>
+
+        <rect class="b-team-in" x="598" y="172" width="110" height="48" rx="5"/>
+        <text class="t-b" x="610" y="193">No survey</text>
+        <text class="t-m" x="610" y="210">no_survey</text>
+
+        <rect class="b-team-in" x="598" y="316" width="110" height="48" rx="5"/>
+        <text class="t-b" x="610" y="337">Not scheduled</text>
+        <text class="t-s" x="610" y="354">failed a check</text>
+
+        <line class="w" x1="445" y1="148" x2="445" y2="170" marker-end="url(#ah)"/>
+        <text class="t-lab" x="453" y="164">insight</text>
+        <line class="w" x1="445" y1="220" x2="445" y2="242" marker-end="url(#ah)"/>
+        <text class="t-lab" x="453" y="236">yes</text>
+        <line class="w" x1="445" y1="292" x2="445" y2="314" marker-end="url(#ah)"/>
+        <text class="t-lab" x="453" y="308">draft survey</text>
+        <line class="w" x1="570" y1="196" x2="596" y2="196" marker-end="url(#ah)"/>
+        <text class="t-lab" x="574" y="189">no</text>
+        <line class="w" x1="570" y1="340" x2="596" y2="340" marker-end="url(#ah)"/>
+        <text class="t-lab" x="572" y="333">fail</text>
+
+        <!-- inputs -->
+        <line class="w" x1="230" y1="124" x2="318" y2="124" marker-end="url(#ah)"/>
+        <text class="t-lab" x="274" y="116" text-anchor="middle">insight</text>
+        <line class="w" x1="230" y1="245" x2="298" y2="245" marker-end="url(#ah)"/>
+        <text class="t-lab" x="264" y="237" text-anchor="middle">rules</text>
+
+        <!-- Reports -->
+        <rect class="b-dg" x="750" y="172" width="260" height="48" rx="6"/>
+        <text class="t-h" x="764" y="192">Reports</text>
+        <text class="t-s" x="764" y="210">reads no_survey; owner not stated</text>
+        <line class="w" x1="708" y1="196" x2="748" y2="196" marker-end="url(#ah)"/>
+
+        <!-- scheduler, broadcaster, app -->
+        <polyline class="w" points="445,364 445,410 748,410" marker-end="url(#ah)"/>
+        <text class="t-lab" x="460" y="402">pass · survey.schema.json</text>
+
+        <rect class="b-team" x="750" y="370" width="260" height="80" rx="6"/>
+        <text class="t-h" x="764" y="394">Survey scheduler</text>
+        <text class="t-tag" x="996" y="392" text-anchor="end">MUST</text>
+        <text class="t-s" x="764" y="412">window, frequency cap, priority, expiry</text>
+        <text class="t-m" x="764" y="432">schedule_handoff.schema.json</text>
+
+        <line class="w" x1="880" y1="450" x2="880" y2="488" marker-end="url(#ah)"/>
+        <text class="t-lab" x="888" y="474">due surveys</text>
+        <rect class="b-team" x="750" y="490" width="260" height="60" rx="6"/>
+        <text class="t-h" x="764" y="514">Broadcaster stub</text>
+        <text class="t-tag" x="996" y="512" text-anchor="end">SHOULD</text>
+        <text class="t-s" x="764" y="534">sends due surveys on a simulated clock</text>
+
+        <line class="w" x1="880" y1="550" x2="880" y2="588" marker-end="url(#ah)"/>
+        <text class="t-lab" x="888" y="574">survey</text>
+        <rect class="b-team" x="750" y="590" width="260" height="110" rx="6"/>
+        <text class="t-h" x="764" y="614">Simulated app and answers</text>
+        <text class="t-tag" x="996" y="612" text-anchor="end">SHOULD</text>
+        <text class="t-s" x="764" y="634">renders tap answers, one step at a time</text>
+        <text class="t-s" x="764" y="652">simulates answers, failures included</text>
+        <text class="t-m" x="764" y="672">bottom_sheet.schema.json</text>
+        <text class="t-m" x="764" y="690">response.schema.json</text>
+
+        <!-- exploratory -->
+        <rect class="b-explore" x="1070" y="590" width="165" height="50" rx="6"/>
+        <text class="t-h" x="1084" y="612">Response write-back</text>
+        <text class="t-s" x="1084" y="630">answers as outcome data</text>
+        <rect class="b-explore" x="1070" y="660" width="165" height="50" rx="6"/>
+        <text class="t-h" x="1084" y="682">Negative follow-up</text>
+        <text class="t-s" x="1084" y="700">bad answers routed back</text>
+        <line class="w" x1="1010" y1="615" x2="1068" y2="615" marker-end="url(#ah)"/>
+        <text class="t-lab" x="1040" y="607" text-anchor="middle">answers</text>
+        <line class="w" x1="1010" y1="685" x2="1068" y2="685" marker-end="url(#ah)"/>
+        <text class="t-lab" x="1040" y="677" text-anchor="middle">if bad</text>
+
+        <!-- out of scope -->
+        <rect class="b-oos" x="1070" y="40" width="165" height="262" rx="6"/>
+        <text class="t-h" x="1084" y="64">Out of scope</text>
+        <text class="t-oos" x="1084" y="88">Production FarmerChat,</text>
+        <text class="t-oos" x="1084" y="104">broadcaster and app</text>
+        <text class="t-oos" x="1084" y="128">Real delivery: WhatsApp,</text>
+        <text class="t-oos" x="1084" y="144">Telegram, voice, push</text>
+        <text class="t-oos" x="1084" y="168">AgMCP and live data</text>
+        <text class="t-oos" x="1084" y="192">NightSync, SeasonPlanner,</text>
+        <text class="t-oos" x="1084" y="208">FarmWatch agents</text>
+        <text class="t-oos" x="1084" y="232">Delivery at scale</text>
+        <text class="t-oos" x="1084" y="256">Languages other than</text>
+        <text class="t-oos" x="1084" y="272">Hindi and English</text>
+        <polyline class="w-dash" points="1010,520 1150,520 1150,304" marker-end="url(#ahm)"/>
+        <text class="t-m" x="1142" y="420" text-anchor="end">later, through</text>
+        <text class="t-m" x="1142" y="434" text-anchor="end">the JSON contract</text>
+
+        <!-- evaluation -->
+        <line class="w" x1="510" y1="480" x2="510" y2="538" marker-end="url(#ah)"/>
+        <text class="t-lab" x="518" y="514">surveys and decisions</text>
+        <line class="w" x1="230" y1="600" x2="298" y2="600" marker-end="url(#ah)"/>
+        <text class="t-lab" x="264" y="592" text-anchor="middle">expected</text>
+        <rect class="b-team" x="300" y="540" width="420" height="100" rx="8"/>
+        <text class="t-h" x="320" y="566">Evaluation harness</text>
+        <text class="t-tag" x="706" y="564" text-anchor="end">MUST</text>
+        <text class="t-s" x="320" y="586">scores against the golden dataset; rerun to show the trend</text>
+        <text class="t-b" x="320" y="608">relevance · timeliness · format · safety · speed</text>
+        <text class="t-s" x="320" y="628">deterministic checks plus an LLM judge on a rubric</text>
+
+        <rect class="b-team" x="300" y="660" width="420" height="50" rx="8"/>
+        <text class="t-h" x="320" y="682">Latency and cost telemetry</text>
+        <text class="t-tag" x="706" y="680" text-anchor="end">SHOULD</text>
+        <text class="t-s" x="320" y="700">tokens, cost and time per survey and per batch</text>
+      </svg>
+    </div>
+    <figcaption>Arrow labels name the data that moves. Where a schema in <code>json/schemas/</code> governs that data, the arrow or the box names the schema. The Technical document allows a simpler build: "a single process with a loop standing in for the scheduler". The brief names Reports as the reader of <code>no_survey</code> records but does not say who runs it.</figcaption>
+  </figure>
+
+  <section class="col">
+    <h2>Scope and priority</h2>
+    <p>From the Vision document's MVP feature list.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Feature</th><th>Priority</th><th>What it covers</th></tr></thead>
+        <tbody>
+          <tr><td>Insight ingestion</td><td><span class="prio must">Must</span></td><td>Load and query insights by farmer, crop, topic and date.</td></tr>
+          <tr><td>Survey generation agent</td><td><span class="prio must">Must</span></td><td>A tap survey for each eligible insight, or for a group of insights.</td></tr>
+          <tr><td>Survey JSON contract</td><td><span class="prio must">Must</span></td><td>Items, options, language, send window and source insights.</td></tr>
+          <tr><td>Self-evaluation step</td><td><span class="prio must">Must</span></td><td>Schema check and relevance check before a survey is scheduled.</td></tr>
+          <tr><td>Evaluation harness</td><td><span class="prio must">Must</span></td><td>Scores surveys against the golden dataset. Supports repeated runs.</td></tr>
+          <tr><td>Survey scheduler</td><td><span class="prio must">Must</span></td><td>Send windows from the crop calendar and the action window. A frequency cap per farmer.</td></tr>
+          <tr><td>Broadcaster stub and simulated app</td><td><span class="prio">Should</span></td><td>Picks up due surveys on a simulated clock and shows them as tap UI. Records answers.</td></tr>
+          <tr><td>Hindi surveys</td><td><span class="prio">Should</span></td><td>The same agent, with hi-IN output.</td></tr>
+          <tr><td>Latency and cost telemetry</td><td><span class="prio">Should</span></td><td>Time and tokens per survey and per batch.</td></tr>
+          <tr><td>Response write-back</td><td><span class="prio explore">Exploratory</span></td><td>Store answers as adoption and outcome data.</td></tr>
+          <tr><td>Negative-outcome follow-up</td><td><span class="prio explore">Exploratory</span></td><td>Route "it did not work" or "crop damaged" answers back for advice.</td></tr>
+          <tr><td>Alternative channels</td><td><span class="prio explore">Exploratory</span></td><td>The same survey JSON through voice or chat.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h3>Definition of done (Vision document)</h3>
+    <ul>
+      <li>All Must Have features built and tested.</li>
+      <li>The agent runs over the full synthetic insights dataset.</li>
+      <li>Scores against the golden dataset are reported, with at least one improvement round shown.</li>
+      <li>Time per survey and per batch is reported.</li>
+      <li>Invalid or low-scoring surveys are shown not to be scheduled.</li>
+      <li>Survey JSON validates against the agreed schema.</li>
+      <li>Code, infrastructure as code, the evaluation harness and a README are in the open-source repo.</li>
+    </ul>
+  </section>
+
+  <section class="col">
+    <h2>How quality is judged</h2>
+    <blockquote>"Evaluation is the center of this project, not an afterthought." From the Technical document.</blockquote>
+    <ul>
+      <li><strong>Method:</strong> hill-climb. Run the agent, score against the golden dataset, change prompts or logic, rerun, and show the trend.</li>
+      <li><strong>Dimensions:</strong> relevance (does it ask about this farmer's advice), timeliness (send window against the crop calendar and action window), format (valid JSON, tap answers, item count, language), safety (no new advice, no personal information) and speed.</li>
+      <li><strong>Checks:</strong> deterministic checks for format and timing. An LLM judge for relevance, on a rubric agreed with Digital Green's MEL team. The document asks teams to confirm if a rubric exists.</li>
+      <li><strong>Language:</strong> English is the evaluation baseline. Hindi output is reviewed by Hindi-speaking participants and Digital Green.</li>
+    </ul>
+  </section>
+
+  <section class="col">
+    <h2>What Digital Green expects of the build</h2>
+    <p>From the Technical document. It says to "lean toward Digital Green's stack, but do not get hung up on it."</p>
+    <dl class="rules">
+      <dt>Language</dt><dd>Python 3.12 or later is required, for the agent, the scheduler and the evaluation harness.</dd>
+      <dt>Models</dt><dd>Amazon Bedrock is required. Keep the model choice behind an abstraction so it is easy to swap. A smaller model for eligibility and checks and a larger one for generation is worth exploring. Event staff confirm which models are enabled.</dd>
+      <dt>Framework</dt><dd>Google ADK is what Digital Green uses in production. Strands Agents or another framework is acceptable if the REST and JSON contract is met.</dd>
+      <dt>Interface</dt><dd>A REST API and a JSON survey object. The suggested libraries are FastAPI, Pydantic or JSON Schema, Boto3 with the Bedrock Converse API, and Streamlit.</dd>
+      <dt>Hosting</dt><dd>Bedrock AgentCore Runtime or containers. A containerized agent can later move to Digital Green's Amazon EKS. If a database is needed, use Amazon RDS or Aurora for PostgreSQL.</dd>
+      <dt>Infrastructure</dt><dd>AWS CDK or Terraform. All outputs are open source.</dd>
+      <dt>Clock</dt><dd>The scheduler and broadcaster read a shared simulated clock, so the demo moves through November to March in minutes. Every scheduled step also has a manual trigger.</dd>
+      <dt>Delivery</dt><dd>Do not send real messages to anyone. Deliver to the simulated app only.</dd>
+    </dl>
+  </section>
+
+  <section class="col">
+    <h2>The contract</h2>
+    <p>Five files pass between the parts. The schemas in <code>json/schemas/</code> define each one. The Technical document shows an older draft of these contracts with other field names. The pack schemas are the later, detailed version.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>File</th><th>What it carries</th><th>Written by</th><th>Read by</th></tr></thead>
+        <tbody>
+          <tr><td><code>insight</code></td><td>What the farmer asked and was told</td><td>Insight extractor</td><td>The agent</td></tr>
+          <tr><td><code>survey</code></td><td>One to three tap questions</td><td>The agent</td><td>Scheduler</td></tr>
+          <tr><td><code>no_survey</code></td><td>Why an insight gets nothing</td><td>The agent</td><td>Reports</td></tr>
+          <tr><td><code>schedule_handoff</code></td><td>When, where and how often to send</td><td>The agent</td><td>Scheduler</td></tr>
+          <tr><td><code>response</code></td><td>What one survey attempt produced, success or failure</td><td>The simulator</td><td>Digital Green</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>A sixth schema, <code>bottom_sheet</code>, is the suggested way for the app and web chat to show a survey: one question per step, with Skip and Close.</p>
+  </section>
+
+  <section class="col">
+    <h2>Rules the agent starts from</h2>
+    <blockquote>"Use them as the baseline, and improve on them if your evaluation shows a better choice." From the brief, about <code>rules.json</code>.</blockquote>
+    <dl class="rules">
+      <dt>Survey or not</dt>
+      <dd>
+        <p>The brief and <code>rules.json</code>: direct action, wait and monitor, do not act, plan created and escalate to expert get a survey. General information and unfinished conversations do not. Junk rows get none.</p>
+        <p class="conflict"><b>The golden set adds more.</b> It expects no survey for 18 rows that this rule calls eligible: critical severity (5), <code>verification.needed</code> false (10), a window that starts after 31 March (2), and a crop already past its calendar (1). In the full input, 1,315 clean insights have an eligible resolution with <code>verification.needed</code> false.</p>
+        <p>The Vision document adds a principle: "If an insight does not support a meaningful question, generate nothing. A missed survey is better than an irrelevant one."</p>
+      </dd>
+      <dt>Survey shape</dt>
+      <dd>One to three questions: pick one, yes or no, or a scale of up to 10 steps. Prompts under 400 characters, two to ten answers, labels of 20 characters or fewer. One file per language. No new advice and no personal information.</dd>
+      <dt>Send window</dt>
+      <dd>
+        <p>Days count from the day of the insight. The window opens at 07:00 and closes at 19:00 India time. It never opens on the day of the advice or before the action window ends. It is at least two days wide. Nothing is sent after 31 March, the end of rabi.</p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th><code>verification.timing</code></th><th>Brief, days</th><th><code>rules.json</code>, days</th></tr></thead>
+            <tbody>
+              <tr><td>same_day</td><td>1 to 3</td><td><b>0 to 1</b></td></tr>
+              <tr><td>next_day</td><td>1 to 3</td><td><b>1 to 2</b></td></tr>
+              <tr><td>two_to_five_days</td><td>2 to 5</td><td>2 to 5</td></tr>
+              <tr><td>three_to_ten_days</td><td>3 to 10</td><td>3 to 10</td></tr>
+              <tr><td>seven_to_fourteen_days</td><td>7 to 14</td><td>7 to 14</td></tr>
+              <tr><td>seasonal</td><td>21 to 45</td><td>21 to 45</td></tr>
+              <tr><td>none</td><td>action window +1 to +7</td><td>action window +1 to +7</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="conflict"><b>The golden windows break these rules.</b> 88 of the 95 golden windows open at 09:00, not 07:00. 75 of 95 open before the action window ends. All 11 <code>same_day</code> windows are four hours wide, and 7 of them open on the day of the advice.</p>
+      </dd>
+      <dt>Channel order</dt>
+      <dd>The farmer's preferred channel, then the channel the check method names, then WhatsApp, then voice for high priority only. Wait 6, 24 or 48 hours between channels for high, normal or low priority.</dd>
+      <dt>Priority</dt>
+      <dd>
+        <p>High for escalate to expert, high or critical severity, or an emergency. Low for plan created and do not act. Normal for the rest.</p>
+        <p class="conflict"><b>The golden set disagrees on critical.</b> It gives all 6 critical rows no survey, with the reason <span class="pill">critical_needs_human_call</span>.</p>
+      </dd>
+      <dt>Weekly cap</dt>
+      <dd>One survey per farmer per 7 days, across every channel. High priority goes out when the cap is full, and still counts.</dd>
+      <dt>Expiry</dt>
+      <dd>The survey is dropped 2 days after its window closes.</dd>
+    </dl>
+  </section>
+
+  <section class="col">
+    <h2>What one answer attempt can produce</h2>
+    <p>Every simulated attempt writes one record. The record says what happened, what to do next, and if it counts toward the weekly cap. The brief says a survey counts "once the farmer has seen it, answered or not."</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>Status</th><th class="num">Codes</th><th>For example</th></tr></thead>
+        <tbody>
+          <tr><td>completed, partial, negative_outcome</td><td class="num">3</td><td>Successes. A negative outcome means the advice failed or harm happened, and it goes to follow-up.</td></tr>
+          <tr><td>delivery_failed</td><td class="num">8</td><td>Push address gone, WhatsApp undelivered, bot blocked, no answer, line busy, call dropped</td></tr>
+          <tr><td>declined</td><td class="num">3</td><td>Not now, opted out, sheet dismissed</td></tr>
+          <tr><td>invalid_input</td><td class="num">3</td><td>Typed text instead of a tap, wrong key, speech not understood</td></tr>
+          <tr><td>expired</td><td class="num">2</td><td>No answer before expiry, notification never opened</td></tr>
+          <tr><td>stale</td><td class="num">2</td><td>A tap after the survey closed or was replaced</td></tr>
+          <tr><td>duplicate, identity_mismatch</td><td class="num">2</td><td>A second answer, or an answer from a number that now belongs to another farmer</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Each failure code carries a retry decision: none, retry the same channel, fall back to the next channel, or give up. The full list is in <code>outcome_codes.json</code>.</p>
+    <p class="conflict"><b>One code breaks the counting rule.</b> <code>outcome_codes.json</code> counts <code>push_not_opened</code> toward the cap, but its meaning says the sheet never opened, so the farmer never saw the survey.</p>
+  </section>
+
+  <section class="col">
+    <h2>Questions to take to Digital Green</h2>
+    <h3>Rules</h3>
+    <ul>
+      <li><strong>Critical severity.</strong> The golden set gives critical cases no survey and a human call. <code>rules.json</code> gives them a high-priority survey. Which one wins?</li>
+      <li><strong>No check needed.</strong> Is <code>verification.needed</code> false a deliberate "no survey" signal? It decides 10 golden rows and 1,315 clean input rows.</li>
+      <li><strong>Crop past its calendar.</strong> One golden row gets no survey because the crop's last calendar stage has ended. What exactly triggers this rule?</li>
+      <li><strong>Timing.</strong> Which governs: the brief's table, <code>rules.json</code>, or the golden windows (09:00 starts, same-day windows)?</li>
+      <li><strong>Cap.</strong> Does <code>push_not_opened</code> count toward the weekly cap?</li>
+    </ul>
+    <h3>Contract</h3>
+    <ul>
+      <li><strong>No-survey reasons.</strong> <code>no_survey.schema.json</code> allows two reason codes. The golden set uses seven. Which list is right?</li>
+      <li><strong>Conditional questions.</strong> The golden set shows "If not, what stopped you?" only when q1 is not "Yes". <code>survey.schema.json</code> has no field for a condition. How is this expressed?</li>
+      <li><strong>Resolution types.</strong> The Vision document names three (direct action, indirect action, wait and watch). The pack uses seven. Confirm that the pack schemas are the agreed contract.</li>
+      <li><strong>Grouping.</strong> The schema allows up to five source insights per survey. Do you want several insights for one farmer combined into one survey?</li>
+    </ul>
+    <h3>Evaluation and event</h3>
+    <ul>
+      <li><strong>Rubric.</strong> Does the MEL team have a relevance rubric for the LLM judge?</li>
+      <li><strong>Golden set updates.</strong> The golden set is version 1 and can change during the event. How will updates reach the teams?</li>
+      <li><strong>Models.</strong> Which Bedrock models are enabled in the Workshop Studio accounts, and in which region?</li>
+    </ul>
+  </section>
+
+  <section class="col">
+    <h2>Still open for the team</h2>
+    <p>The sources leave these to the team. This page does not pick them.</p>
+    <ul>
+      <li>Google ADK or Strands Agents</li>
+      <li>Bedrock AgentCore Runtime or a container</li>
+      <li>Which Bedrock models, and if a small and a large model split the work</li>
+      <li>One process with a loop, or separate services, for the scheduler and broadcaster</li>
+      <li>A database (RDS or Aurora PostgreSQL) or none</li>
+      <li>How to combine several insights for one farmer</li>
+      <li>The demo surface: Streamlit, a command-line tool, or another channel</li>
+    </ul>
+  </section>
+
+  <section class="col">
+    <h2>Out of scope for the MVP</h2>
+    <p>From the Vision document: production FarmerChat, broadcaster and app integration, real survey delivery, AgMCP servers and live data, the NightSync, SeasonPlanner and FarmWatch agents, languages beyond Hindi and English, regions beyond Bihar, replacing RCTs, and delivery at scale. All data is synthetic.</p>
+  </section>
+
+  <footer class="col">
+    <span>Sources in this repo: <code>docs/participant-pack/</code> (brief <code>index.html</code>, <code>json/</code>, <code>data/</code>), the Vision Document and the Technical Document for the MVP in <code>docs/</code>.</span>
+    <span>Counts are from <code>golden_set.jsonl</code> and <code>insights.jsonl</code>, version 1.</span>
+    <span>See also: <a href="survey-question-patterns.html">Survey question patterns</a>, the one survey template per resolution type that the golden set follows.</span>
+  </footer>
+</div>
+</body>
+</html>

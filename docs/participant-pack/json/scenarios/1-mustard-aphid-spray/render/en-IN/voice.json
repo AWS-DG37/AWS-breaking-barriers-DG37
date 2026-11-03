@@ -1,0 +1,79 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "Hello, this is a call from FarmerChat. We have three short questions about the advice you got. You can press a key or say your answer.",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "Did you spray your mustard for the aphids (small green insects)? For Yes, press 1. For No, press 2.",
+      "keypad": {
+        "1": "yes",
+        "2": "no"
+      },
+      "speech": {
+        "yes": [
+          "Yes",
+          "yes",
+          "yes I did"
+        ],
+        "no": [
+          "No",
+          "no",
+          "not yet"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "Was it easy to get the spray? For Yes, easily, press 1. For Yes, with difficulty, press 2. For Could not get it, press 3.",
+      "keypad": {
+        "1": "easy",
+        "2": "hard",
+        "3": "not_found"
+      },
+      "speech": {
+        "easy": [
+          "Yes, easily"
+        ],
+        "hard": [
+          "Yes, with difficulty"
+        ],
+        "not_found": [
+          "Could not get it"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q3",
+      "say": "How many of these insects are on the plants now? For Almost none, press 1. For Fewer than before, press 2. For Same as before, press 3. For More than before, press 4.",
+      "keypad": {
+        "1": "almost_none",
+        "2": "fewer",
+        "3": "same",
+        "4": "more"
+      },
+      "speech": {
+        "almost_none": [
+          "Almost none"
+        ],
+        "fewer": [
+          "Fewer than before"
+        ],
+        "same": [
+          "Same as before"
+        ],
+        "more": [
+          "More than before"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "Thank you. Your answers help us give better advice.",
+  "closing_if_follow_up": "Thank you. We have noted this. FarmerChat will contact you again about it."
+}

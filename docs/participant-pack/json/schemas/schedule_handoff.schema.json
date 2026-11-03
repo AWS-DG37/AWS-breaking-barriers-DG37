@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farmerchat.digitalgreen.org/mel/schedule_handoff.schema.json",
+  "title": "Schedule hand-off",
+  "description": "What the scheduler receives for one survey: the survey in the farmer's language, when to send, which channel to try first and what to try next, the per-farmer cap, priority and expiry. Built from the insight by the rules in rules/rules.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "handoff_id",
+    "created_at",
+    "survey",
+    "send_window",
+    "send_hours",
+    "channel_order",
+    "frequency_cap",
+    "priority",
+    "expires_at",
+    "farmerchat_flow"
+  ],
+  "properties": {
+    "handoff_id": {
+      "type": "string",
+      "pattern": "^H-[0-9]{5,10}$"
+    },
+    "created_at": {
+      "$ref": "survey.schema.json#/$defs/ist_time"
+    },
+    "survey": {
+      "$ref": "survey.schema.json"
+    },
+    "send_window": {
+      "$ref": "survey.schema.json#/$defs/send_window",
+      "description": "Same as survey.send_window. The scheduler must not send outside it."
+    },
+    "send_hours": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "description": "Farmer's local clock (India time). Nothing is sent outside these hours, on any channel.",
+      "properties": {
+        "from": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        },
+        "to": {
+          "type": "string",
+          "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        }
+      }
+    },
+    "channel_order": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 5,
+      "description": "Try the first channel. If no answer comes within wait_hours, try the next. The broadcaster skips a channel the farmer cannot be reached on. The last entry has wait_hours null.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "channel",
+          "wait_hours"
+        ],
+        "properties": {
+          "channel": {
+            "enum": [
+              "app",
+              "web",
+              "whatsapp",
+              "telegram",
+              "voice"
+            ]
+          },
+          "wait_hours": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 1,
+            "maximum": 168
+          }
+        }
+      }
+    },
+    "frequency_cap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "max_surveys",
+        "window_days",
+        "exempt"
+      ],
+      "description": "Counted per farmer across every survey and every channel.",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^mel:farmer:.{1,64}$"
+        },
+        "max_surveys": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "window_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 90
+        },
+        "exempt": {
+          "type": "boolean",
+          "description": "True only for high priority. The survey is sent even if the cap is full, and still counts toward it."
+        }
+      }
+    },
+    "priority": {
+      "enum": [
+        "high",
+        "normal",
+        "low"
+      ]
+    },
+    "expires_at": {
+      "$ref": "survey.schema.json#/$defs/ist_time",
+      "description": "After this the survey is dropped, sent or not, and late answers are kept but marked late."
+    },
+    "farmerchat_flow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "org_id",
+        "flow_key",
+        "version",
+        "campaign_id",
+        "flow_id"
+      ],
+      "description": "What FarmerChat needs to register this survey as a survey flow and to accept its answers. flow_id is the id in the answer path /v1/surveys/{flow_id}/responses.",
+      "properties": {
+        "org_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,64}$"
+        },
+        "flow_key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{1,63}$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "campaign_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "flow_id": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    }
+  }
+}

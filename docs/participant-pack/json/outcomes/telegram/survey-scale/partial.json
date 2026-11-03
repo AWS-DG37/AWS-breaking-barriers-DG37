@@ -1,0 +1,66 @@
+{
+  "response_key": "rk-S-21310-telegram-partial",
+  "survey_id": "S-21310",
+  "farmer_id": "F-000245",
+  "source_insight_ids": [
+    "I-005330"
+  ],
+  "channel": "telegram",
+  "language": "hi-IN",
+  "question_type": "survey-scale",
+  "status": "partial",
+  "failure_code": null,
+  "sheet_outcome": null,
+  "answers": {
+    "q3": 5
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "skipped",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "skipped",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 1
+    },
+    {
+      "item_id": "q3",
+      "item_type": "survey-scale",
+      "result": "answered",
+      "value": 5,
+      "raw_input": "mel|S-21310|q3|5",
+      "input_kind": "callback_data",
+      "attempts": 1
+    }
+  ],
+  "complete": false,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2027-01-09T08:00:00+05:30",
+    "delivered": "2027-01-09T08:01:00+05:30",
+    "opened": null,
+    "answered": "2027-01-09T08:25:00+05:30"
+  },
+  "recorded_at": "2027-01-09T08:25:00+05:30",
+  "answered_by": "F-000245",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

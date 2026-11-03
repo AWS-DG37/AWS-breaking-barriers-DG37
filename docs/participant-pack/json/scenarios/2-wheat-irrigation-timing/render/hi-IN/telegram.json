@@ -1,0 +1,65 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।"
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "क्या आपने गेहूँ में पहली सिंचाई कर दी?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हाँ, समय पर",
+              "callback_data": "mel|S-21044|q1|on_time"
+            }
+          ],
+          [
+            {
+              "text": "हाँ, पर देर से",
+              "callback_data": "mel|S-21044|q1|late"
+            }
+          ],
+          [
+            {
+              "text": "अभी नहीं",
+              "callback_data": "mel|S-21044|q1|not_yet"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपकी गेहूँ की फसल अब कैसी दिख रही है?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हरी और स्वस्थ",
+              "callback_data": "mel|S-21044|q2|healthy"
+            }
+          ],
+          [
+            {
+              "text": "कुछ पत्ते पीले",
+              "callback_data": "mel|S-21044|q2|some_yellow"
+            }
+          ],
+          [
+            {
+              "text": "बहुत पत्ते पीले",
+              "callback_data": "mel|S-21044|q2|many_yellow"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

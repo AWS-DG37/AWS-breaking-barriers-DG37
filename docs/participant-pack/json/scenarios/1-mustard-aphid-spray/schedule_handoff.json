@@ -1,0 +1,117 @@
+{
+  "handoff_id": "H-20931",
+  "created_at": "2026-12-04T23:00:00+05:30",
+  "survey": {
+    "survey_id": "S-20931",
+    "farmer_id": "F-000123",
+    "source_insight_ids": [
+      "I-004512"
+    ],
+    "language": "hi-IN",
+    "send_window": {
+      "not_before": "2026-12-06T07:00:00+05:30",
+      "not_after": "2026-12-09T19:00:00+05:30"
+    },
+    "items": [
+      {
+        "item_id": "q1",
+        "type": "survey-confirm",
+        "prompt": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया?",
+        "options": [
+          {
+            "value": "yes",
+            "label": "हाँ"
+          },
+          {
+            "value": "no",
+            "label": "नहीं"
+          }
+        ]
+      },
+      {
+        "item_id": "q2",
+        "type": "survey-single-select",
+        "prompt": "क्या छिड़काव की दवा आसानी से मिल गई?",
+        "options": [
+          {
+            "value": "easy",
+            "label": "हाँ, आसानी से"
+          },
+          {
+            "value": "hard",
+            "label": "हाँ, मुश्किल से"
+          },
+          {
+            "value": "not_found",
+            "label": "नहीं मिली",
+            "follow_up": "could_not_get_input"
+          }
+        ]
+      },
+      {
+        "item_id": "q3",
+        "type": "survey-single-select",
+        "prompt": "अब पौधों पर ये कीड़े कितने हैं?",
+        "options": [
+          {
+            "value": "almost_none",
+            "label": "लगभग नहीं"
+          },
+          {
+            "value": "fewer",
+            "label": "पहले से कम"
+          },
+          {
+            "value": "same",
+            "label": "पहले जितने",
+            "follow_up": "advice_did_not_work"
+          },
+          {
+            "value": "more",
+            "label": "पहले से ज़्यादा",
+            "follow_up": "advice_did_not_work"
+          }
+        ]
+      }
+    ],
+    "rationale": "Direct-action pest advice with a 2-day window. Ask from day 2, when the spray is done and the aphid count has had time to change.",
+    "self_eval": {
+      "schema_valid": true,
+      "gives_new_advice": false,
+      "asks_personal_info": false
+    }
+  },
+  "send_window": {
+    "not_before": "2026-12-06T07:00:00+05:30",
+    "not_after": "2026-12-09T19:00:00+05:30"
+  },
+  "send_hours": {
+    "from": "07:00",
+    "to": "19:00"
+  },
+  "channel_order": [
+    {
+      "channel": "app",
+      "wait_hours": 24
+    },
+    {
+      "channel": "whatsapp",
+      "wait_hours": null
+    }
+  ],
+  "frequency_cap": {
+    "key": "mel:farmer:F-000123",
+    "max_surveys": 1,
+    "window_days": 7,
+    "exempt": false
+  },
+  "priority": "normal",
+  "expires_at": "2026-12-11T19:00:00+05:30",
+  "farmerchat_flow": {
+    "org_id": "org.farmerchat",
+    "flow_key": "mel_s_20931",
+    "version": 1,
+    "campaign_id": "283df456-256d-5d97-912f-1a6c4fdde6d0",
+    "flow_id": "eb101082-d576-558b-98a6-8f398a0039ae"
+  }
+}

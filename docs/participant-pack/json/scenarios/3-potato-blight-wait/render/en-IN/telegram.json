@@ -1,0 +1,96 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "A short question from FarmerChat about the advice you got. It takes one minute."
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "Did you check the potato leaves in the last 3 days?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Yes",
+              "callback_data": "mel|S-21310|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "No",
+              "callback_data": "mel|S-21310|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "What is happening to the brown spots?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "No new spots",
+              "callback_data": "mel|S-21310|q2|no_new"
+            }
+          ],
+          [
+            {
+              "text": "Same as before",
+              "callback_data": "mel|S-21310|q2|same"
+            }
+          ],
+          [
+            {
+              "text": "Spreading",
+              "callback_data": "mel|S-21310|q2|spreading"
+            }
+          ],
+          [
+            {
+              "text": "White growth seen",
+              "callback_data": "mel|S-21310|q2|white_growth"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "How useful was the advice? 1 means not useful, 5 means very useful.",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "1",
+              "callback_data": "mel|S-21310|q3|1"
+            },
+            {
+              "text": "2",
+              "callback_data": "mel|S-21310|q3|2"
+            },
+            {
+              "text": "3",
+              "callback_data": "mel|S-21310|q3|3"
+            },
+            {
+              "text": "4",
+              "callback_data": "mel|S-21310|q3|4"
+            },
+            {
+              "text": "5",
+              "callback_data": "mel|S-21310|q3|5"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

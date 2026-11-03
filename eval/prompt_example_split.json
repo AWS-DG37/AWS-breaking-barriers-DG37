@@ -1,0 +1,265 @@
+{
+  "version": "luna-golden-patterns-v3",
+  "source": "docs/participant-pack/data/golden_set.jsonl",
+  "source_sha256": "2a3b29d92d966d72d1f01c357c23a5ed009d6b57a51d326400d4b58b9f6230d7",
+  "prompt_example_ids": [
+    "G-0131",
+    "G-0032",
+    "G-0019",
+    "G-0003",
+    "G-0045",
+    "G-0004",
+    "G-0018"
+  ],
+  "prompt_example_insight_ids": [
+    "I-006334",
+    "I-001660",
+    "I-001118",
+    "I-000523",
+    "I-002303",
+    "I-000543",
+    "I-001105"
+  ],
+  "exclusion_policy": "Exclude examples, their farmers/conversations, and exact normalized-advice duplicates across crops/animals.",
+  "excluded": [
+    {
+      "golden_id": "G-0003",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0004",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0018",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0019",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0024",
+      "reasons": [
+        "example_farmer"
+      ]
+    },
+    {
+      "golden_id": "G-0032",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0045",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0088",
+      "reasons": [
+        "example_farmer"
+      ]
+    },
+    {
+      "golden_id": "G-0097",
+      "reasons": [
+        "example_farmer"
+      ]
+    },
+    {
+      "golden_id": "G-0102",
+      "reasons": [
+        "example_farmer"
+      ]
+    },
+    {
+      "golden_id": "G-0131",
+      "reasons": [
+        "prompt_example",
+        "example_farmer",
+        "example_conversation",
+        "normalized_advice_duplicate"
+      ]
+    },
+    {
+      "golden_id": "G-0135",
+      "reasons": [
+        "example_farmer"
+      ]
+    }
+  ],
+  "holdout_ids": [
+    "G-0001",
+    "G-0002",
+    "G-0005",
+    "G-0006",
+    "G-0007",
+    "G-0008",
+    "G-0009",
+    "G-0010",
+    "G-0011",
+    "G-0012",
+    "G-0013",
+    "G-0014",
+    "G-0015",
+    "G-0016",
+    "G-0017",
+    "G-0020",
+    "G-0021",
+    "G-0022",
+    "G-0023",
+    "G-0025",
+    "G-0026",
+    "G-0027",
+    "G-0028",
+    "G-0029",
+    "G-0030",
+    "G-0031",
+    "G-0033",
+    "G-0034",
+    "G-0035",
+    "G-0036",
+    "G-0037",
+    "G-0038",
+    "G-0039",
+    "G-0040",
+    "G-0041",
+    "G-0042",
+    "G-0043",
+    "G-0044",
+    "G-0046",
+    "G-0047",
+    "G-0048",
+    "G-0049",
+    "G-0050",
+    "G-0051",
+    "G-0052",
+    "G-0053",
+    "G-0054",
+    "G-0055",
+    "G-0056",
+    "G-0057",
+    "G-0058",
+    "G-0059",
+    "G-0060",
+    "G-0061",
+    "G-0062",
+    "G-0063",
+    "G-0064",
+    "G-0065",
+    "G-0066",
+    "G-0067",
+    "G-0068",
+    "G-0069",
+    "G-0070",
+    "G-0071",
+    "G-0072",
+    "G-0073",
+    "G-0074",
+    "G-0075",
+    "G-0076",
+    "G-0077",
+    "G-0078",
+    "G-0079",
+    "G-0080",
+    "G-0081",
+    "G-0082",
+    "G-0083",
+    "G-0084",
+    "G-0085",
+    "G-0086",
+    "G-0087",
+    "G-0089",
+    "G-0090",
+    "G-0091",
+    "G-0092",
+    "G-0093",
+    "G-0094",
+    "G-0095",
+    "G-0096",
+    "G-0098",
+    "G-0099",
+    "G-0100",
+    "G-0101",
+    "G-0103",
+    "G-0104",
+    "G-0105",
+    "G-0106",
+    "G-0107",
+    "G-0108",
+    "G-0109",
+    "G-0110",
+    "G-0111",
+    "G-0112",
+    "G-0113",
+    "G-0114",
+    "G-0115",
+    "G-0116",
+    "G-0117",
+    "G-0118",
+    "G-0119",
+    "G-0120",
+    "G-0121",
+    "G-0122",
+    "G-0123",
+    "G-0124",
+    "G-0125",
+    "G-0126",
+    "G-0127",
+    "G-0128",
+    "G-0129",
+    "G-0130",
+    "G-0132",
+    "G-0133",
+    "G-0134",
+    "G-0136",
+    "G-0137",
+    "G-0138",
+    "G-0139",
+    "G-0140",
+    "G-0141",
+    "G-0142",
+    "G-0143",
+    "G-0144",
+    "G-0145",
+    "G-0146",
+    "G-0147",
+    "G-0148",
+    "G-0149",
+    "G-0150"
+  ],
+  "notes": [
+    "Reference wording and answer meanings are copied from golden items; surrounding lessons are project-authored.",
+    "All reference examples are English sketches; runtime prompts require the target language and current wire schema.",
+    "Holdout is a candidate evaluation split, not a new validated rubric or a guarantee against paraphrase leakage.",
+    "The 150-row golden source is unchanged. Exclude any further cases used for prompt tuning from scored evaluation."
+  ]
+}

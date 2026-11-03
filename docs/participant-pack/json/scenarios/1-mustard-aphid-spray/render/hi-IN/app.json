@@ -1,0 +1,92 @@
+{
+  "channel": "app",
+  "how_it_arrives": "A notification tells the farmer there is a short question. Tapping it opens the app with the sheet. If they open the app another way inside the send window, the sheet opens then. It never covers an answer that is still arriving, a message being typed, or a call.",
+  "presentation": {
+    "type": "bottom_sheet",
+    "opens_when": [
+      "push_tapped",
+      "next_app_open"
+    ],
+    "waits_for": [
+      "answer_finished_streaming",
+      "no_typing_for_5_seconds",
+      "no_call_in_progress"
+    ],
+    "one_question_per_step": true,
+    "steps_total": 3,
+    "can_skip": true,
+    "can_close": true,
+    "swipe_down_closes": true
+  },
+  "sheet": {
+    "title": "आपको मिली सलाह पर एक छोटा सवाल",
+    "skip_label": "छोड़ें",
+    "close_label": "बंद करें",
+    "thank_you": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+    "steps": [
+      {
+        "step": 1,
+        "step_label": "3 में से 1",
+        "item_id": "q1",
+        "question_type": "survey-confirm",
+        "question": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया?",
+        "options": [
+          {
+            "label": "हाँ",
+            "answer": "yes"
+          },
+          {
+            "label": "नहीं",
+            "answer": "no"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "step_label": "3 में से 2",
+        "item_id": "q2",
+        "question_type": "survey-single-select",
+        "question": "क्या छिड़काव की दवा आसानी से मिल गई?",
+        "options": [
+          {
+            "label": "हाँ, आसानी से",
+            "answer": "easy"
+          },
+          {
+            "label": "हाँ, मुश्किल से",
+            "answer": "hard"
+          },
+          {
+            "label": "नहीं मिली",
+            "answer": "not_found"
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "step_label": "3 में से 3",
+        "item_id": "q3",
+        "question_type": "survey-single-select",
+        "question": "अब पौधों पर ये कीड़े कितने हैं?",
+        "options": [
+          {
+            "label": "लगभग नहीं",
+            "answer": "almost_none"
+          },
+          {
+            "label": "पहले से कम",
+            "answer": "fewer"
+          },
+          {
+            "label": "पहले जितने",
+            "answer": "same"
+          },
+          {
+            "label": "पहले से ज़्यादा",
+            "answer": "more"
+          }
+        ]
+      }
+    ]
+  }
+}

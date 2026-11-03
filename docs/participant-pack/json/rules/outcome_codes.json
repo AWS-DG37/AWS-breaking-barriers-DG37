@@ -1,0 +1,288 @@
+{
+  "success": {
+    "completed": {
+      "retry_decision": "none",
+      "counts_toward_cap": true,
+      "meaning": "Every question answered, nothing bad reported."
+    },
+    "partial": {
+      "retry_decision": "none",
+      "counts_toward_cap": true,
+      "meaning": "Some questions answered, the rest skipped before the window closed."
+    },
+    "negative_outcome": {
+      "retry_decision": "none",
+      "counts_toward_cap": true,
+      "meaning": "Answers accepted, and at least one says the advice failed or harm happened. Goes to follow-up."
+    }
+  },
+  "failures": {
+    "window_expired": {
+      "status": "expired",
+      "channels": [
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "Delivered, or waiting in the web chat, but no answer before the survey expired."
+    },
+    "farmer_declined": {
+      "status": "declined",
+      "channels": [
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The farmer said not now."
+    },
+    "farmer_opted_out": {
+      "status": "declined",
+      "channels": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The farmer asked for no more surveys (a Do not ask me again button in the sheet, STOP, /stop, or 9 on a call). Stop all future surveys to this farmer."
+    },
+    "push_token_invalid": {
+      "status": "delivery_failed",
+      "channels": [
+        "app"
+      ],
+      "retry_decision": "fall_back_to_next_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "The phone's push address no longer works, usually after the app was removed."
+    },
+    "client_cannot_render": {
+      "status": "delivery_failed",
+      "channels": [
+        "app",
+        "web"
+      ],
+      "retry_decision": "fall_back_to_next_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "This version of the app or web chat cannot show the survey sheet."
+    },
+    "wa_session_window_closed": {
+      "status": "delivery_failed",
+      "channels": [
+        "whatsapp"
+      ],
+      "retry_decision": "retry_same_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "More than 24 hours since the farmer last wrote, so WhatsApp refused a normal message. Resend as the approved template."
+    },
+    "wa_undelivered": {
+      "status": "delivery_failed",
+      "channels": [
+        "whatsapp"
+      ],
+      "retry_decision": "fall_back_to_next_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "WhatsApp reported the message failed, for example the number is not on WhatsApp."
+    },
+    "tg_bot_blocked": {
+      "status": "delivery_failed",
+      "channels": [
+        "telegram"
+      ],
+      "retry_decision": "fall_back_to_next_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "The farmer blocked the FarmerChat bot."
+    },
+    "voice_no_answer": {
+      "status": "delivery_failed",
+      "channels": [
+        "voice"
+      ],
+      "retry_decision": "fall_back_to_next_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": false,
+      "meaning": "Three calls, 10 minutes apart, none picked up."
+    },
+    "voice_busy": {
+      "status": "delivery_failed",
+      "channels": [
+        "voice"
+      ],
+      "retry_decision": "retry_same_channel",
+      "retry_after_minutes": 10,
+      "counts_toward_cap": false,
+      "meaning": "The line was busy."
+    },
+    "voice_call_dropped": {
+      "status": "delivery_failed",
+      "channels": [
+        "voice"
+      ],
+      "retry_decision": "retry_same_channel",
+      "retry_after_minutes": 10,
+      "counts_toward_cap": true,
+      "meaning": "The call cut off part way. Answers given before the cut are kept. Call back for the rest."
+    },
+    "free_text_instead_of_choice": {
+      "status": "invalid_input",
+      "channels": [
+        "whatsapp",
+        "telegram"
+      ],
+      "retry_decision": "retry_same_channel",
+      "retry_after_minutes": 0,
+      "counts_toward_cap": true,
+      "meaning": "The farmer typed a message instead of tapping. Send the same question again with its buttons."
+    },
+    "keypad_out_of_range": {
+      "status": "invalid_input",
+      "channels": [
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "A key with no answer behind it, twice. The call moves to the next question."
+    },
+    "speech_not_understood": {
+      "status": "invalid_input",
+      "channels": [
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The spoken answer matched no choice, twice. The call moves to the next question."
+    },
+    "sheet_dismissed": {
+      "status": "declined",
+      "channels": [
+        "app",
+        "web"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The sheet opened and the farmer swiped it down or closed it without answering anything."
+    },
+    "push_not_opened": {
+      "status": "expired",
+      "channels": [
+        "app"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The notification arrived but was never tapped, and the farmer did not open the app before the survey expired, so the sheet never opened."
+    },
+    "survey_closed": {
+      "status": "stale",
+      "channels": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": false,
+      "meaning": "A tap after the survey expired. Dropped before it reaches FarmerChat."
+    },
+    "survey_replaced": {
+      "status": "stale",
+      "channels": [
+        "app",
+        "web"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": false,
+      "meaning": "A tap on a survey that was withdrawn or replaced by a newer one."
+    },
+    "duplicate_answer": {
+      "status": "duplicate",
+      "channels": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "retry_decision": "none",
+      "retry_after_minutes": null,
+      "counts_toward_cap": false,
+      "meaning": "A second answer to a survey already answered. The first answer stands."
+    },
+    "identity_mismatch": {
+      "status": "identity_mismatch",
+      "channels": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "retry_decision": "give_up",
+      "retry_after_minutes": null,
+      "counts_toward_cap": false,
+      "meaning": "The answer came from a phone, number or chat that now belongs to another farmer. Not stored."
+    }
+  },
+  "grid_anchor": {
+    "survey-confirm": {
+      "scenario": "4-cow-vet-escalation",
+      "item_id": "q1"
+    },
+    "survey-single-select": {
+      "scenario": "1-mustard-aphid-spray",
+      "item_id": "q3"
+    },
+    "survey-scale": {
+      "scenario": "3-potato-blight-wait",
+      "item_id": "q3"
+    }
+  },
+  "not_applicable": {
+    "voice/survey_closed": "A call is live, so its answer cannot arrive after the survey closed.",
+    "app/free_text_instead_of_choice": "The sheet has no text box, only options to tap."
+  },
+  "sheet_cases": {
+    "sheet_closed_partway": {
+      "status": "partial",
+      "sheet_outcome": "closed_partway",
+      "retry_decision": "none",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The farmer answered some steps, then tapped Close or swiped the sheet down. The answers given are sent."
+    },
+    "sheet_interrupted": {
+      "status": "partial",
+      "sheet_outcome": "interrupted",
+      "retry_decision": "none",
+      "retry_after_minutes": null,
+      "counts_toward_cap": true,
+      "meaning": "The phone closed the app, or the browser tab was closed, part way through. The answers given are kept on the phone and sent the next time the app or web chat opens."
+    }
+  },
+  "sheet_outcomes": {
+    "finished": "The farmer went through every step.",
+    "closed_partway": "Closed after answering some steps.",
+    "interrupted": "The app or browser tab was closed part way.",
+    "dismissed": "Closed or swiped down before answering anything.",
+    "never_opened": "The sheet never appeared."
+  }
+}

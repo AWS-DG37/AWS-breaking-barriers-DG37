@@ -1,0 +1,69 @@
+{
+  "response_key": "rk-S-21310-whatsapp",
+  "survey_id": "S-21310",
+  "farmer_id": "F-000245",
+  "source_insight_ids": [
+    "I-005330"
+  ],
+  "channel": "whatsapp",
+  "language": "hi-IN",
+  "status": "negative_outcome",
+  "failure_code": null,
+  "sheet_outcome": null,
+  "answers": {
+    "q1": "yes",
+    "q2": "spreading",
+    "q3": 2
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "answered",
+      "value": "yes",
+      "raw_input": "S-21310|q1|yes",
+      "input_kind": "button_reply",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "spreading",
+      "raw_input": "S-21310|q2|spreading",
+      "input_kind": "list_reply",
+      "attempts": 1
+    },
+    {
+      "item_id": "q3",
+      "item_type": "survey-scale",
+      "result": "answered",
+      "value": 2,
+      "raw_input": "S-21310|q3|2",
+      "input_kind": "list_reply",
+      "attempts": 1
+    }
+  ],
+  "complete": true,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2027-01-09T08:00:00+05:30",
+    "delivered": "2027-01-09T08:01:00+05:30",
+    "opened": "2027-01-09T08:20:00+05:30",
+    "answered": "2027-01-09T08:25:00+05:30"
+  },
+  "recorded_at": "2027-01-09T08:25:00+05:30",
+  "answered_by": "F-000245",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": true,
+  "follow_up_reasons": [
+    "crop_or_animal_damaged"
+  ]
+}

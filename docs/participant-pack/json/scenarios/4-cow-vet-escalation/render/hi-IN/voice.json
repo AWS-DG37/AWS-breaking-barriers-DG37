@@ -1,0 +1,56 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "नमस्ते, यह FarmerChat की ओर से कॉल है। आपको मिली सलाह के बारे में दो छोटे सवाल हैं। आप बटन दबाकर या बोलकर जवाब दे सकते हैं।",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "क्या पशु डॉक्टर ने आपकी गाय को देखा? हाँ के लिए 1 दबाएँ। नहीं के लिए 2 दबाएँ।",
+      "keypad": {
+        "1": "yes",
+        "2": "no"
+      },
+      "speech": {
+        "yes": [
+          "हाँ",
+          "हाँ",
+          "हां",
+          "जी हाँ",
+          "haan"
+        ],
+        "no": [
+          "नहीं",
+          "नहीं",
+          "नही",
+          "nahin"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "आपकी गाय अब कैसी है? पहले से ठीक के लिए 1 दबाएँ। पहले जैसी के लिए 2 दबाएँ। पहले से खराब के लिए 3 दबाएँ।",
+      "keypad": {
+        "1": "better",
+        "2": "same",
+        "3": "worse"
+      },
+      "speech": {
+        "better": [
+          "पहले से ठीक"
+        ],
+        "same": [
+          "पहले जैसी"
+        ],
+        "worse": [
+          "पहले से खराब"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+  "closing_if_follow_up": "धन्यवाद। हमने यह नोट कर लिया है। FarmerChat आपसे इस बारे में फिर बात करेगा।"
+}

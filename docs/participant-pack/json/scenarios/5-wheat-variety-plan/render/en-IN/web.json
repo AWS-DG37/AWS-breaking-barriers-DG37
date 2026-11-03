@@ -1,0 +1,78 @@
+{
+  "channel": "web",
+  "how_it_arrives": "Web chat has no notifications. The sheet opens the next time the farmer visits inside the send window, once the answer on screen has finished arriving.",
+  "presentation": {
+    "type": "bottom_sheet",
+    "opens_when": [
+      "next_web_visit"
+    ],
+    "waits_for": [
+      "answer_finished_streaming",
+      "no_typing_for_5_seconds",
+      "no_call_in_progress"
+    ],
+    "one_question_per_step": true,
+    "steps_total": 2,
+    "can_skip": true,
+    "can_close": true,
+    "swipe_down_closes": true
+  },
+  "sheet": {
+    "title": "A quick question about the advice you got",
+    "skip_label": "Skip",
+    "close_label": "Close",
+    "thank_you": "Thank you. Your answers help us give better advice.",
+    "steps": [
+      {
+        "step": 1,
+        "step_label": "1 of 2",
+        "item_id": "q1",
+        "question_type": "survey-single-select",
+        "question": "Which wheat seed did you sow?",
+        "options": [
+          {
+            "label": "The suggested type",
+            "answer": "suggested"
+          },
+          {
+            "label": "A different type",
+            "answer": "other"
+          },
+          {
+            "label": "Not sown yet",
+            "answer": "not_sown"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "step_label": "2 of 2",
+        "item_id": "q2",
+        "question_type": "survey-scale",
+        "question": "How easy was it to find good seed? 1 means very hard, 5 means very easy.",
+        "options": [
+          {
+            "label": "1",
+            "answer": 1
+          },
+          {
+            "label": "2",
+            "answer": 2
+          },
+          {
+            "label": "3",
+            "answer": 3
+          },
+          {
+            "label": "4",
+            "answer": 4
+          },
+          {
+            "label": "5",
+            "answer": 5
+          }
+        ]
+      }
+    ]
+  }
+}

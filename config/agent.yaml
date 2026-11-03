@@ -1,0 +1,28 @@
+# Paths resolve relative to this file. Override with --config or MEL_CONFIG_PATH.
+version: luna-golden-patterns-v3
+generation:
+  model_id: null  # Null uses MEL_BEDROCK_MODEL_ID; set an explicit ID to override it.
+  temperature: null  # Omit sampling parameters for reasoning models.
+  reasoning_effort: low
+  max_tokens: 4096   # Includes reasoning and the structured survey output.
+review:
+  model_id: null  # Can differ from generation; IAM must allow both.
+  temperature: null
+  reasoning_effort: low
+  max_tokens: 2048
+graph:
+  max_revisions: 1       # Initial generation + at most one regeneration.
+  relevance_threshold: 0.8
+  agent_output_retries: 2
+  max_requests_per_call: 4
+  insight_timeout_seconds: 180
+batch:
+  concurrency: 3
+  input_cost_per_million: null  # Set actual model prices to enable estimated cost.
+  output_cost_per_million: null
+prompts:
+  generate: ../prompts/generate.txt
+  review: ../prompts/review.txt
+rules_path: ../docs/participant-pack/json/rules/rules.json
+calendar_path: ../docs/participant-pack/data/crop_calendar_bihar_rabi.csv
+schemas_path: ../docs/participant-pack/json/schemas

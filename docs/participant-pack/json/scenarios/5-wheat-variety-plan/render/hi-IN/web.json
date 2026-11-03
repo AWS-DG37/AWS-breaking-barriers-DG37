@@ -1,0 +1,78 @@
+{
+  "channel": "web",
+  "how_it_arrives": "Web chat has no notifications. The sheet opens the next time the farmer visits inside the send window, once the answer on screen has finished arriving.",
+  "presentation": {
+    "type": "bottom_sheet",
+    "opens_when": [
+      "next_web_visit"
+    ],
+    "waits_for": [
+      "answer_finished_streaming",
+      "no_typing_for_5_seconds",
+      "no_call_in_progress"
+    ],
+    "one_question_per_step": true,
+    "steps_total": 2,
+    "can_skip": true,
+    "can_close": true,
+    "swipe_down_closes": true
+  },
+  "sheet": {
+    "title": "आपको मिली सलाह पर एक छोटा सवाल",
+    "skip_label": "छोड़ें",
+    "close_label": "बंद करें",
+    "thank_you": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+    "steps": [
+      {
+        "step": 1,
+        "step_label": "2 में से 1",
+        "item_id": "q1",
+        "question_type": "survey-single-select",
+        "question": "आपने गेहूँ का कौन सा बीज बोया?",
+        "options": [
+          {
+            "label": "सुझाई गई किस्म",
+            "answer": "suggested"
+          },
+          {
+            "label": "कोई दूसरी किस्म",
+            "answer": "other"
+          },
+          {
+            "label": "अभी नहीं बोया",
+            "answer": "not_sown"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "step_label": "2 में से 2",
+        "item_id": "q2",
+        "question_type": "survey-scale",
+        "question": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान।",
+        "options": [
+          {
+            "label": "1",
+            "answer": 1
+          },
+          {
+            "label": "2",
+            "answer": 2
+          },
+          {
+            "label": "3",
+            "answer": 3
+          },
+          {
+            "label": "4",
+            "answer": 4
+          },
+          {
+            "label": "5",
+            "answer": 5
+          }
+        ]
+      }
+    ]
+  }
+}

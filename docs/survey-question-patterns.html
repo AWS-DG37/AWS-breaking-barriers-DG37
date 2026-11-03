@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Survey Question Patterns</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>/* Layout: one reading column; each resolution type is one section with a question table and collapsible slot fills. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --ink: #1c2331; --muted: #596273; --line: #cdd2db;
+  --dg: #2d5a87; --dg-tint: #e5edf6; --team: #a87600; --team-tint: #fcf1d2; --bad: #b3261e; --bad-tint: #fbe7e5;
+  --f-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+    --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --bad: #f2a29b; --bad-tint: #3a1d1b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a1f29; --ink: #e5e8ee; --muted: #9ba4b3; --line: #39414f;
+  --dg: #82b1df; --dg-tint: #1b293a; --team: #e2b443; --team-tint: #33290e; --bad: #f2a29b; --bad-tint: #3a1d1b;
+  color-scheme: dark;
+}
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.55; }
+.wrap {
+  max-width: 980px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 32px;
+}
+.col { max-width: 760px; min-width: 0; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--f-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+h1, h2 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(30px, 5vw, 42px); font-weight: 700; }
+h2 { font-size: 22px; font-weight: 600; }
+p { margin: 0; }
+.lede { font-size: 18px; max-width: 66ch; }
+.note { font-size: 15px; color: var(--muted); max-width: 70ch; }
+code, .mono { font-family: var(--f-mono); font-size: 0.84em; }
+.small { font-size: 14px; color: var(--muted); }
+section { display: grid; gap: 12px; min-width: 0; }
+.stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.stats div { padding: 14px 16px; display: grid; gap: 2px; border-left: 1px solid var(--line); }
+.stats div:first-child { border-left: 0; }
+.stats b { font-family: var(--f-display); font-size: 26px; font-variant-numeric: tabular-nums; }
+.stats span { font-size: 13px; color: var(--muted); }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } .stats div:nth-child(4) { border-left: 0; } .stats div:nth-child(n+4) { border-top: 1px solid var(--line); } }
+.toc { display: flex; flex-wrap: wrap; gap: 8px; }
+.toc a { text-decoration: none; color: var(--ink); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; font-size: 14px; background: var(--surface); }
+.toc a span { color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.toc a:hover, .toc a:focus-visible { border-color: var(--team); outline: none; }
+.res { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px; scroll-margin-top: 16px; }
+.res-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.res-head .mono { color: var(--muted); }
+.res-head .count { font-size: 14px; color: var(--muted); margin-left: auto; }
+.asks { font-size: 15px; }
+.k { font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dg); margin-right: 8px; }
+.tbl { overflow-x: auto; min-width: 0; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+th, td { text-align: left; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 11px; font-weight: 500; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.num { text-align: right; font-variant-numeric: tabular-nums; padding-right: 4px; width: 3.5em; }
+.pos { font-family: var(--f-mono); font-size: 13px; color: var(--muted); width: 2.5em; }
+.slot { font-family: var(--f-mono); font-size: 0.86em; background: var(--team-tint); border: 1px solid var(--team); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.cond { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-block; font-size: 13px; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); white-space: nowrap; }
+.chip.bad { border-color: var(--bad); background: var(--bad-tint); }
+.fu { font-size: 13px; color: var(--bad); margin-left: 4px; }
+details { border-top: 1px dashed var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-size: 14px; color: var(--muted); }
+summary:focus-visible { outline: 2px solid var(--team); outline-offset: 2px; }
+.fills td { font-size: 14px; }
+.gid { color: var(--muted); margin-right: 6px; }
+.scen { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface); display: grid; gap: 8px; }
+.scen-head .mono { color: var(--muted); margin-left: 6px; }
+.scen ol { margin: 0; padding-left: 20px; display: grid; gap: 10px; }
+.scen li { display: grid; gap: 6px; }
+.t { color: var(--muted); margin-right: 6px; }
+ul { margin: 0; padding-left: 22px; display: grid; gap: 8px; }
+footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+footer a { color: var(--dg); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="col">
+  <div class="eyebrow">Digital Green · MEL Survey Agent · working notes</div>
+  <h1>Survey Question Patterns</h1>
+  <p class="lede">The 95 surveys in <code>golden_set.jsonl</code> (version 1) follow one fixed template per resolution type. No Digital Green document states these templates. This page reads them out of the data.</p>
+  <p class="note">The Vision document defines the golden dataset as "insights with expected high-quality surveys, used for evaluation", so these templates are what the evaluation compares against. <strong>They are still evidence, not a spec.</strong> The brief's own worked scenarios use different questions (see the comparison below). Confirm with Digital Green before the team treats this as a question library.</p>
+</header>
+<div class="stats" role="list">
+  <div role="listitem"><b>95</b><span>surveys</span></div>
+  <div role="listitem"><b>216</b><span>questions</span></div>
+  <div role="listitem"><b>53</b><span>distinct texts</span></div>
+  <div role="listitem"><b>9</b><span>answer sets</span></div>
+  <div role="listitem"><b>5</b><span>templates</span></div>
+</div>
+<nav class="toc col" aria-label="Resolution types">
+<a href="#direct_action">Direct action <span>40</span></a> <a href="#plan_created">Plan created <span>20</span></a> <a href="#wait_and_monitor">Wait and monitor <span>12</span></a> <a href="#do_not_act">Do not act <span>12</span></a> <a href="#escalate_to_expert">Escalate to expert <span>11</span></a>
+</nav>
+<section class="res" id="direct_action"><div class="res-head"><h2>Direct action</h2><span class="mono">direct_action</span><span class="count">40 surveys · 14 with 2 questions, 26 with 3 questions</span></div><p class="asks"><span class="k">rules.json asks</span> Did the farmer do it, and did it work?</p><div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Answers</th><th class="num">Used</th></tr></thead><tbody>
+<tr><td class="pos">q1</td><td>Did you <span class="slot">{advised action}</span>?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">Not yet</span><span class="chip">No</span></div></td><td class="num">40</td></tr>
+<tr><td class="pos">q2</td><td>How is your <span class="slot">{crop or animal}</span> now?</td><td><div class="chips"><span class="chip">Better</span><span class="chip">Same</span><span class="chip">Worse</span></div></td><td class="num">40</td></tr>
+<tr><td class="pos">q3</td><td>If not, what stopped you?<div class="cond">only if <code>q1 != Yes</code> (26 of 26)</div></td><td><div class="chips"><span class="chip">Too costly</span><span class="chip">Not available nearby</span><span class="chip">No time</span><span class="chip">Did not understand</span></div></td><td class="num">26</td></tr>
+</tbody></table></div>
+<details><summary>q1 slot fills: 24 values, paraphrased from <code>advice_summary</code>, 5 of 40 word for word</summary><div class="tbl"><table class="fills"><thead><tr><th>Fill</th><th class="num">Used</th><th>Example source</th></tr></thead><tbody>
+<tr><td>treat the termite patches</td><td class="num">5</td><td><span class="mono gid">G-0014</span> Advised to give a light irrigation and apply a recommended soil insecticide as per the label in the affected patches.</td></tr>
+<tr><td>sow winter fodder</td><td class="num">3</td><td><span class="mono gid">G-0026</span> Advised to sow berseem or oats on a small plot for green fodder.</td></tr>
+<tr><td>avoid irrigation on windy days</td><td class="num">3</td><td><span class="mono gid">G-0055</span> Advised to stop irrigation on windy days and do not add more nitrogen.</td></tr>
+<tr><td>spray for yellow rust</td><td class="num">3</td><td><span class="mono gid">G-0065</span> Advised to spray a recommended fungicide for rust as per the label and cover the whole field.</td></tr>
+<tr><td>re-dry and use airtight bins</td><td class="num">3</td><td><span class="mono gid">G-0082</span> Advised to clean the store, sun-dry the produce again and use airtight bins.</td></tr>
+<tr><td>drain the field</td><td class="num">2</td><td><span class="mono gid">G-0017</span> Advised to open drains on the low side of the field within a day.</td></tr>
+<tr><td>give a light irrigation</td><td class="num">2</td><td><span class="mono gid">G-0031</span> Advised to give a light irrigation and feel if the soil below the top layer has dried.</td></tr>
+<tr><td>control fall armyworm</td><td class="num">2</td><td><span class="mono gid">G-0037</span> Advised to put a pinch of sand and soil mix into the whorl, or spray a recommended insecticide as per the label into the whorl.</td></tr>
+<tr><td>apply sulphur</td><td class="num">2</td><td><span class="mono gid">G-0072</span> Advised to apply a sulphur fertiliser as per soil test advice.</td></tr>
+<tr><td>irrigate lightly in the heat</td><td class="num">1</td><td><span class="mono gid">G-0005</span> Advised to give a light irrigation in the evening to protect grain and pod filling.</td></tr>
+<tr><td>call the vet</td><td class="num">1</td><td><span class="mono gid">G-0008</span> Advised to call the nearest veterinary doctor today and keep the animal separate.</td></tr>
+<tr><td>top-dress urea</td><td class="num">1</td><td><span class="mono gid">G-0012</span> Advised to top-dress urea after irrigation as per soil test advice.</td></tr>
+<tr><td>remove the wilted plants</td><td class="num">1</td><td><span class="mono gid">G-0021</span> Advised to pull out wilted plants, avoid water logging and plan treated seed for next season.</td></tr>
+<tr><td>fix water and top-dress</td><td class="num">1</td><td><span class="mono gid">G-0042</span> Advised to check irrigation and drainage first, then top-dress nitrogen as per soil test advice.</td></tr>
+<tr><td>treat the nursery bed</td><td class="num">1</td><td><span class="mono gid">G-0048</span> Advised to drench the nursery with a recommended fungicide as per the label and keep the bed well drained.</td></tr>
+<tr><td>get the animal checked</td><td class="num">1</td><td><span class="mono gid">G-0066</span> Advised to give mineral mixture daily and get the animal checked by the vet.</td></tr>
+<tr><td>spray for leaf blight</td><td class="num">1</td><td><span class="mono gid">G-0069</span> Advised to spray a recommended fungicide as per the label and repeat only if advised.</td></tr>
+<tr><td>apply zinc</td><td class="num">1</td><td><span class="mono gid">G-0081</span> Advised to apply zinc as per soil test advice and repeat the soil test next season.</td></tr>
+<tr><td>control the painted bug</td><td class="num">1</td><td><span class="mono gid">G-0086</span> Advised to shake plants over a cloth and spray a recommended insecticide as per the label if bugs are many.</td></tr>
+<tr><td>compare mandi prices</td><td class="num">1</td><td><span class="mono gid">G-0090</span> Advised to check mandi prices on eNAM and nearby markets, and sell graded produce in lots.</td></tr>
+<tr><td>drain the standing water</td><td class="num">1</td><td><span class="mono gid">G-0100</span> Advised to postpone sprays and irrigation, and open drains so water does not stand.</td></tr>
+<tr><td>control the fruit borer</td><td class="num">1</td><td><span class="mono gid">G-0115</span> Advised to pick and destroy bored fruits, set pheromone traps and spray a recommended insecticide as per the label if needed.</td></tr>
+<tr><td>irrigate lightly</td><td class="num">1</td><td><span class="mono gid">G-0120</span> Advised to give a light irrigation if the soil is dry and protect the crop from late pests.</td></tr>
+<tr><td>sort out rotten tubers</td><td class="num">1</td><td><span class="mono gid">G-0131</span> Advised to remove rotten tubers, dry the rest in shade and send only healthy tubers to cold storage.</td></tr>
+</tbody></table></div></details>
+<details><summary>q2 slot fills: 12 values, copied from <code>asset.name</code></summary><div class="tbl"><table class="fills"><thead><tr><th>Fill</th><th class="num">Used</th><th>Example source</th></tr></thead><tbody>
+<tr><td>wheat</td><td class="num">12</td><td><span class="mono gid">G-0014</span> wheat</td></tr>
+<tr><td>lentil</td><td class="num">6</td><td><span class="mono gid">G-0017</span> lentil</td></tr>
+<tr><td>mustard</td><td class="num">4</td><td><span class="mono gid">G-0005</span> mustard</td></tr>
+<tr><td>goat</td><td class="num">4</td><td><span class="mono gid">G-0008</span> goat</td></tr>
+<tr><td>maize</td><td class="num">4</td><td><span class="mono gid">G-0037</span> maize</td></tr>
+<tr><td>onion</td><td class="num">2</td><td><span class="mono gid">G-0048</span> onion</td></tr>
+<tr><td>pea</td><td class="num">2</td><td><span class="mono gid">G-0082</span> pea</td></tr>
+<tr><td>tomato</td><td class="num">2</td><td><span class="mono gid">G-0115</span> tomato</td></tr>
+<tr><td>cow</td><td class="num">1</td><td><span class="mono gid">G-0054</span> cow</td></tr>
+<tr><td>cabbage</td><td class="num">1</td><td><span class="mono gid">G-0090</span> cabbage</td></tr>
+<tr><td>gram</td><td class="num">1</td><td><span class="mono gid">G-0120</span> gram</td></tr>
+<tr><td>potato</td><td class="num">1</td><td><span class="mono gid">G-0131</span> potato</td></tr>
+</tbody></table></div></details>
+</section>
+<section class="res" id="plan_created"><div class="res-head"><h2>Plan created</h2><span class="mono">plan_created</span><span class="count">20 surveys · 20 with 2 questions</span></div><p class="asks"><span class="k">rules.json asks</span> Did the farmer follow the plan&#x27;s first step?</p><div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Answers</th><th class="num">Used</th></tr></thead><tbody>
+<tr><td class="pos">q1</td><td>How much of the plan have you done?</td><td><div class="chips"><span class="chip">All steps</span><span class="chip">Some steps</span><span class="chip">Not started</span></div></td><td class="num">20</td></tr>
+<tr><td class="pos">q2</td><td>Is the plan working so far?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">Too early to say</span><span class="chip">No</span></div></td><td class="num">20</td></tr>
+</tbody></table></div>
+</section>
+<section class="res" id="wait_and_monitor"><div class="res-head"><h2>Wait and monitor</h2><span class="mono">wait_and_monitor</span><span class="count">12 surveys · 12 with 2 questions</span></div><p class="asks"><span class="k">rules.json asks</span> Did the farmer watch, and is the problem growing?</p><div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Answers</th><th class="num">Used</th></tr></thead><tbody>
+<tr><td class="pos">q1</td><td>Have you seen <span class="slot">{warning sign}</span>?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span><span class="chip">Did not check</span></div></td><td class="num">12</td></tr>
+<tr><td class="pos">q2</td><td>Do you need more help?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span></div></td><td class="num">12</td></tr>
+</tbody></table></div>
+<details><summary>q1 slot fills: 9 values, copied from <code>advice_summary</code></summary><div class="tbl"><table class="fills"><thead><tr><th>Fill</th><th class="num">Used</th><th>Example source</th></tr></thead><tbody>
+<tr><td>insects in the bins</td><td class="num">3</td><td><span class="mono gid">G-0089</span> Advised to wait and watch for insects in the bins over the next few days before acting.</td></tr>
+<tr><td>new drying patches</td><td class="num">2</td><td><span class="mono gid">G-0013</span> Advised to wait and watch for new drying patches over the next few days before acting.</td></tr>
+<tr><td>new drooping plants</td><td class="num">1</td><td><span class="mono gid">G-0032</span> Advised to wait and watch for new drooping plants over the next few days before acting.</td></tr>
+<tr><td>wilting the next afternoon</td><td class="num">1</td><td><span class="mono gid">G-0039</span> Advised to wait and watch for wilting the next afternoon over the next few days before acting.</td></tr>
+<tr><td>new yellow stripes on the upper leaves</td><td class="num">1</td><td><span class="mono gid">G-0071</span> Advised to wait and watch for new yellow stripes on the upper leaves over the next few days before acting.</td></tr>
+<tr><td>new blisters on young leaves</td><td class="num">1</td><td><span class="mono gid">G-0073</span> Advised to wait and watch for new blisters on young leaves over the next few days before acting.</td></tr>
+<tr><td>spots on upper leaves</td><td class="num">1</td><td><span class="mono gid">G-0091</span> Advised to wait and watch for spots on upper leaves over the next few days before acting.</td></tr>
+<tr><td>fresh damage in the whorl</td><td class="num">1</td><td><span class="mono gid">G-0116</span> Advised to wait and watch for fresh damage in the whorl over the next few days before acting.</td></tr>
+<tr><td>more soft tubers in the heap</td><td class="num">1</td><td><span class="mono gid">G-0125</span> Advised to wait and watch for more soft tubers in the heap over the next few days before acting.</td></tr>
+</tbody></table></div></details>
+</section>
+<section class="res" id="do_not_act"><div class="res-head"><h2>Do not act</h2><span class="mono">do_not_act</span><span class="count">12 surveys · 12 with 2 questions</span></div><p class="asks"><span class="k">rules.json asks</span> Did the farmer hold off, and what happened?</p><div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Answers</th><th class="num">Used</th></tr></thead><tbody>
+<tr><td class="pos">q1</td><td>Did you hold off as advised?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span></div></td><td class="num">12</td></tr>
+<tr><td class="pos">q2</td><td>How is your <span class="slot">{crop or animal}</span> now?</td><td><div class="chips"><span class="chip">Better</span><span class="chip">Same</span><span class="chip">Worse</span></div></td><td class="num">12</td></tr>
+</tbody></table></div>
+<details><summary>q2 slot fills: 7 values, copied from <code>asset.name</code></summary><div class="tbl"><table class="fills"><thead><tr><th>Fill</th><th class="num">Used</th><th>Example source</th></tr></thead><tbody>
+<tr><td>wheat</td><td class="num">3</td><td><span class="mono gid">G-0061</span> wheat</td></tr>
+<tr><td>potato</td><td class="num">3</td><td><span class="mono gid">G-0085</span> potato</td></tr>
+<tr><td>lentil</td><td class="num">2</td><td><span class="mono gid">G-0097</span> lentil</td></tr>
+<tr><td>cabbage</td><td class="num">1</td><td><span class="mono gid">G-0003</span> cabbage</td></tr>
+<tr><td>pea</td><td class="num">1</td><td><span class="mono gid">G-0096</span> pea</td></tr>
+<tr><td>cauliflower</td><td class="num">1</td><td><span class="mono gid">G-0129</span> cauliflower</td></tr>
+<tr><td>gram</td><td class="num">1</td><td><span class="mono gid">G-0133</span> gram</td></tr>
+</tbody></table></div></details>
+</section>
+<section class="res" id="escalate_to_expert"><div class="res-head"><h2>Escalate to expert</h2><span class="mono">escalate_to_expert</span><span class="count">11 surveys · 11 with 2 questions</span></div><p class="asks"><span class="k">rules.json asks</span> Did the farmer reach the expert, and is the crop or animal better?</p><div class="tbl"><table><thead><tr><th>#</th><th>Question</th><th>Answers</th><th class="num">Used</th></tr></thead><tbody>
+<tr><td class="pos">q1</td><td>Did you meet the veterinary doctor?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">Not yet</span><span class="chip">Could not reach</span></div></td><td class="num">11</td></tr>
+<tr><td class="pos">q2</td><td>Did their advice help?</td><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span><span class="chip">Not met yet</span></div></td><td class="num">11</td></tr>
+</tbody></table></div>
+<p class="small">Every golden expert survey is about livestock ({'livestock': 11}), so the question always says veterinary doctor. The full input matches: clean <code>escalate_to_expert</code> insights split as {'livestock': 34}. A crop case would need different wording, but the practice data has none.</p>
+</section>
+<section class="col"><h2>The answer sets</h2><p>Each question text always comes with the same answers. These are all of them.</p><div class="tbl"><table><thead><tr><th>Answers</th><th class="num">Used</th><th>Questions</th></tr></thead><tbody>
+<tr><td><div class="chips"><span class="chip">Better</span><span class="chip">Same</span><span class="chip">Worse</span></div></td><td class="num">52</td><td class="small">How is your {crop or animal} now?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">Not yet</span><span class="chip">No</span></div></td><td class="num">40</td><td class="small">Did you {advised action}?</td></tr>
+<tr><td><div class="chips"><span class="chip">Too costly</span><span class="chip">Not available nearby</span><span class="chip">No time</span><span class="chip">Did not understand</span></div></td><td class="num">26</td><td class="small">If not, what stopped you?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span></div></td><td class="num">24</td><td class="small">Did you hold off as advised?<br>Do you need more help?</td></tr>
+<tr><td><div class="chips"><span class="chip">All steps</span><span class="chip">Some steps</span><span class="chip">Not started</span></div></td><td class="num">20</td><td class="small">How much of the plan have you done?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">Too early to say</span><span class="chip">No</span></div></td><td class="num">20</td><td class="small">Is the plan working so far?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span><span class="chip">Did not check</span></div></td><td class="num">12</td><td class="small">Have you seen {warning sign}?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">Not yet</span><span class="chip">Could not reach</span></div></td><td class="num">11</td><td class="small">Did you meet the veterinary doctor?</td></tr>
+<tr><td><div class="chips"><span class="chip">Yes</span><span class="chip">No</span><span class="chip">Not met yet</span></div></td><td class="num">11</td><td class="small">Did their advice help?</td></tr>
+</tbody></table></div></section>
+<section class="col"><h2>Compare: the brief's worked scenarios</h2><p>The five worked surveys use other wording, a scale question, and mark the bad answers with a <code>follow_up</code> reason. The golden surveys mark none (0 of 216 questions carry a follow-up field).</p>
+<div class="scen"><div class="scen-head"><b>1-mustard-aphid-spray</b> <span class="mono">direct_action</span></div><ol>
+<li><span class="mono t">confirm</span> Did you spray your mustard for the aphids (small green insects)?<div class="chips"><span class="chip" title="">Yes</span><span class="chip" title="">No</span></div></li>
+<li><span class="mono t">single-select</span> Was it easy to get the spray?<div class="chips"><span class="chip" title="">Yes, easily</span><span class="chip" title="">Yes, with difficulty</span><span class="chip bad" title="could_not_get_input">Could not get it</span></div></li>
+<li><span class="mono t">single-select</span> How many of these insects are on the plants now?<div class="chips"><span class="chip" title="">Almost none</span><span class="chip" title="">Fewer than before</span><span class="chip bad" title="advice_did_not_work">Same as before</span><span class="chip bad" title="advice_did_not_work">More than before</span></div></li>
+</ol></div>
+<div class="scen"><div class="scen-head"><b>2-wheat-irrigation-timing</b> <span class="mono">direct_action</span></div><ol>
+<li><span class="mono t">single-select</span> Did you give the first irrigation to your wheat?<div class="chips"><span class="chip" title="">Yes, on time</span><span class="chip" title="">Yes, but later</span><span class="chip" title="">Not yet</span></div></li>
+<li><span class="mono t">single-select</span> How does your wheat crop look now?<div class="chips"><span class="chip" title="">Green and healthy</span><span class="chip" title="">Some yellow leaves</span><span class="chip bad" title="crop_or_animal_damaged">Many yellow leaves</span></div></li>
+</ol></div>
+<div class="scen"><div class="scen-head"><b>3-potato-blight-wait</b> <span class="mono">wait_and_monitor</span></div><ol>
+<li><span class="mono t">confirm</span> Did you check the potato leaves in the last 3 days?<div class="chips"><span class="chip" title="">Yes</span><span class="chip" title="">No</span></div></li>
+<li><span class="mono t">single-select</span> What is happening to the brown spots?<div class="chips"><span class="chip" title="">No new spots</span><span class="chip" title="">Same as before</span><span class="chip bad" title="crop_or_animal_damaged">Spreading</span><span class="chip bad" title="crop_or_animal_damaged">White growth seen</span></div></li>
+<li><span class="mono t">scale</span> How useful was the advice? 1 means not useful, 5 means very useful.<div class="chips"><span class="chip">1 to 5</span><span class="fu">follow-up at or below 1: advice_did_not_work</span></div></li>
+</ol></div>
+<div class="scen"><div class="scen-head"><b>4-cow-vet-escalation</b> <span class="mono">escalate_to_expert</span></div><ol>
+<li><span class="mono t">confirm</span> Did a vet see your cow?<div class="chips"><span class="chip" title="">Yes</span><span class="chip bad" title="could_not_reach_expert">No</span></div></li>
+<li><span class="mono t">single-select</span> How is your cow now?<div class="chips"><span class="chip" title="">Better</span><span class="chip bad" title="advice_did_not_work">Same as before</span><span class="chip bad" title="crop_or_animal_damaged">Worse</span></div></li>
+</ol></div>
+<div class="scen"><div class="scen-head"><b>5-wheat-variety-plan</b> <span class="mono">plan_created</span></div><ol>
+<li><span class="mono t">single-select</span> Which wheat seed did you sow?<div class="chips"><span class="chip" title="">The suggested type</span><span class="chip" title="">A different type</span><span class="chip" title="">Not sown yet</span></div></li>
+<li><span class="mono t">scale</span> How easy was it to find good seed? 1 means very hard, 5 means very easy.<div class="chips"><span class="chip">1 to 5</span><span class="fu">follow-up at or below 1: could_not_get_input</span></div></li>
+</ol></div>
+<p class="small"><span class="chip bad">Answer</span> marks an answer that carries a <code>follow_up</code> reason and goes back to FarmerChat for help.</p></section>
+<section class="col"><h2>Check before use</h2><ul>
+<li><strong>No follow-up flags.</strong> The brief requires a <code>follow_up</code> reason on bad answers, for example "more insects than before" or "the cow is worse". The golden answers "Worse" and "Could not reach" carry none.</li>
+<li><strong><code>show_if</code> is not in the schema.</strong> The golden set shows "If not, what stopped you?" only when q1 is not "Yes". <code>survey.schema.json</code> has no field for a condition.</li>
+<li><strong>English only.</strong> All golden questions are English. The farmer gets the copy in the insight's <code>conversation_language</code>, mostly hi-IN, and Hindi answer labels must still fit 20 characters.</li>
+<li><strong>Different shape.</strong> Golden items use <code>id</code>, <code>text</code> and plain option strings. <code>survey.schema.json</code> uses <code>item_id</code>, <code>type</code>, <code>prompt</code> and option objects with <code>value</code> and <code>label</code>.</li>
+<li><strong>Version 1.</strong> Digital Green can update the golden set during the event. Rebuild this page when it changes.</li>
+</ul></section>
+<footer class="col">Built from the Digital Green participant pack, version 1: <code>data/golden_set.jsonl</code>, <code>json/rules/rules.json</code>, <code>json/scenarios/*/survey.en-IN.json</code>. Synthetic data. Every count on this page is computed from those files by <code>scripts/build_question_patterns.py</code>. See also the <a href="system-diagram.html">system diagram</a>.</footer>
+</div>
+</body>
+</html>

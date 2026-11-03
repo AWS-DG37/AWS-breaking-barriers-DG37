@@ -1,8 +1,23 @@
-# Python-generated files
+.DS_Store
+.venv/
+.uv-cache/
+.aws-sam/
+.pytest_cache/
+.ruff_cache/
 __pycache__/
-*.py[oc]
+*.pyc
+.env
 build/
 dist/
+outputs/
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/farmerchat-mel.iml
+/.idea/modules.xml
+/.idea/vcs.xml
+# Python-generated files
+*.py[oc]
 wheels/
 *.egg-info
 
@@ -11,3 +26,11 @@ wheels/
 
 # Digital Green participant pack (confidential per the secure-attach email; do not commit)
 data/pack/
+
+
+
+# Impeccable review captures and local engine state
+.impeccable/review/
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json

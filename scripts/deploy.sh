@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Creates AWS resources and pushes the image only when explicitly run by an operator.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+AWS_REGION="${AWS_REGION:-us-east-1}"
+BEDROCK_MODEL_ID="${BEDROCK_MODEL_ID:-openai.gpt-6-luna}"
+BEDROCK_ALLOWED_MODEL_IDS="${BEDROCK_ALLOWED_MODEL_IDS:-$BEDROCK_MODEL_ID}"
+if [[ "$BEDROCK_MODEL_ID" == "openai.gpt-6-luna" && "$AWS_REGION" != "us-east-1" ]]; then
+  echo 'GPT-6 Luna on Mantle requires AWS_REGION=us-east-1.' >&2
+  exit 1
+fi
+STACK_NAME="${STACK_NAME:-farmerchat-mel}"
+ASSETS_STACK="${STACK_NAME}-assets"
+IMAGE_TAG="${IMAGE_TAG:-$(date -u +%Y%m%d%H%M%S)}"
+export AWS_DEFAULT_REGION="$AWS_REGION"
+
+aws cloudformation deploy --region "$AWS_REGION" \
+  --stack-name "$ASSETS_STACK" --template-file infra/bootstrap.yaml \
+  --no-fail-on-empty-changeset
+
+TEMPLATE_BUCKET="$(aws cloudformation describe-stacks --stack-name "$ASSETS_STACK" \
+  --query 'Stacks[0].Outputs[?OutputKey==`TemplateBucketName`].OutputValue | [0]' --output text)"
+REPOSITORY="$(aws cloudformation describe-stacks --stack-name "$ASSETS_STACK" \
+  --query 'Stacks[0].Outputs[?OutputKey==`WorkerRepositoryUri`].OutputValue | [0]' --output text)"
+REGISTRY="${REPOSITORY%%/*}"
+IMAGE="${REPOSITORY}:${IMAGE_TAG}"
+aws ecr get-login-password --region "$AWS_REGION" |
+  docker login --username AWS --password-stdin "$REGISTRY"
+docker build --platform linux/amd64 --tag "$IMAGE" .
+docker push "$IMAGE"
+
+# S3 receives the SAM template. ECS images are stored in ECR, not packaged by sam build.
+sam deploy --region "$AWS_REGION" --stack-name "$STACK_NAME" \
+  --template-file template.yaml --s3-bucket "$TEMPLATE_BUCKET" \
+  --s3-prefix "$STACK_NAME" --force-upload --capabilities CAPABILITY_IAM \
+  --no-fail-on-empty-changeset \
+  --parameter-overrides "ContainerImage=$IMAGE" "BedrockModelId=$BEDROCK_MODEL_ID" \
+  "BedrockAllowedModelIds=$BEDROCK_ALLOWED_MODEL_IDS"

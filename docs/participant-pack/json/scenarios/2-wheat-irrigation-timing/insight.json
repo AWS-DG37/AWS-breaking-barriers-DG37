@@ -1,0 +1,31 @@
+{
+  "insight_id": "I-004871",
+  "farmer_id": "F-000187",
+  "conversation_id": "C-88402",
+  "created_at": "2026-12-08T18:40:00+05:30",
+  "conversation_language": "hi-IN",
+  "location": {
+    "country": "IN",
+    "state": "Bihar",
+    "district": "Samastipur"
+  },
+  "asset": {
+    "name": "wheat",
+    "category": "crop",
+    "growth_stage": "seedling"
+  },
+  "concern": "water_stress",
+  "behavioral_intent": "procedural_guidance",
+  "decision_episode_type": "decision",
+  "severity": "low",
+  "query_summary": "When to give the first irrigation to wheat sown on 18 November.",
+  "advice_summary": "Give the first irrigation at crown root initiation, 21 to 25 days after sowing, that is between 9 and 13 December. Give a light irrigation and do not flood the field.",
+  "resolution_type": "direct_action",
+  "action_window_days": 5,
+  "verification": {
+    "needed": true,
+    "timing": "three_to_ten_days",
+    "method": "whatsapp"
+  },
+  "preferred_channel": "whatsapp"
+}

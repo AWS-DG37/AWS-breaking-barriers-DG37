@@ -1,0 +1,150 @@
+{
+  "channel": "whatsapp",
+  "how_it_arrives": "Days after the chat, so outside WhatsApp's 24-hour reply window. The first message must be an approved template; the questions follow once the farmer taps Start.",
+  "opening_template": {
+    "messaging_product": "whatsapp",
+    "to": "<farmer WhatsApp number>",
+    "type": "template",
+    "template": {
+      "name": "mel_survey_invite",
+      "language": {
+        "code": "hi"
+      },
+      "components": [
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "0",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-20931|start"
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "1",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-20931|later"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "template_text_for_approval": {
+    "body": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।",
+    "quick_replies": [
+      "शुरू करें",
+      "अभी नहीं"
+    ]
+  },
+  "messages": [
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20931|q1|yes",
+                "title": "हाँ"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20931|q1|no",
+                "title": "नहीं"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "क्या छिड़काव की दवा आसानी से मिल गई?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20931|q2|easy",
+                "title": "हाँ, आसानी से"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20931|q2|hard",
+                "title": "हाँ, मुश्किल से"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20931|q2|not_found",
+                "title": "नहीं मिली"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "list",
+        "body": {
+          "text": "अब पौधों पर ये कीड़े कितने हैं?"
+        },
+        "action": {
+          "button": "चुनें",
+          "sections": [
+            {
+              "title": "एक चुनें",
+              "rows": [
+                {
+                  "id": "S-20931|q3|almost_none",
+                  "title": "लगभग नहीं"
+                },
+                {
+                  "id": "S-20931|q3|fewer",
+                  "title": "पहले से कम"
+                },
+                {
+                  "id": "S-20931|q3|same",
+                  "title": "पहले जितने"
+                },
+                {
+                  "id": "S-20931|q3|more",
+                  "title": "पहले से ज़्यादा"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

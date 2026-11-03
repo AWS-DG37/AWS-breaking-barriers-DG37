@@ -1,0 +1,68 @@
+{
+  "response_key": "rk-S-21310-voice-completed",
+  "survey_id": "S-21310",
+  "farmer_id": "F-000245",
+  "source_insight_ids": [
+    "I-005330"
+  ],
+  "channel": "voice",
+  "language": "hi-IN",
+  "question_type": "survey-scale",
+  "status": "completed",
+  "failure_code": null,
+  "sheet_outcome": null,
+  "answers": {
+    "q1": "yes",
+    "q2": "no_new",
+    "q3": 5
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "answered",
+      "value": "yes",
+      "raw_input": "हाँ",
+      "input_kind": "speech",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "no_new",
+      "raw_input": "1",
+      "input_kind": "keypad",
+      "attempts": 1
+    },
+    {
+      "item_id": "q3",
+      "item_type": "survey-scale",
+      "result": "answered",
+      "value": 5,
+      "raw_input": "5",
+      "input_kind": "keypad",
+      "attempts": 1
+    }
+  ],
+  "complete": true,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2027-01-09T10:00:00+05:30",
+    "delivered": "2027-01-09T10:01:00+05:30",
+    "opened": "2027-01-09T10:20:00+05:30",
+    "answered": "2027-01-09T10:25:00+05:30"
+  },
+  "recorded_at": "2027-01-09T10:25:00+05:30",
+  "answered_by": "F-000245",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

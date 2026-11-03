@@ -1,0 +1,31 @@
+{
+  "insight_id": "I-004101",
+  "farmer_id": "F-000519",
+  "conversation_id": "C-87790",
+  "created_at": "2026-11-20T11:00:00+05:30",
+  "conversation_language": "hi-IN",
+  "location": {
+    "country": "IN",
+    "state": "Bihar",
+    "district": "Darbhanga"
+  },
+  "asset": {
+    "name": "wheat",
+    "category": "crop",
+    "growth_stage": null
+  },
+  "concern": "soil_health",
+  "behavioral_intent": "information_seeking",
+  "decision_episode_type": "general_knowledge",
+  "severity": "low",
+  "query_summary": "What is zero tillage and why is it said to be good for wheat?",
+  "advice_summary": "Explained zero tillage: sowing wheat with a seed drill straight after paddy, without ploughing, which saves time, diesel and water.",
+  "resolution_type": "generic_information",
+  "action_window_days": null,
+  "verification": {
+    "needed": false,
+    "timing": "none",
+    "method": "none"
+  },
+  "preferred_channel": "app"
+}

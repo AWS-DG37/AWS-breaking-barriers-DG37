@@ -1,0 +1,60 @@
+{
+  "response_key": "rk-S-21102-voice",
+  "survey_id": "S-21102",
+  "farmer_id": "F-000311",
+  "source_insight_ids": [
+    "I-004990"
+  ],
+  "channel": "voice",
+  "language": "hi-IN",
+  "status": "negative_outcome",
+  "failure_code": null,
+  "sheet_outcome": null,
+  "answers": {
+    "q1": "no",
+    "q2": "worse"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "answered",
+      "value": "no",
+      "raw_input": "नहीं",
+      "input_kind": "speech",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "worse",
+      "raw_input": "3",
+      "input_kind": "keypad",
+      "attempts": 1
+    }
+  ],
+  "complete": true,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-16T10:00:00+05:30",
+    "delivered": "2026-12-16T10:01:00+05:30",
+    "opened": "2026-12-16T10:20:00+05:30",
+    "answered": "2026-12-16T10:25:00+05:30"
+  },
+  "recorded_at": "2026-12-16T10:25:00+05:30",
+  "answered_by": "F-000311",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": true,
+  "follow_up_reasons": [
+    "could_not_reach_expert",
+    "crop_or_animal_damaged"
+  ]
+}

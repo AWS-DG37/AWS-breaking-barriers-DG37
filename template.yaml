@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: FarmerChat MEL - standalone Fargate worker, private PostgreSQL, S3 data.
+
+Parameters:
+  ContainerImage:
+    Type: String
+    Description: Full ECR image URI with immutable tag or digest, built before deployment.
+  BedrockModelId:
+    Type: String
+    Default: openai.gpt-6-luna
+    Description: Bedrock Mantle model ID; GPT-6 Luna is served in us-east-1.
+  BedrockAllowedModelIds:
+    Type: CommaDelimitedList
+    Default: openai.gpt-6-luna
+    Description: Model names allowed for inference; include generation and review IDs.
+  DatabaseInstanceClass:
+    Type: String
+    Default: db.t4g.micro
+  DatabaseName:
+    Type: String
+    Default: farmerchat
+    AllowedPattern: '[a-z][a-z0-9]{0,62}'
+  DatabaseBackupDays:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    MaxValue: 35
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+  WorkerSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.0.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+  WorkerRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  WorkerRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref WorkerSubnet
+      RouteTableId: !Ref WorkerRoutes
+  InternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref WorkerRoutes
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  DatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.10.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+  DatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.11.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+  DatabaseSubnets:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Isolated database subnets; no internet routes.
+      SubnetIds: [!Ref DatabaseSubnetA, !Ref DatabaseSubnetB]
+  WorkerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Batch worker - no inbound connections.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.42.0.0/16
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL reachable only by the worker security group.
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref WorkerSecurityGroup
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 127.0.0.1/32
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      Engine: postgres
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      AllocatedStorage: '20'
+      StorageType: gp3
+      StorageEncrypted: true
+      DBName: !Ref DatabaseName
+      MasterUsername: meladmin
+      ManageMasterUserPassword: true
+      DBSubnetGroupName: !Ref DatabaseSubnets
+      VPCSecurityGroups: [!Ref DatabaseSecurityGroup]
+      PubliclyAccessible: false
+      MultiAZ: false
+      BackupRetentionPeriod: !Ref DatabaseBackupDays
+      AutoMinorVersionUpgrade: true
+      CopyTagsToSnapshot: true
+  DataBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  DataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DataBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt DataBucket.Arn, !Sub '${DataBucket.Arn}/*']
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+  Cluster:
+    Type: AWS::ECS::Cluster
+  WorkerLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 14
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  WorkerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WorkerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: bedrock-mantle:CreateInference
+                Resource: !Sub 'arn:${AWS::Partition}:bedrock-mantle:${AWS::Region}:${AWS::AccountId}:project/default'
+                Condition:
+                  StringEquals:
+                    bedrock-mantle:Model: !Ref BedrockAllowedModelIds
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !GetAtt Database.MasterUserSecret.SecretArn
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource:
+                  - !Sub '${DataBucket.Arn}/inputs/*'
+                  - !Sub '${DataBucket.Arn}/config/*'
+              - Effect: Allow
+                Action: s3:PutObject
+                Resource: !Sub '${DataBucket.Arn}/outputs/*'
+  WorkerTask:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      Cpu: '512'
+      Memory: '1024'
+      RuntimePlatform:
+        CpuArchitecture: X86_64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt ExecutionRole.Arn
+      TaskRoleArn: !GetAtt WorkerRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Ref ContainerImage
+          Essential: true
+          ReadonlyRootFilesystem: true
+          Environment:
+            - Name: PYTHONDONTWRITEBYTECODE
+              Value: '1'
+            - Name: MEL_AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: MEL_BEDROCK_MODEL_ID
+              Value: !Ref BedrockModelId
+            - Name: MEL_DATABASE_HOST
+              Value: !GetAtt Database.Endpoint.Address
+            - Name: MEL_DATABASE_NAME
+              Value: !Ref DatabaseName
+            - Name: MEL_DATABASE_SECRET_ARN
+              Value: !GetAtt Database.MasterUserSecret.SecretArn
+            - Name: MEL_DATABASE_SSLMODE
+              Value: verify-full
+            - Name: MEL_DATABASE_SSLROOTCERT
+              Value: /app/certs/global-bundle.pem
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogs
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: worker
+
+Outputs:
+  BedrockModelId:
+    Value: !Ref BedrockModelId
+  ClusterArn:
+    Value: !GetAtt Cluster.Arn
+  WorkerTaskDefinitionArn:
+    Value: !Ref WorkerTask
+  WorkerSubnetId:
+    Value: !Ref WorkerSubnet
+  WorkerSecurityGroupId:
+    Value: !Ref WorkerSecurityGroup
+  DataBucketName:
+    Value: !Ref DataBucket
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  DatabaseSecretArn:
+    Value: !GetAtt Database.MasterUserSecret.SecretArn
+  WorkerLogGroup:
+    Value: !Ref WorkerLogs

@@ -1,0 +1,59 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "A short question from FarmerChat about the advice you got. It takes one minute."
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "Did a vet see your cow?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Yes",
+              "callback_data": "mel|S-21102|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "No",
+              "callback_data": "mel|S-21102|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "How is your cow now?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Better",
+              "callback_data": "mel|S-21102|q2|better"
+            }
+          ],
+          [
+            {
+              "text": "Same as before",
+              "callback_data": "mel|S-21102|q2|same"
+            }
+          ],
+          [
+            {
+              "text": "Worse",
+              "callback_data": "mel|S-21102|q2|worse"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

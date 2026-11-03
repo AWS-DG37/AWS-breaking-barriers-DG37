@@ -1,0 +1,52 @@
+{
+  "response_key": "rk-S-21102-whatsapp-farmer_declined",
+  "survey_id": "S-21102",
+  "farmer_id": "F-000311",
+  "source_insight_ids": [
+    "I-004990"
+  ],
+  "channel": "whatsapp",
+  "language": "hi-IN",
+  "question_type": "survey-confirm",
+  "status": "declined",
+  "failure_code": "farmer_declined",
+  "sheet_outcome": null,
+  "answers": {},
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "not_reached",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 0
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "not_reached",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 0
+    }
+  ],
+  "complete": false,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-16T08:00:00+05:30",
+    "delivered": "2026-12-16T08:01:00+05:30",
+    "opened": "2026-12-16T08:20:00+05:30",
+    "answered": "2026-12-16T08:25:00+05:30"
+  },
+  "recorded_at": "2026-12-16T08:25:00+05:30",
+  "answered_by": "F-000311",
+  "raw_event": "S-21102|later",
+  "retry_decision": "give_up",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": null,
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

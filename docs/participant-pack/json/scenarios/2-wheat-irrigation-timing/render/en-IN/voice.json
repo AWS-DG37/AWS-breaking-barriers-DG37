@@ -1,0 +1,53 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "Hello, this is a call from FarmerChat. We have two short questions about the advice you got. You can press a key or say your answer.",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "Did you give the first irrigation to your wheat? For Yes, on time, press 1. For Yes, but later, press 2. For Not yet, press 3.",
+      "keypad": {
+        "1": "on_time",
+        "2": "late",
+        "3": "not_yet"
+      },
+      "speech": {
+        "on_time": [
+          "Yes, on time"
+        ],
+        "late": [
+          "Yes, but later"
+        ],
+        "not_yet": [
+          "Not yet"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "How does your wheat crop look now? For Green and healthy, press 1. For Some yellow leaves, press 2. For Many yellow leaves, press 3.",
+      "keypad": {
+        "1": "healthy",
+        "2": "some_yellow",
+        "3": "many_yellow"
+      },
+      "speech": {
+        "healthy": [
+          "Green and healthy"
+        ],
+        "some_yellow": [
+          "Some yellow leaves"
+        ],
+        "many_yellow": [
+          "Many yellow leaves"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "Thank you. Your answers help us give better advice.",
+  "closing_if_follow_up": "Thank you. We have noted this. FarmerChat will contact you again about it."
+}

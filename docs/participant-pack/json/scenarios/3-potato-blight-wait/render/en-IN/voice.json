@@ -1,0 +1,92 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "Hello, this is a call from FarmerChat. We have three short questions about the advice you got. You can press a key or say your answer.",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "Did you check the potato leaves in the last 3 days? For Yes, press 1. For No, press 2.",
+      "keypad": {
+        "1": "yes",
+        "2": "no"
+      },
+      "speech": {
+        "yes": [
+          "Yes",
+          "yes",
+          "yes I did"
+        ],
+        "no": [
+          "No",
+          "no",
+          "not yet"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "What is happening to the brown spots? For No new spots, press 1. For Same as before, press 2. For Spreading, press 3. For White growth seen, press 4.",
+      "keypad": {
+        "1": "no_new",
+        "2": "same",
+        "3": "spreading",
+        "4": "white_growth"
+      },
+      "speech": {
+        "no_new": [
+          "No new spots"
+        ],
+        "same": [
+          "Same as before"
+        ],
+        "spreading": [
+          "Spreading"
+        ],
+        "white_growth": [
+          "White growth seen"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q3",
+      "say": "How useful was the advice? 1 means not useful, 5 means very useful. Press or say a number from 1 to 5.",
+      "keypad": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5
+      },
+      "speech": {
+        "1": [
+          "1",
+          "one"
+        ],
+        "2": [
+          "2",
+          "two"
+        ],
+        "3": [
+          "3",
+          "three"
+        ],
+        "4": [
+          "4",
+          "four"
+        ],
+        "5": [
+          "5",
+          "five"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "Thank you. Your answers help us give better advice.",
+  "closing_if_follow_up": "Thank you. We have noted this. FarmerChat will contact you again about it."
+}

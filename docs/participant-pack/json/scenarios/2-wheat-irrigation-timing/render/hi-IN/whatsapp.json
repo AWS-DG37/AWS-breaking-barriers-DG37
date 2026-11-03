@@ -1,0 +1,120 @@
+{
+  "channel": "whatsapp",
+  "how_it_arrives": "Days after the chat, so outside WhatsApp's 24-hour reply window. The first message must be an approved template; the questions follow once the farmer taps Start.",
+  "opening_template": {
+    "messaging_product": "whatsapp",
+    "to": "<farmer WhatsApp number>",
+    "type": "template",
+    "template": {
+      "name": "mel_survey_invite",
+      "language": {
+        "code": "hi"
+      },
+      "components": [
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "0",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-21044|start"
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "1",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-21044|later"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "template_text_for_approval": {
+    "body": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।",
+    "quick_replies": [
+      "शुरू करें",
+      "अभी नहीं"
+    ]
+  },
+  "messages": [
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "क्या आपने गेहूँ में पहली सिंचाई कर दी?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q1|on_time",
+                "title": "हाँ, समय पर"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q1|late",
+                "title": "हाँ, पर देर से"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q1|not_yet",
+                "title": "अभी नहीं"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "आपकी गेहूँ की फसल अब कैसी दिख रही है?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q2|healthy",
+                "title": "हरी और स्वस्थ"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q2|some_yellow",
+                "title": "कुछ पत्ते पीले"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21044|q2|many_yellow",
+                "title": "बहुत पत्ते पीले"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

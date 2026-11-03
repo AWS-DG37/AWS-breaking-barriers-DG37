@@ -1,0 +1,89 @@
+{
+  "handoff_id": "H-20877",
+  "created_at": "2026-12-02T23:00:00+05:30",
+  "survey": {
+    "survey_id": "S-20877",
+    "farmer_id": "F-000402",
+    "source_insight_ids": [
+      "I-004420"
+    ],
+    "language": "hi-IN",
+    "send_window": {
+      "not_before": "2026-12-25T07:00:00+05:30",
+      "not_after": "2026-12-27T19:00:00+05:30"
+    },
+    "items": [
+      {
+        "item_id": "q1",
+        "type": "survey-single-select",
+        "prompt": "आपने गेहूँ का कौन सा बीज बोया?",
+        "options": [
+          {
+            "value": "suggested",
+            "label": "सुझाई गई किस्म"
+          },
+          {
+            "value": "other",
+            "label": "कोई दूसरी किस्म"
+          },
+          {
+            "value": "not_sown",
+            "label": "अभी नहीं बोया"
+          }
+        ]
+      },
+      {
+        "item_id": "q2",
+        "type": "survey-scale",
+        "prompt": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान।",
+        "scale_min": 1,
+        "scale_max": 5,
+        "follow_up_at_or_below": 1,
+        "follow_up_reason": "could_not_get_input"
+      }
+    ],
+    "rationale": "Variety plan with a sowing deadline of 25 December. Asking at 7 to 14 days would land before the sowing date, so the window starts on the deadline.",
+    "self_eval": {
+      "schema_valid": true,
+      "gives_new_advice": false,
+      "asks_personal_info": false
+    }
+  },
+  "send_window": {
+    "not_before": "2026-12-25T07:00:00+05:30",
+    "not_after": "2026-12-27T19:00:00+05:30"
+  },
+  "send_hours": {
+    "from": "07:00",
+    "to": "19:00"
+  },
+  "channel_order": [
+    {
+      "channel": "telegram",
+      "wait_hours": 48
+    },
+    {
+      "channel": "app",
+      "wait_hours": 48
+    },
+    {
+      "channel": "whatsapp",
+      "wait_hours": null
+    }
+  ],
+  "frequency_cap": {
+    "key": "mel:farmer:F-000402",
+    "max_surveys": 1,
+    "window_days": 7,
+    "exempt": false
+  },
+  "priority": "low",
+  "expires_at": "2026-12-29T19:00:00+05:30",
+  "farmerchat_flow": {
+    "org_id": "org.farmerchat",
+    "flow_key": "mel_s_20877",
+    "version": 1,
+    "campaign_id": "283df456-256d-5d97-912f-1a6c4fdde6d0",
+    "flow_id": "691d27be-f575-5dbd-8475-b98c90113bcc"
+  }
+}
