@@ -16,7 +16,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from pydantic import BaseModel, ConfigDict, Field
 from referencing import Registry, Resource
 
-PACK = Path(__file__).resolve().parent.parent / "data" / "pack"
+PACK = Path(__file__).resolve().parent.parent / "docs" / "participant-pack"
 SCHEMAS = PACK / "json" / "schemas"
 SCHEMA_NAMES = ("insight", "survey", "schedule_handoff", "response", "no_survey", "bottom_sheet")
 
@@ -251,5 +251,5 @@ def validator(name: str) -> Draft202012Validator:
 
 
 def validate(name: str, payload: dict) -> list[str]:
-    """Return schema errors for payload against data/pack/json/schemas/<name>.schema.json."""
+    """Return schema errors against docs/participant-pack/json/schemas/<name>.schema.json."""
     return [f"{'/'.join(map(str, e.absolute_path))}: {e.message}" for e in validator(name).iter_errors(payload)]

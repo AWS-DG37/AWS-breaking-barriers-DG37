@@ -376,10 +376,10 @@ The current 145/150 golden score measures eligibility only, not question quality
 uv run pytest -q
 ```
 
-The legacy reference tests use the ignored `data/pack/` copy of the participant
-pack. The worker uses `docs/participant-pack/`. The six schemas and rule files
-currently match byte-for-byte. Evaluation integration must reconcile these paths
-and the worker's held-out split rather than claim two independent truths.
+The retained reference tests and worker both use `docs/participant-pack/`, so a
+fresh checkout needs no extra ignored copy of the schemas. The original
+`data/pack/` directory remains untouched. Evaluation integration must reconcile
+the legacy all-150 score with the worker's held-out split.
 
 ## Simple Bedrock chat smoke test
 
