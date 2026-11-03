@@ -1,0 +1,92 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "A short question from FarmerChat about the advice you got. It takes one minute."
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "Did you spray your mustard for the aphids (small green insects)?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Yes",
+              "callback_data": "mel|S-20931|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "No",
+              "callback_data": "mel|S-20931|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "Was it easy to get the spray?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Yes, easily",
+              "callback_data": "mel|S-20931|q2|easy"
+            }
+          ],
+          [
+            {
+              "text": "Yes, with difficulty",
+              "callback_data": "mel|S-20931|q2|hard"
+            }
+          ],
+          [
+            {
+              "text": "Could not get it",
+              "callback_data": "mel|S-20931|q2|not_found"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "How many of these insects are on the plants now?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Almost none",
+              "callback_data": "mel|S-20931|q3|almost_none"
+            }
+          ],
+          [
+            {
+              "text": "Fewer than before",
+              "callback_data": "mel|S-20931|q3|fewer"
+            }
+          ],
+          [
+            {
+              "text": "Same as before",
+              "callback_data": "mel|S-20931|q3|same"
+            }
+          ],
+          [
+            {
+              "text": "More than before",
+              "callback_data": "mel|S-20931|q3|more"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

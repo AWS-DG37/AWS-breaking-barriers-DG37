@@ -1,0 +1,65 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "A short question from FarmerChat about the advice you got. It takes one minute."
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "Did you give the first irrigation to your wheat?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Yes, on time",
+              "callback_data": "mel|S-21044|q1|on_time"
+            }
+          ],
+          [
+            {
+              "text": "Yes, but later",
+              "callback_data": "mel|S-21044|q1|late"
+            }
+          ],
+          [
+            {
+              "text": "Not yet",
+              "callback_data": "mel|S-21044|q1|not_yet"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "How does your wheat crop look now?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "Green and healthy",
+              "callback_data": "mel|S-21044|q2|healthy"
+            }
+          ],
+          [
+            {
+              "text": "Some yellow leaves",
+              "callback_data": "mel|S-21044|q2|some_yellow"
+            }
+          ],
+          [
+            {
+              "text": "Many yellow leaves",
+              "callback_data": "mel|S-21044|q2|many_yellow"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "Hello, this is a call from FarmerChat. We have two short questions about the advice you got. You can press a key or say your answer.",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "Which wheat seed did you sow? For The suggested type, press 1. For A different type, press 2. For Not sown yet, press 3.",
+      "keypad": {
+        "1": "suggested",
+        "2": "other",
+        "3": "not_sown"
+      },
+      "speech": {
+        "suggested": [
+          "The suggested type"
+        ],
+        "other": [
+          "A different type"
+        ],
+        "not_sown": [
+          "Not sown yet"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "How easy was it to find good seed? 1 means very hard, 5 means very easy. Press or say a number from 1 to 5.",
+      "keypad": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5
+      },
+      "speech": {
+        "1": [
+          "1",
+          "one"
+        ],
+        "2": [
+          "2",
+          "two"
+        ],
+        "3": [
+          "3",
+          "three"
+        ],
+        "4": [
+          "4",
+          "four"
+        ],
+        "5": [
+          "5",
+          "five"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "Thank you. Your answers help us give better advice.",
+  "closing_if_follow_up": "Thank you. We have noted this. FarmerChat will contact you again about it."
+}

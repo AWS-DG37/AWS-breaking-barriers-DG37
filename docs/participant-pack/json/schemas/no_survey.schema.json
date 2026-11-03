@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farmerchat.digitalgreen.org/mel/no_survey.schema.json",
+  "title": "No survey",
+  "description": "What the MEL agent returns when an insight should not get a survey. Nothing goes to the scheduler.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "insight_id",
+    "farmer_id",
+    "decision",
+    "reason_code",
+    "reason"
+  ],
+  "properties": {
+    "insight_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "farmer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "decision": {
+      "const": "no_survey"
+    },
+    "reason_code": {
+      "enum": [
+        "generic_information",
+        "needs_more_context"
+      ]
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    }
+  }
+}

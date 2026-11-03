@@ -1,0 +1,31 @@
+{
+  "insight_id": "I-004420",
+  "farmer_id": "F-000402",
+  "conversation_id": "C-88010",
+  "created_at": "2026-12-02T16:20:00+05:30",
+  "conversation_language": "hi-IN",
+  "location": {
+    "country": "IN",
+    "state": "Bihar",
+    "district": "Begusarai"
+  },
+  "asset": {
+    "name": "wheat",
+    "category": "crop",
+    "growth_stage": null
+  },
+  "concern": "variety_selection",
+  "behavioral_intent": "decision_making",
+  "decision_episode_type": "decision",
+  "severity": "low",
+  "query_summary": "Which wheat variety to sow late, after harvesting paddy in mid-December.",
+  "advice_summary": "Plan created: for sowing after 15 December, buy certified seed of a heat-tolerant wheat variety recommended for late sowing in Bihar. Sow by 25 December and use a higher seed rate than for timely sowing.",
+  "resolution_type": "plan_created",
+  "action_window_days": 23,
+  "verification": {
+    "needed": true,
+    "timing": "seven_to_fourteen_days",
+    "method": "push"
+  },
+  "preferred_channel": "telegram"
+}

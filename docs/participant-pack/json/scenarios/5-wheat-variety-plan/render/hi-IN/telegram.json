@@ -1,0 +1,69 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।"
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपने गेहूँ का कौन सा बीज बोया?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "सुझाई गई किस्म",
+              "callback_data": "mel|S-20877|q1|suggested"
+            }
+          ],
+          [
+            {
+              "text": "कोई दूसरी किस्म",
+              "callback_data": "mel|S-20877|q1|other"
+            }
+          ],
+          [
+            {
+              "text": "अभी नहीं बोया",
+              "callback_data": "mel|S-20877|q1|not_sown"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान।",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "1",
+              "callback_data": "mel|S-20877|q2|1"
+            },
+            {
+              "text": "2",
+              "callback_data": "mel|S-20877|q2|2"
+            },
+            {
+              "text": "3",
+              "callback_data": "mel|S-20877|q2|3"
+            },
+            {
+              "text": "4",
+              "callback_data": "mel|S-20877|q2|4"
+            },
+            {
+              "text": "5",
+              "callback_data": "mel|S-20877|q2|5"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

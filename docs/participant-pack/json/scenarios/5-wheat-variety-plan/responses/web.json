@@ -1,0 +1,57 @@
+{
+  "response_key": "rk-S-20877-web",
+  "survey_id": "S-20877",
+  "farmer_id": "F-000402",
+  "source_insight_ids": [
+    "I-004420"
+  ],
+  "channel": "web",
+  "language": "hi-IN",
+  "status": "completed",
+  "failure_code": null,
+  "sheet_outcome": "finished",
+  "answers": {
+    "q1": "other",
+    "q2": 3
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "other",
+      "raw_input": "other",
+      "input_kind": "sheet_tap",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-scale",
+      "result": "answered",
+      "value": 3,
+      "raw_input": "3",
+      "input_kind": "sheet_tap",
+      "attempts": 1
+    }
+  ],
+  "complete": true,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-25T10:00:00+05:30",
+    "delivered": "2026-12-25T10:01:00+05:30",
+    "opened": "2026-12-25T10:20:00+05:30",
+    "answered": "2026-12-25T10:25:00+05:30"
+  },
+  "recorded_at": "2026-12-25T10:25:00+05:30",
+  "answered_by": "F-000402",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

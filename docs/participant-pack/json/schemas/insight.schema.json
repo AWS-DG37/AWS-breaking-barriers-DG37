@@ -1,0 +1,261 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farmerchat.digitalgreen.org/mel/insight.schema.json",
+  "title": "Insight",
+  "description": "One insight from the insight extractor: what the farmer asked, what FarmerChat advised, and whether it should be checked. Free text is English.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "insight_id",
+    "farmer_id",
+    "conversation_id",
+    "created_at",
+    "conversation_language",
+    "location",
+    "asset",
+    "concern",
+    "behavioral_intent",
+    "decision_episode_type",
+    "severity",
+    "query_summary",
+    "advice_summary",
+    "resolution_type",
+    "action_window_days",
+    "verification",
+    "preferred_channel"
+  ],
+  "properties": {
+    "insight_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "farmer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "conversation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\+05:30$",
+      "description": "India time, always with the +05:30 offset."
+    },
+    "conversation_language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}-[A-Z]{2}$",
+      "description": "BCP 47 tag of the conversation, such as hi-IN. The survey the farmer gets is in this language."
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "country",
+        "state",
+        "district"
+      ],
+      "properties": {
+        "country": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "state": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "district": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        }
+      }
+    },
+    "asset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "category",
+        "growth_stage"
+      ],
+      "description": "The crop or animal the conversation is about. Each field may be null.",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1,
+          "maxLength": 60,
+          "pattern": "^[a-z][a-z ()-]*$"
+        },
+        "category": {
+          "enum": [
+            "crop",
+            "livestock",
+            null
+          ]
+        },
+        "growth_stage": {
+          "enum": [
+            "germination",
+            "seedling",
+            "vegetative",
+            "tillering",
+            "flowering",
+            "fruiting",
+            "maturity",
+            "harvest",
+            "post_harvest",
+            "dormant",
+            null
+          ]
+        }
+      }
+    },
+    "concern": {
+      "description": "15 values: 14 names and null.",
+      "enum": [
+        "pest_disease",
+        "weather_climate",
+        "growth_issue",
+        "nutrient_deficiency",
+        "variety_selection",
+        "soil_health",
+        "water_stress",
+        "storage_post_harvest",
+        "livestock_nutrition",
+        "livestock_health",
+        "market_price",
+        "weed_management",
+        "breeding_reproduction",
+        "yield_loss",
+        null
+      ]
+    },
+    "behavioral_intent": {
+      "enum": [
+        "procedural_guidance",
+        "information_seeking",
+        "diagnosing",
+        "planning",
+        "profile_update",
+        "exploring_options",
+        "symptom_reporting",
+        "confirming",
+        "decision_making",
+        "market_inquiry",
+        "following_up",
+        "comparing",
+        "emergency"
+      ]
+    },
+    "decision_episode_type": {
+      "enum": [
+        "decision",
+        "problem_resolution",
+        "general_knowledge",
+        "casual",
+        "exploration",
+        null
+      ]
+    },
+    "severity": {
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical",
+        null
+      ]
+    },
+    "query_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400
+    },
+    "advice_summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 600
+    },
+    "resolution_type": {
+      "enum": [
+        "direct_action",
+        "generic_information",
+        "plan_created",
+        "needs_more_context",
+        "do_not_act",
+        "wait_and_monitor",
+        "escalate_to_expert"
+      ]
+    },
+    "action_window_days": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 180,
+      "description": "Days the farmer has to act on the advice. Null when the advice has no deadline."
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "needed",
+        "timing",
+        "method"
+      ],
+      "properties": {
+        "needed": {
+          "type": "boolean"
+        },
+        "timing": {
+          "enum": [
+            "none",
+            "same_day",
+            "next_day",
+            "two_to_five_days",
+            "three_to_ten_days",
+            "seven_to_fourteen_days",
+            "seasonal"
+          ]
+        },
+        "method": {
+          "enum": [
+            "none",
+            "push",
+            "whatsapp",
+            "ivr_callback",
+            "repeat_photo",
+            "agent_followup"
+          ]
+        }
+      }
+    },
+    "preferred_channel": {
+      "enum": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ],
+      "description": "Where this farmer talks to FarmerChat most."
+    },
+    "quality_flag": {
+      "enum": [
+        "clean",
+        "junk"
+      ],
+      "description": "Label on the practice data only. junk rows are broken on purpose and may fail this schema. Your agent should send them no survey."
+    }
+  }
+}

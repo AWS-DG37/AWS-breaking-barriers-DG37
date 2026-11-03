@@ -1,0 +1,70 @@
+{
+  "channel": "web",
+  "how_it_arrives": "Web chat has no notifications. The sheet opens the next time the farmer visits inside the send window, once the answer on screen has finished arriving.",
+  "presentation": {
+    "type": "bottom_sheet",
+    "opens_when": [
+      "next_web_visit"
+    ],
+    "waits_for": [
+      "answer_finished_streaming",
+      "no_typing_for_5_seconds",
+      "no_call_in_progress"
+    ],
+    "one_question_per_step": true,
+    "steps_total": 2,
+    "can_skip": true,
+    "can_close": true,
+    "swipe_down_closes": true
+  },
+  "sheet": {
+    "title": "आपको मिली सलाह पर एक छोटा सवाल",
+    "skip_label": "छोड़ें",
+    "close_label": "बंद करें",
+    "thank_you": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+    "steps": [
+      {
+        "step": 1,
+        "step_label": "2 में से 1",
+        "item_id": "q1",
+        "question_type": "survey-single-select",
+        "question": "क्या आपने गेहूँ में पहली सिंचाई कर दी?",
+        "options": [
+          {
+            "label": "हाँ, समय पर",
+            "answer": "on_time"
+          },
+          {
+            "label": "हाँ, पर देर से",
+            "answer": "late"
+          },
+          {
+            "label": "अभी नहीं",
+            "answer": "not_yet"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "step_label": "2 में से 2",
+        "item_id": "q2",
+        "question_type": "survey-single-select",
+        "question": "आपकी गेहूँ की फसल अब कैसी दिख रही है?",
+        "options": [
+          {
+            "label": "हरी और स्वस्थ",
+            "answer": "healthy"
+          },
+          {
+            "label": "कुछ पत्ते पीले",
+            "answer": "some_yellow"
+          },
+          {
+            "label": "बहुत पत्ते पीले",
+            "answer": "many_yellow"
+          }
+        ]
+      }
+    ]
+  }
+}

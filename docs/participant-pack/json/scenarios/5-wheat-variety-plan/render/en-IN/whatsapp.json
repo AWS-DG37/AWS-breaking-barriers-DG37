@@ -1,0 +1,125 @@
+{
+  "channel": "whatsapp",
+  "how_it_arrives": "Days after the chat, so outside WhatsApp's 24-hour reply window. The first message must be an approved template; the questions follow once the farmer taps Start.",
+  "opening_template": {
+    "messaging_product": "whatsapp",
+    "to": "<farmer WhatsApp number>",
+    "type": "template",
+    "template": {
+      "name": "mel_survey_invite",
+      "language": {
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "0",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-20877|start"
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "1",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-20877|later"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "template_text_for_approval": {
+    "body": "A short question from FarmerChat about the advice you got. It takes one minute.",
+    "quick_replies": [
+      "Start",
+      "Not now"
+    ]
+  },
+  "messages": [
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "Which wheat seed did you sow?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20877|q1|suggested",
+                "title": "The suggested type"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20877|q1|other",
+                "title": "A different type"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-20877|q1|not_sown",
+                "title": "Not sown yet"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "list",
+        "body": {
+          "text": "How easy was it to find good seed? 1 means very hard, 5 means very easy."
+        },
+        "action": {
+          "button": "Choose",
+          "sections": [
+            {
+              "title": "Choose one",
+              "rows": [
+                {
+                  "id": "S-20877|q2|1",
+                  "title": "1"
+                },
+                {
+                  "id": "S-20877|q2|2",
+                  "title": "2"
+                },
+                {
+                  "id": "S-20877|q2|3",
+                  "title": "3"
+                },
+                {
+                  "id": "S-20877|q2|4",
+                  "title": "4"
+                },
+                {
+                  "id": "S-20877|q2|5",
+                  "title": "5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

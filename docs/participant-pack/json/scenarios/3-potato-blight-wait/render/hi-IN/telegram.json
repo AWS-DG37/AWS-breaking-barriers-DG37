@@ -1,0 +1,96 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।"
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "क्या आपने पिछले 3 दिनों में आलू के पत्ते देखे?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हाँ",
+              "callback_data": "mel|S-21310|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "नहीं",
+              "callback_data": "mel|S-21310|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "भूरे धब्बों का अब क्या हाल है?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "नए धब्बे नहीं",
+              "callback_data": "mel|S-21310|q2|no_new"
+            }
+          ],
+          [
+            {
+              "text": "पहले जैसे ही",
+              "callback_data": "mel|S-21310|q2|same"
+            }
+          ],
+          [
+            {
+              "text": "फैल रहे हैं",
+              "callback_data": "mel|S-21310|q2|spreading"
+            }
+          ],
+          [
+            {
+              "text": "सफ़ेद फफूंद दिखी",
+              "callback_data": "mel|S-21310|q2|white_growth"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "सलाह कितनी काम की रही? 1 मतलब बिल्कुल नहीं, 5 मतलब बहुत काम की।",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "1",
+              "callback_data": "mel|S-21310|q3|1"
+            },
+            {
+              "text": "2",
+              "callback_data": "mel|S-21310|q3|2"
+            },
+            {
+              "text": "3",
+              "callback_data": "mel|S-21310|q3|3"
+            },
+            {
+              "text": "4",
+              "callback_data": "mel|S-21310|q3|4"
+            },
+            {
+              "text": "5",
+              "callback_data": "mel|S-21310|q3|5"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

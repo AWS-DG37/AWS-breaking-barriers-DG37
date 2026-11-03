@@ -1,0 +1,59 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।"
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "क्या पशु डॉक्टर ने आपकी गाय को देखा?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हाँ",
+              "callback_data": "mel|S-21102|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "नहीं",
+              "callback_data": "mel|S-21102|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपकी गाय अब कैसी है?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "पहले से ठीक",
+              "callback_data": "mel|S-21102|q2|better"
+            }
+          ],
+          [
+            {
+              "text": "पहले जैसी",
+              "callback_data": "mel|S-21102|q2|same"
+            }
+          ],
+          [
+            {
+              "text": "पहले से खराब",
+              "callback_data": "mel|S-21102|q2|worse"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

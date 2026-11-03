@@ -1,0 +1,66 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "नमस्ते, यह FarmerChat की ओर से कॉल है। आपको मिली सलाह के बारे में दो छोटे सवाल हैं। आप बटन दबाकर या बोलकर जवाब दे सकते हैं।",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "आपने गेहूँ का कौन सा बीज बोया? सुझाई गई किस्म के लिए 1 दबाएँ। कोई दूसरी किस्म के लिए 2 दबाएँ। अभी नहीं बोया के लिए 3 दबाएँ।",
+      "keypad": {
+        "1": "suggested",
+        "2": "other",
+        "3": "not_sown"
+      },
+      "speech": {
+        "suggested": [
+          "सुझाई गई किस्म"
+        ],
+        "other": [
+          "कोई दूसरी किस्म"
+        ],
+        "not_sown": [
+          "अभी नहीं बोया"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान। 1 से 5 के बीच कोई अंक दबाएँ या बोलें।",
+      "keypad": {
+        "1": 1,
+        "2": 2,
+        "3": 3,
+        "4": 4,
+        "5": 5
+      },
+      "speech": {
+        "1": [
+          "1",
+          "एक"
+        ],
+        "2": [
+          "2",
+          "दो"
+        ],
+        "3": [
+          "3",
+          "तीन"
+        ],
+        "4": [
+          "4",
+          "चार"
+        ],
+        "5": [
+          "5",
+          "पाँच"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+  "closing_if_follow_up": "धन्यवाद। हमने यह नोट कर लिया है। FarmerChat आपसे इस बारे में फिर बात करेगा।"
+}

@@ -1,0 +1,155 @@
+{
+  "channel": "whatsapp",
+  "how_it_arrives": "Days after the chat, so outside WhatsApp's 24-hour reply window. The first message must be an approved template; the questions follow once the farmer taps Start.",
+  "opening_template": {
+    "messaging_product": "whatsapp",
+    "to": "<farmer WhatsApp number>",
+    "type": "template",
+    "template": {
+      "name": "mel_survey_invite",
+      "language": {
+        "code": "en"
+      },
+      "components": [
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "0",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-21310|start"
+            }
+          ]
+        },
+        {
+          "type": "button",
+          "sub_type": "quick_reply",
+          "index": "1",
+          "parameters": [
+            {
+              "type": "payload",
+              "payload": "S-21310|later"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "template_text_for_approval": {
+    "body": "A short question from FarmerChat about the advice you got. It takes one minute.",
+    "quick_replies": [
+      "Start",
+      "Not now"
+    ]
+  },
+  "messages": [
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "button",
+        "body": {
+          "text": "Did you check the potato leaves in the last 3 days?"
+        },
+        "action": {
+          "buttons": [
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21310|q1|yes",
+                "title": "Yes"
+              }
+            },
+            {
+              "type": "reply",
+              "reply": {
+                "id": "S-21310|q1|no",
+                "title": "No"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "list",
+        "body": {
+          "text": "What is happening to the brown spots?"
+        },
+        "action": {
+          "button": "Choose",
+          "sections": [
+            {
+              "title": "Choose one",
+              "rows": [
+                {
+                  "id": "S-21310|q2|no_new",
+                  "title": "No new spots"
+                },
+                {
+                  "id": "S-21310|q2|same",
+                  "title": "Same as before"
+                },
+                {
+                  "id": "S-21310|q2|spreading",
+                  "title": "Spreading"
+                },
+                {
+                  "id": "S-21310|q2|white_growth",
+                  "title": "White growth seen"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "messaging_product": "whatsapp",
+      "to": "<farmer WhatsApp number>",
+      "type": "interactive",
+      "interactive": {
+        "type": "list",
+        "body": {
+          "text": "How useful was the advice? 1 means not useful, 5 means very useful."
+        },
+        "action": {
+          "button": "Choose",
+          "sections": [
+            {
+              "title": "Choose one",
+              "rows": [
+                {
+                  "id": "S-21310|q3|1",
+                  "title": "1"
+                },
+                {
+                  "id": "S-21310|q3|2",
+                  "title": "2"
+                },
+                {
+                  "id": "S-21310|q3|3",
+                  "title": "3"
+                },
+                {
+                  "id": "S-21310|q3|4",
+                  "title": "4"
+                },
+                {
+                  "id": "S-21310|q3|5",
+                  "title": "5"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

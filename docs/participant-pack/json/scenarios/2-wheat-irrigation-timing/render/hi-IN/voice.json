@@ -1,0 +1,53 @@
+{
+  "channel": "voice",
+  "how_it_arrives": "An outbound call from FarmerChat's number inside send hours. Two silent prompts in a row end the call and the answers so far are saved as partial.",
+  "opening": "नमस्ते, यह FarmerChat की ओर से कॉल है। आपको मिली सलाह के बारे में दो छोटे सवाल हैं। आप बटन दबाकर या बोलकर जवाब दे सकते हैं।",
+  "items": [
+    {
+      "item_id": "q1",
+      "say": "क्या आपने गेहूँ में पहली सिंचाई कर दी? हाँ, समय पर के लिए 1 दबाएँ। हाँ, पर देर से के लिए 2 दबाएँ। अभी नहीं के लिए 3 दबाएँ।",
+      "keypad": {
+        "1": "on_time",
+        "2": "late",
+        "3": "not_yet"
+      },
+      "speech": {
+        "on_time": [
+          "हाँ, समय पर"
+        ],
+        "late": [
+          "हाँ, पर देर से"
+        ],
+        "not_yet": [
+          "अभी नहीं"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    },
+    {
+      "item_id": "q2",
+      "say": "आपकी गेहूँ की फसल अब कैसी दिख रही है? हरी और स्वस्थ के लिए 1 दबाएँ। कुछ पत्ते पीले के लिए 2 दबाएँ। बहुत पत्ते पीले के लिए 3 दबाएँ।",
+      "keypad": {
+        "1": "healthy",
+        "2": "some_yellow",
+        "3": "many_yellow"
+      },
+      "speech": {
+        "healthy": [
+          "हरी और स्वस्थ"
+        ],
+        "some_yellow": [
+          "कुछ पत्ते पीले"
+        ],
+        "many_yellow": [
+          "बहुत पत्ते पीले"
+        ]
+      },
+      "timeout_seconds": 8,
+      "repeat_if_no_input": 1
+    }
+  ],
+  "closing": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।",
+  "closing_if_follow_up": "धन्यवाद। हमने यह नोट कर लिया है। FarmerChat आपसे इस बारे में फिर बात करेगा।"
+}

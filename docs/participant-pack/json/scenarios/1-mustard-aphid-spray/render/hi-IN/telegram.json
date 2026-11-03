@@ -1,0 +1,92 @@
+{
+  "channel": "telegram",
+  "how_it_arrives": "The bot can message a farmer who has started it at any time. Scale numbers share one row; other choices get one row each.",
+  "messages": [
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "आपको मिली सलाह के बारे में FarmerChat से एक छोटा सवाल। बस एक मिनट लगेगा।"
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हाँ",
+              "callback_data": "mel|S-20931|q1|yes"
+            }
+          ],
+          [
+            {
+              "text": "नहीं",
+              "callback_data": "mel|S-20931|q1|no"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "क्या छिड़काव की दवा आसानी से मिल गई?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "हाँ, आसानी से",
+              "callback_data": "mel|S-20931|q2|easy"
+            }
+          ],
+          [
+            {
+              "text": "हाँ, मुश्किल से",
+              "callback_data": "mel|S-20931|q2|hard"
+            }
+          ],
+          [
+            {
+              "text": "नहीं मिली",
+              "callback_data": "mel|S-20931|q2|not_found"
+            }
+          ]
+        ]
+      }
+    },
+    {
+      "method": "sendMessage",
+      "chat_id": "<telegram chat id>",
+      "text": "अब पौधों पर ये कीड़े कितने हैं?",
+      "reply_markup": {
+        "inline_keyboard": [
+          [
+            {
+              "text": "लगभग नहीं",
+              "callback_data": "mel|S-20931|q3|almost_none"
+            }
+          ],
+          [
+            {
+              "text": "पहले से कम",
+              "callback_data": "mel|S-20931|q3|fewer"
+            }
+          ],
+          [
+            {
+              "text": "पहले जितने",
+              "callback_data": "mel|S-20931|q3|same"
+            }
+          ],
+          [
+            {
+              "text": "पहले से ज़्यादा",
+              "callback_data": "mel|S-20931|q3|more"
+            }
+          ]
+        ]
+      }
+    }
+  ]
+}

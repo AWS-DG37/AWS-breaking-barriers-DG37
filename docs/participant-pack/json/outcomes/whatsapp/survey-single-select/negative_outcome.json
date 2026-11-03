@@ -1,0 +1,70 @@
+{
+  "response_key": "rk-S-20931-whatsapp-negative_outcome",
+  "survey_id": "S-20931",
+  "farmer_id": "F-000123",
+  "source_insight_ids": [
+    "I-004512"
+  ],
+  "channel": "whatsapp",
+  "language": "hi-IN",
+  "question_type": "survey-single-select",
+  "status": "negative_outcome",
+  "failure_code": null,
+  "sheet_outcome": null,
+  "answers": {
+    "q1": "yes",
+    "q2": "easy",
+    "q3": "same"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "answered",
+      "value": "yes",
+      "raw_input": "S-20931|q1|yes",
+      "input_kind": "button_reply",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "easy",
+      "raw_input": "S-20931|q2|easy",
+      "input_kind": "button_reply",
+      "attempts": 1
+    },
+    {
+      "item_id": "q3",
+      "item_type": "survey-single-select",
+      "result": "answered",
+      "value": "same",
+      "raw_input": "S-20931|q3|same",
+      "input_kind": "list_reply",
+      "attempts": 1
+    }
+  ],
+  "complete": true,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-06T08:00:00+05:30",
+    "delivered": "2026-12-06T08:01:00+05:30",
+    "opened": "2026-12-06T08:20:00+05:30",
+    "answered": "2026-12-06T08:25:00+05:30"
+  },
+  "recorded_at": "2026-12-06T08:25:00+05:30",
+  "answered_by": "F-000123",
+  "raw_event": null,
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": true,
+  "follow_up_reasons": [
+    "advice_did_not_work"
+  ]
+}

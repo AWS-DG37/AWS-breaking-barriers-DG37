@@ -1,0 +1,61 @@
+{
+  "response_key": "rk-S-20931-app-client_cannot_render",
+  "survey_id": "S-20931",
+  "farmer_id": "F-000123",
+  "source_insight_ids": [
+    "I-004512"
+  ],
+  "channel": "app",
+  "language": "hi-IN",
+  "question_type": "survey-single-select",
+  "status": "delivery_failed",
+  "failure_code": "client_cannot_render",
+  "sheet_outcome": "never_opened",
+  "answers": {},
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "not_reached",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 0
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "not_reached",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 0
+    },
+    {
+      "item_id": "q3",
+      "item_type": "survey-single-select",
+      "result": "not_reached",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 0
+    }
+  ],
+  "complete": false,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-06T07:00:00+05:30",
+    "delivered": null,
+    "opened": null,
+    "answered": null
+  },
+  "recorded_at": "2026-12-06T07:02:00+05:30",
+  "answered_by": null,
+  "raw_event": "this version cannot show the survey sheet",
+  "retry_decision": "fall_back_to_next_channel",
+  "retry_after_minutes": 0,
+  "counts_toward_cap": false,
+  "farmerchat_reply": null,
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

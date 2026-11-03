@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farmerchat.digitalgreen.org/mel/bottom_sheet.schema.json",
+  "title": "Bottom sheet",
+  "description": "The suggested way for the app and web chat to show a survey: a sheet that slides up from the bottom, one question per step. Simulate it in Streamlit or a CLI.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "presentation",
+    "sheet"
+  ],
+  "properties": {
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "opens_when",
+        "waits_for",
+        "one_question_per_step",
+        "steps_total",
+        "can_skip",
+        "can_close",
+        "swipe_down_closes"
+      ],
+      "properties": {
+        "type": {
+          "const": "bottom_sheet"
+        },
+        "opens_when": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "push_tapped",
+              "next_app_open",
+              "next_web_visit"
+            ]
+          },
+          "description": "push_tapped: the farmer taps the survey notification. next_app_open and next_web_visit: the next time they open the app or web chat inside the send window."
+        },
+        "waits_for": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "answer_finished_streaming",
+              "no_typing_for_5_seconds",
+              "no_call_in_progress"
+            ]
+          },
+          "description": "The sheet never covers an answer that is still arriving, a message being typed, or a call."
+        },
+        "one_question_per_step": {
+          "const": true
+        },
+        "steps_total": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3
+        },
+        "can_skip": {
+          "const": true
+        },
+        "can_close": {
+          "const": true
+        },
+        "swipe_down_closes": {
+          "const": true
+        }
+      }
+    },
+    "sheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title",
+        "skip_label",
+        "close_label",
+        "steps",
+        "thank_you"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "skip_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "close_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20
+        },
+        "thank_you": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "step",
+              "step_label",
+              "item_id",
+              "question_type",
+              "question",
+              "options"
+            ],
+            "properties": {
+              "step": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              },
+              "step_label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 20,
+                "description": "Such as 1 of 3."
+              },
+              "item_id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]{1,63}$"
+              },
+              "question_type": {
+                "enum": [
+                  "survey-single-select",
+                  "survey-scale",
+                  "survey-confirm"
+                ]
+              },
+              "question": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400
+              },
+              "options": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 10,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label",
+                    "answer"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 20
+                    },
+                    "answer": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+                        },
+                        {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 100
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

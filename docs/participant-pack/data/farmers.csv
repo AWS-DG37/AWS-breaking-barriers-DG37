@@ -1,0 +1,301 @@
+farmer_id,country,state,district,language,preferred_channel,crops,land_size_band,livestock,activity_level
+F-000001,IN,Bihar,Gaya,hi-IN,web,potato,small_1_to_2ha,,regular
+F-000002,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,mustard|pea|lentil|potato,large_above_10ha,buffalo,light
+F-000003,IN,Bihar,Vaishali,hi-IN,voice,tomato,marginal_below_1ha,,regular
+F-000004,IN,Bihar,Gaya,en-IN,whatsapp,gram|lentil,marginal_below_1ha,,heavy
+F-000005,IN,Bihar,Aurangabad,hi-IN,app,mustard,marginal_below_1ha,,regular
+F-000006,IN,Bihar,Begusarai,hi-IN,web,wheat|lentil|maize|gram,marginal_below_1ha,goat|cow,light
+F-000007,IN,Bihar,Pashchim Champaran,hi-IN,whatsapp,wheat|lentil|potato|mustard,marginal_below_1ha,cow,regular
+F-000008,IN,Bihar,Bhojpur,hi-IN,whatsapp,lentil|gram,marginal_below_1ha,,heavy
+F-000009,IN,Bihar,Bhojpur,hi-IN,app,pea,small_1_to_2ha,,regular
+F-000010,IN,Bihar,Khagaria,hi-IN,voice,wheat|maize,small_1_to_2ha,goat|buffalo,heavy
+F-000011,IN,Bihar,Gaya,hi-IN,app,lentil|gram,semi_medium_2_to_4ha,,regular
+F-000012,IN,Bihar,Khagaria,hi-IN,whatsapp,mustard|wheat|maize|lentil,marginal_below_1ha,,regular
+F-000013,IN,Bihar,Bhagalpur,hi-IN,whatsapp,wheat|gram,marginal_below_1ha,,light
+F-000014,IN,Bihar,Begusarai,hi-IN,web,maize,semi_medium_2_to_4ha,,regular
+F-000015,IN,Bihar,Aurangabad,hi-IN,app,mustard|wheat,semi_medium_2_to_4ha,,regular
+F-000016,IN,Bihar,Bhojpur,hi-IN,voice,wheat,marginal_below_1ha,,regular
+F-000017,IN,Bihar,Muzaffarpur,hi-IN,whatsapp,wheat|cauliflower,small_1_to_2ha,,regular
+F-000018,IN,Bihar,Samastipur,hi-IN,whatsapp,potato|cauliflower|wheat,marginal_below_1ha,,regular
+F-000019,IN,Bihar,Pashchim Champaran,en-IN,app,wheat,marginal_below_1ha,,regular
+F-000020,IN,Bihar,Katihar,hi-IN,whatsapp,wheat|maize|mustard,marginal_below_1ha,,regular
+F-000021,IN,Bihar,Darbhanga,hi-IN,voice,lentil|wheat|pea,marginal_below_1ha,goat,regular
+F-000022,IN,Bihar,Saran,hi-IN,app,mustard|pea,small_1_to_2ha,,heavy
+F-000023,IN,Bihar,Purbi Champaran,hi-IN,app,wheat|pea|potato|lentil,semi_medium_2_to_4ha,,light
+F-000024,IN,Bihar,Khagaria,hi-IN,voice,maize|wheat|mustard,small_1_to_2ha,,regular
+F-000025,IN,Bihar,Nalanda,hi-IN,app,potato,large_above_10ha,cow,light
+F-000026,IN,Bihar,Gaya,en-IN,whatsapp,gram|wheat,marginal_below_1ha,buffalo,heavy
+F-000027,IN,Bihar,Bhojpur,en-IN,app,lentil|wheat|mustard,marginal_below_1ha,,light
+F-000028,IN,Bihar,Bhojpur,hi-IN,whatsapp,pea|lentil,small_1_to_2ha,goat,heavy
+F-000029,IN,Bihar,Darbhanga,hi-IN,voice,pea|wheat,small_1_to_2ha,,regular
+F-000030,IN,Bihar,Madhubani,hi-IN,telegram,wheat|potato|lentil|mustard,marginal_below_1ha,goat|buffalo,regular
+F-000031,IN,Bihar,Patna,en-IN,telegram,pea,marginal_below_1ha,buffalo,light
+F-000032,IN,Bihar,Saran,hi-IN,voice,mustard,small_1_to_2ha,goat,regular
+F-000033,IN,Bihar,Saran,hi-IN,web,wheat|mustard|pea|tomato,marginal_below_1ha,,regular
+F-000034,IN,Bihar,Rohtas,hi-IN,whatsapp,gram|wheat,marginal_below_1ha,,regular
+F-000035,IN,Bihar,Muzaffarpur,hi-IN,app,potato|mustard|wheat,marginal_below_1ha,,light
+F-000036,IN,Bihar,Katihar,hi-IN,telegram,wheat,semi_medium_2_to_4ha,cow,regular
+F-000037,IN,Bihar,Siwan,hi-IN,web,pea|wheat|potato,marginal_below_1ha,cow|goat,regular
+F-000038,IN,Bihar,Purnia,hi-IN,app,mustard|maize,semi_medium_2_to_4ha,goat|buffalo,regular
+F-000039,IN,Bihar,Nalanda,en-IN,web,onion|potato,marginal_below_1ha,,heavy
+F-000040,IN,Bihar,Bhagalpur,hi-IN,whatsapp,wheat|maize,marginal_below_1ha,,heavy
+F-000041,IN,Bihar,Nalanda,hi-IN,app,lentil,marginal_below_1ha,,regular
+F-000042,IN,Bihar,Aurangabad,hi-IN,app,gram|wheat|mustard,marginal_below_1ha,buffalo,heavy
+F-000043,IN,Bihar,Aurangabad,hi-IN,app,wheat|lentil|gram,marginal_below_1ha,,light
+F-000044,IN,Bihar,Darbhanga,hi-IN,voice,potato|mustard|wheat,marginal_below_1ha,goat,regular
+F-000045,IN,Bihar,Bhagalpur,en-IN,telegram,wheat|lentil,marginal_below_1ha,cow,heavy
+F-000046,IN,Bihar,Bhojpur,hi-IN,web,gram|wheat,marginal_below_1ha,,light
+F-000047,IN,Bihar,Muzaffarpur,hi-IN,telegram,wheat,small_1_to_2ha,cow|goat,regular
+F-000048,IN,Bihar,Muzaffarpur,hi-IN,telegram,maize|lentil|cauliflower|potato,semi_medium_2_to_4ha,,regular
+F-000049,IN,Bihar,Rohtas,hi-IN,web,wheat|gram,small_1_to_2ha,,heavy
+F-000050,IN,Bihar,Purnia,hi-IN,whatsapp,mustard,marginal_below_1ha,goat,regular
+F-000051,IN,Bihar,Nalanda,hi-IN,voice,onion|potato|gram,small_1_to_2ha,,heavy
+F-000052,IN,Bihar,Katihar,hi-IN,app,maize|mustard,marginal_below_1ha,,light
+F-000053,IN,Bihar,Madhubani,hi-IN,whatsapp,potato|mustard|wheat,marginal_below_1ha,buffalo,regular
+F-000054,IN,Bihar,Bhojpur,hi-IN,telegram,wheat|gram|lentil,marginal_below_1ha,,regular
+F-000055,IN,Bihar,Pashchim Champaran,hi-IN,app,wheat|lentil,marginal_below_1ha,buffalo|goat,light
+F-000056,IN,Bihar,Pashchim Champaran,hi-IN,app,wheat|mustard|lentil,marginal_below_1ha,,regular
+F-000057,IN,Bihar,Vaishali,hi-IN,telegram,wheat,small_1_to_2ha,goat|cow,light
+F-000058,IN,Bihar,Vaishali,hi-IN,app,cabbage|wheat|maize,marginal_below_1ha,cow,light
+F-000059,IN,Bihar,Samastipur,hi-IN,web,wheat|tomato,medium_4_to_10ha,,heavy
+F-000060,IN,Bihar,Darbhanga,hi-IN,telegram,wheat|lentil,marginal_below_1ha,cow,regular
+F-000061,IN,Bihar,Katihar,hi-IN,whatsapp,maize|mustard|wheat,marginal_below_1ha,,regular
+F-000062,IN,Bihar,Begusarai,hi-IN,app,maize|mustard|wheat,marginal_below_1ha,,regular
+F-000063,IN,Bihar,Saran,hi-IN,app,pea|mustard,small_1_to_2ha,goat,regular
+F-000064,IN,Bihar,Purnia,hi-IN,app,potato|wheat|maize,marginal_below_1ha,,regular
+F-000065,IN,Bihar,Purnia,hi-IN,telegram,wheat|maize|potato|mustard,marginal_below_1ha,goat,regular
+F-000066,IN,Bihar,Purnia,hi-IN,app,maize|wheat|potato,semi_medium_2_to_4ha,,regular
+F-000067,IN,Bihar,Khagaria,hi-IN,voice,maize|wheat|mustard|lentil,small_1_to_2ha,,light
+F-000068,IN,Bihar,Katihar,hi-IN,whatsapp,lentil|wheat,marginal_below_1ha,cow,regular
+F-000069,IN,Bihar,Patna,hi-IN,web,wheat|potato|onion|gram,marginal_below_1ha,,heavy
+F-000070,IN,Bihar,Madhubani,hi-IN,whatsapp,lentil|mustard,marginal_below_1ha,goat,regular
+F-000071,IN,Bihar,Saran,hi-IN,app,pea|potato,marginal_below_1ha,goat,regular
+F-000072,IN,Bihar,Madhubani,hi-IN,app,wheat|pea|lentil|mustard,small_1_to_2ha,goat,heavy
+F-000073,IN,Bihar,Bhagalpur,hi-IN,web,gram|lentil|mustard,marginal_below_1ha,cow,regular
+F-000074,IN,Bihar,Saran,hi-IN,web,wheat,marginal_below_1ha,,heavy
+F-000075,IN,Bihar,Darbhanga,hi-IN,whatsapp,mustard|wheat,small_1_to_2ha,goat,light
+F-000076,IN,Bihar,Gaya,hi-IN,voice,mustard,marginal_below_1ha,,regular
+F-000077,IN,Bihar,Patna,hi-IN,web,wheat|pea|gram|mustard,marginal_below_1ha,buffalo,heavy
+F-000078,IN,Bihar,Vaishali,hi-IN,app,tomato,small_1_to_2ha,,light
+F-000079,IN,Bihar,Aurangabad,hi-IN,app,mustard,marginal_below_1ha,buffalo|goat,light
+F-000080,IN,Bihar,Purnia,hi-IN,app,mustard|wheat|potato,marginal_below_1ha,buffalo,light
+F-000081,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,potato|wheat|lentil,semi_medium_2_to_4ha,buffalo,heavy
+F-000082,IN,Bihar,Nalanda,hi-IN,whatsapp,potato,marginal_below_1ha,,regular
+F-000083,IN,Bihar,Aurangabad,hi-IN,telegram,lentil|wheat|gram,marginal_below_1ha,buffalo|cow,regular
+F-000084,IN,Bihar,Muzaffarpur,en-IN,voice,maize|wheat|potato|cauliflower,marginal_below_1ha,goat|cow,regular
+F-000085,IN,Bihar,Khagaria,hi-IN,app,maize|mustard|wheat,marginal_below_1ha,cow,regular
+F-000086,IN,Bihar,Muzaffarpur,hi-IN,voice,cauliflower|potato|lentil,marginal_below_1ha,,regular
+F-000087,IN,Bihar,Bhojpur,hi-IN,whatsapp,gram|lentil|wheat,small_1_to_2ha,,regular
+F-000088,IN,Bihar,Pashchim Champaran,hi-IN,app,mustard|lentil,marginal_below_1ha,,light
+F-000089,IN,Bihar,Purbi Champaran,en-IN,app,mustard,semi_medium_2_to_4ha,,regular
+F-000090,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,potato|mustard|wheat,marginal_below_1ha,goat|buffalo,light
+F-000091,IN,Bihar,Nalanda,hi-IN,app,onion|wheat|lentil,small_1_to_2ha,,regular
+F-000092,IN,Bihar,Begusarai,hi-IN,app,maize|wheat|mustard,semi_medium_2_to_4ha,buffalo,light
+F-000093,IN,Bihar,Purnia,hi-IN,app,maize|mustard|wheat,marginal_below_1ha,,regular
+F-000094,IN,Bihar,Muzaffarpur,hi-IN,app,lentil,marginal_below_1ha,,light
+F-000095,IN,Bihar,Vaishali,hi-IN,whatsapp,cauliflower|potato|wheat|tomato,marginal_below_1ha,cow,regular
+F-000096,IN,Bihar,Aurangabad,hi-IN,app,gram|wheat,marginal_below_1ha,,regular
+F-000097,IN,Bihar,Purnia,en-IN,web,mustard|maize,marginal_below_1ha,,light
+F-000098,IN,Bihar,Katihar,hi-IN,whatsapp,wheat|maize|mustard|lentil,small_1_to_2ha,,light
+F-000099,IN,Bihar,Aurangabad,hi-IN,web,mustard|wheat,marginal_below_1ha,cow|goat,light
+F-000100,IN,Bihar,Begusarai,hi-IN,whatsapp,gram|wheat|lentil,marginal_below_1ha,,regular
+F-000101,IN,Bihar,Nalanda,hi-IN,telegram,gram|onion|potato,semi_medium_2_to_4ha,cow,light
+F-000102,IN,Bihar,Gaya,hi-IN,app,lentil|mustard|potato,marginal_below_1ha,,regular
+F-000103,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,potato,marginal_below_1ha,,heavy
+F-000104,IN,Bihar,Nalanda,hi-IN,app,onion|wheat|lentil|potato,marginal_below_1ha,,regular
+F-000105,IN,Bihar,Bhagalpur,hi-IN,app,lentil|wheat|mustard|maize,small_1_to_2ha,buffalo,light
+F-000106,IN,Bihar,Madhubani,hi-IN,app,lentil|mustard|potato|wheat,small_1_to_2ha,buffalo,light
+F-000107,IN,Bihar,Muzaffarpur,hi-IN,voice,wheat|cauliflower,marginal_below_1ha,buffalo,light
+F-000108,IN,Bihar,Khagaria,hi-IN,app,maize|mustard,small_1_to_2ha,,light
+F-000109,IN,Bihar,Madhubani,hi-IN,whatsapp,mustard|wheat,marginal_below_1ha,,heavy
+F-000110,IN,Bihar,Samastipur,en-IN,app,wheat|tomato,marginal_below_1ha,,regular
+F-000111,IN,Bihar,Saran,hi-IN,app,wheat|pea|mustard,small_1_to_2ha,,regular
+F-000112,IN,Bihar,Muzaffarpur,hi-IN,voice,mustard|cauliflower,marginal_below_1ha,goat,light
+F-000113,IN,Bihar,Siwan,hi-IN,whatsapp,mustard|wheat,marginal_below_1ha,buffalo|goat,light
+F-000114,IN,Bihar,Khagaria,hi-IN,whatsapp,maize|wheat|mustard,small_1_to_2ha,,regular
+F-000115,IN,Bihar,Gaya,hi-IN,whatsapp,onion|wheat,marginal_below_1ha,cow,regular
+F-000116,IN,Bihar,Khagaria,hi-IN,app,mustard,marginal_below_1ha,cow,regular
+F-000117,IN,Bihar,Siwan,hi-IN,app,pea|wheat|potato,small_1_to_2ha,,regular
+F-000118,IN,Bihar,Samastipur,hi-IN,app,wheat|tomato|cauliflower,marginal_below_1ha,,heavy
+F-000119,IN,Bihar,Bhagalpur,hi-IN,telegram,gram|wheat|maize,marginal_below_1ha,,light
+F-000120,IN,Bihar,Bhojpur,hi-IN,app,lentil,marginal_below_1ha,cow,regular
+F-000121,IN,Bihar,Purbi Champaran,hi-IN,telegram,lentil|wheat,marginal_below_1ha,goat|buffalo,regular
+F-000122,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,mustard,marginal_below_1ha,,regular
+F-000123,IN,Bihar,Bhagalpur,en-IN,web,lentil|maize|wheat,marginal_below_1ha,cow,heavy
+F-000124,IN,Bihar,Nalanda,hi-IN,voice,gram|wheat,marginal_below_1ha,,light
+F-000125,IN,Bihar,Saran,en-IN,app,wheat,medium_4_to_10ha,cow,light
+F-000126,IN,Bihar,Bhojpur,hi-IN,app,wheat|lentil|mustard,marginal_below_1ha,cow|buffalo,heavy
+F-000127,IN,Bihar,Purnia,hi-IN,whatsapp,maize|mustard|wheat|potato,semi_medium_2_to_4ha,buffalo|cow,regular
+F-000128,IN,Bihar,Vaishali,hi-IN,app,wheat|tomato,small_1_to_2ha,,heavy
+F-000129,IN,Bihar,Begusarai,hi-IN,app,maize|mustard,marginal_below_1ha,,regular
+F-000130,IN,Bihar,Muzaffarpur,hi-IN,whatsapp,potato,marginal_below_1ha,,regular
+F-000131,IN,Bihar,Siwan,hi-IN,web,wheat|mustard,marginal_below_1ha,,regular
+F-000132,IN,Bihar,Saran,hi-IN,web,wheat,medium_4_to_10ha,goat,regular
+F-000133,IN,Bihar,Rohtas,hi-IN,app,wheat|mustard,marginal_below_1ha,,heavy
+F-000134,IN,Bihar,Gaya,hi-IN,voice,lentil|gram|wheat,marginal_below_1ha,cow,light
+F-000135,IN,Bihar,Darbhanga,hi-IN,web,wheat,marginal_below_1ha,,heavy
+F-000136,IN,Bihar,Begusarai,hi-IN,app,gram|wheat,small_1_to_2ha,,heavy
+F-000137,IN,Bihar,Katihar,hi-IN,app,wheat,marginal_below_1ha,,regular
+F-000138,IN,Bihar,Saran,hi-IN,web,wheat|potato,marginal_below_1ha,goat,light
+F-000139,IN,Bihar,Gaya,hi-IN,app,wheat|lentil|onion,small_1_to_2ha,,regular
+F-000140,IN,Bihar,Purnia,en-IN,app,potato|maize,medium_4_to_10ha,,light
+F-000141,IN,Bihar,Muzaffarpur,hi-IN,app,wheat|lentil|cauliflower|potato,marginal_below_1ha,buffalo|goat,light
+F-000142,IN,Bihar,Katihar,hi-IN,app,wheat|maize|mustard,marginal_below_1ha,,regular
+F-000143,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,wheat|potato,large_above_10ha,cow,light
+F-000144,IN,Bihar,Rohtas,hi-IN,app,lentil|mustard|wheat,marginal_below_1ha,buffalo,light
+F-000145,IN,Bihar,Muzaffarpur,en-IN,web,wheat|maize|lentil|mustard,marginal_below_1ha,,heavy
+F-000146,IN,Bihar,Purnia,hi-IN,whatsapp,maize|potato|mustard,marginal_below_1ha,buffalo,light
+F-000147,IN,Bihar,Gaya,hi-IN,app,potato|lentil,semi_medium_2_to_4ha,,regular
+F-000148,IN,Bihar,Katihar,hi-IN,app,maize|wheat,marginal_below_1ha,goat,regular
+F-000149,IN,Bihar,Madhubani,hi-IN,voice,wheat|potato|mustard,marginal_below_1ha,cow,light
+F-000150,IN,Bihar,Samastipur,hi-IN,whatsapp,cauliflower,semi_medium_2_to_4ha,buffalo,regular
+F-000151,IN,Bihar,Nalanda,hi-IN,whatsapp,wheat|potato|onion,marginal_below_1ha,,regular
+F-000152,IN,Bihar,Darbhanga,hi-IN,app,mustard|lentil|wheat,marginal_below_1ha,,regular
+F-000153,IN,Bihar,Bhojpur,hi-IN,app,pea|mustard,marginal_below_1ha,,regular
+F-000154,IN,Bihar,Gaya,hi-IN,app,gram|wheat|lentil,marginal_below_1ha,,regular
+F-000155,IN,Bihar,Muzaffarpur,hi-IN,whatsapp,wheat|cauliflower,marginal_below_1ha,cow,regular
+F-000156,IN,Bihar,Darbhanga,en-IN,whatsapp,wheat|mustard,small_1_to_2ha,,heavy
+F-000157,IN,Bihar,Begusarai,hi-IN,app,maize|mustard,marginal_below_1ha,,heavy
+F-000158,IN,Bihar,Siwan,en-IN,whatsapp,wheat,marginal_below_1ha,,light
+F-000159,IN,Bihar,Gaya,hi-IN,whatsapp,lentil|onion,small_1_to_2ha,,regular
+F-000160,IN,Bihar,Khagaria,hi-IN,whatsapp,maize|lentil,marginal_below_1ha,,light
+F-000161,IN,Bihar,Gaya,hi-IN,whatsapp,gram|potato,marginal_below_1ha,buffalo,light
+F-000162,IN,Bihar,Bhojpur,hi-IN,app,wheat,marginal_below_1ha,goat,light
+F-000163,IN,Bihar,Purnia,hi-IN,app,wheat|maize,marginal_below_1ha,,light
+F-000164,IN,Bihar,Bhojpur,hi-IN,app,gram|lentil,marginal_below_1ha,cow,heavy
+F-000165,IN,Bihar,Gaya,hi-IN,app,lentil,marginal_below_1ha,,regular
+F-000166,IN,Bihar,Begusarai,hi-IN,voice,lentil|wheat|maize,marginal_below_1ha,,regular
+F-000167,IN,Bihar,Patna,hi-IN,app,gram|lentil,medium_4_to_10ha,buffalo,light
+F-000168,IN,Bihar,Begusarai,hi-IN,whatsapp,maize|wheat|lentil,marginal_below_1ha,,light
+F-000169,IN,Bihar,Patna,hi-IN,app,wheat|lentil,marginal_below_1ha,goat|buffalo,light
+F-000170,IN,Bihar,Katihar,hi-IN,whatsapp,mustard|wheat,marginal_below_1ha,goat,light
+F-000171,IN,Bihar,Gaya,hi-IN,voice,lentil,marginal_below_1ha,,regular
+F-000172,IN,Bihar,Rohtas,hi-IN,whatsapp,gram,marginal_below_1ha,,regular
+F-000173,IN,Bihar,Aurangabad,hi-IN,app,wheat|mustard,marginal_below_1ha,goat,heavy
+F-000174,IN,Bihar,Aurangabad,hi-IN,app,gram|wheat,small_1_to_2ha,,light
+F-000175,IN,Bihar,Saran,hi-IN,whatsapp,potato|wheat,marginal_below_1ha,,heavy
+F-000176,IN,Bihar,Aurangabad,hi-IN,whatsapp,wheat|gram,marginal_below_1ha,cow,regular
+F-000177,IN,Bihar,Khagaria,hi-IN,voice,maize|lentil,small_1_to_2ha,goat,heavy
+F-000178,IN,Bihar,Purbi Champaran,hi-IN,whatsapp,wheat|pea|lentil|mustard,small_1_to_2ha,,light
+F-000179,IN,Bihar,Siwan,en-IN,whatsapp,mustard|wheat,small_1_to_2ha,,regular
+F-000180,IN,Bihar,Purbi Champaran,hi-IN,app,wheat,small_1_to_2ha,goat,heavy
+F-000181,IN,Bihar,Pashchim Champaran,hi-IN,app,mustard|potato|wheat,marginal_below_1ha,buffalo,regular
+F-000182,IN,Bihar,Vaishali,hi-IN,voice,tomato|maize,small_1_to_2ha,cow,regular
+F-000183,IN,Bihar,Vaishali,hi-IN,app,wheat,marginal_below_1ha,goat,regular
+F-000184,IN,Bihar,Katihar,hi-IN,whatsapp,maize,marginal_below_1ha,cow,light
+F-000185,IN,Bihar,Bhojpur,hi-IN,whatsapp,wheat|gram,marginal_below_1ha,goat,regular
+F-000186,IN,Bihar,Muzaffarpur,hi-IN,app,wheat|maize,marginal_below_1ha,goat,regular
+F-000187,IN,Bihar,Darbhanga,hi-IN,voice,wheat,semi_medium_2_to_4ha,,regular
+F-000188,IN,Bihar,Katihar,hi-IN,app,mustard,marginal_below_1ha,,heavy
+F-000189,IN,Bihar,Pashchim Champaran,hi-IN,telegram,mustard,marginal_below_1ha,,light
+F-000190,IN,Bihar,Vaishali,hi-IN,web,wheat,semi_medium_2_to_4ha,buffalo,regular
+F-000191,IN,Bihar,Purnia,hi-IN,telegram,mustard,small_1_to_2ha,buffalo,heavy
+F-000192,IN,Bihar,Purbi Champaran,hi-IN,app,mustard|wheat|lentil,semi_medium_2_to_4ha,,regular
+F-000193,IN,Bihar,Khagaria,hi-IN,web,mustard,semi_medium_2_to_4ha,,regular
+F-000194,IN,Bihar,Khagaria,hi-IN,voice,wheat|maize,marginal_below_1ha,buffalo,regular
+F-000195,IN,Bihar,Purbi Champaran,hi-IN,app,wheat|mustard|lentil,marginal_below_1ha,cow,regular
+F-000196,IN,Bihar,Saran,hi-IN,whatsapp,wheat|pea,marginal_below_1ha,,light
+F-000197,IN,Bihar,Patna,en-IN,app,wheat,marginal_below_1ha,buffalo,regular
+F-000198,IN,Bihar,Nalanda,hi-IN,whatsapp,onion|wheat|potato,small_1_to_2ha,,heavy
+F-000199,IN,Bihar,Patna,hi-IN,web,wheat|mustard,marginal_below_1ha,,heavy
+F-000200,IN,Bihar,Gaya,hi-IN,telegram,wheat|lentil,marginal_below_1ha,,regular
+F-000201,IN,Bihar,Patna,hi-IN,app,lentil,marginal_below_1ha,buffalo,regular
+F-000202,IN,Bihar,Katihar,hi-IN,app,maize|mustard|lentil,small_1_to_2ha,,regular
+F-000203,IN,Bihar,Pashchim Champaran,hi-IN,telegram,wheat,marginal_below_1ha,goat,light
+F-000204,IN,Bihar,Patna,hi-IN,voice,gram|lentil,marginal_below_1ha,cow,heavy
+F-000205,IN,Bihar,Pashchim Champaran,hi-IN,whatsapp,wheat,marginal_below_1ha,buffalo,light
+F-000206,IN,Bihar,Siwan,hi-IN,app,mustard|pea|wheat,marginal_below_1ha,buffalo|goat,heavy
+F-000207,IN,Bihar,Gaya,hi-IN,whatsapp,lentil|gram|potato|onion,marginal_below_1ha,,light
+F-000208,IN,Bihar,Khagaria,hi-IN,whatsapp,maize|wheat,marginal_below_1ha,,heavy
+F-000209,IN,Bihar,Patna,hi-IN,voice,mustard|onion,marginal_below_1ha,,regular
+F-000210,IN,Bihar,Aurangabad,hi-IN,whatsapp,mustard,marginal_below_1ha,,regular
+F-000211,IN,Bihar,Rohtas,hi-IN,app,wheat|mustard|gram|lentil,marginal_below_1ha,,light
+F-000212,IN,Bihar,Katihar,hi-IN,voice,mustard|wheat,marginal_below_1ha,,regular
+F-000213,IN,Bihar,Pashchim Champaran,en-IN,app,mustard|lentil,small_1_to_2ha,cow,light
+F-000214,IN,Bihar,Vaishali,hi-IN,web,tomato|wheat,small_1_to_2ha,,regular
+F-000215,IN,Bihar,Purbi Champaran,hi-IN,voice,wheat|mustard|pea,marginal_below_1ha,goat|buffalo,light
+F-000216,IN,Bihar,Darbhanga,hi-IN,whatsapp,mustard|wheat,marginal_below_1ha,,light
+F-000217,IN,Bihar,Khagaria,hi-IN,voice,wheat,semi_medium_2_to_4ha,,regular
+F-000218,IN,Bihar,Vaishali,hi-IN,app,tomato|cabbage,marginal_below_1ha,,heavy
+F-000219,IN,Bihar,Vaishali,hi-IN,voice,cabbage|cauliflower,marginal_below_1ha,,light
+F-000220,IN,Bihar,Samastipur,hi-IN,app,potato|cauliflower,marginal_below_1ha,goat,regular
+F-000221,IN,Bihar,Bhojpur,hi-IN,whatsapp,wheat|mustard,small_1_to_2ha,,regular
+F-000222,IN,Bihar,Gaya,hi-IN,telegram,potato|wheat|mustard,marginal_below_1ha,goat,heavy
+F-000223,IN,Bihar,Madhubani,hi-IN,web,wheat|lentil|potato,marginal_below_1ha,,regular
+F-000224,IN,Bihar,Vaishali,hi-IN,whatsapp,potato|wheat,small_1_to_2ha,cow,regular
+F-000225,IN,Bihar,Katihar,en-IN,app,wheat|mustard,marginal_below_1ha,buffalo|cow,light
+F-000226,IN,Bihar,Darbhanga,hi-IN,whatsapp,wheat|mustard|lentil,marginal_below_1ha,buffalo,heavy
+F-000227,IN,Bihar,Nalanda,hi-IN,whatsapp,potato|mustard,marginal_below_1ha,buffalo,regular
+F-000228,IN,Bihar,Samastipur,hi-IN,app,potato|mustard,marginal_below_1ha,buffalo,light
+F-000229,IN,Bihar,Purnia,hi-IN,voice,maize|mustard|potato,semi_medium_2_to_4ha,cow,regular
+F-000230,IN,Bihar,Darbhanga,hi-IN,app,wheat|lentil,marginal_below_1ha,buffalo,light
+F-000231,IN,Bihar,Siwan,hi-IN,web,wheat|potato,small_1_to_2ha,,light
+F-000232,IN,Bihar,Khagaria,hi-IN,web,wheat|maize,marginal_below_1ha,,regular
+F-000233,IN,Bihar,Darbhanga,hi-IN,telegram,pea|mustard|wheat,marginal_below_1ha,,light
+F-000234,IN,Bihar,Samastipur,hi-IN,whatsapp,wheat|tomato|maize,marginal_below_1ha,,light
+F-000235,IN,Bihar,Vaishali,hi-IN,voice,tomato|wheat|potato,marginal_below_1ha,goat,heavy
+F-000236,IN,Bihar,Nalanda,hi-IN,app,wheat|gram|onion|mustard,semi_medium_2_to_4ha,,regular
+F-000237,IN,Bihar,Darbhanga,hi-IN,web,pea|potato,marginal_below_1ha,,regular
+F-000238,IN,Bihar,Samastipur,hi-IN,telegram,wheat|mustard,marginal_below_1ha,,heavy
+F-000239,IN,Bihar,Pashchim Champaran,hi-IN,app,wheat|lentil|potato,marginal_below_1ha,,light
+F-000240,IN,Bihar,Muzaffarpur,hi-IN,app,wheat|maize|potato,marginal_below_1ha,goat,regular
+F-000241,IN,Bihar,Nalanda,hi-IN,whatsapp,mustard|lentil|onion,marginal_below_1ha,,light
+F-000242,IN,Bihar,Vaishali,hi-IN,whatsapp,potato,marginal_below_1ha,,light
+F-000243,IN,Bihar,Patna,hi-IN,web,wheat|gram|pea,marginal_below_1ha,buffalo,regular
+F-000244,IN,Bihar,Siwan,hi-IN,whatsapp,wheat|mustard,marginal_below_1ha,,heavy
+F-000245,IN,Bihar,Aurangabad,hi-IN,whatsapp,wheat|mustard|gram,marginal_below_1ha,,regular
+F-000246,IN,Bihar,Muzaffarpur,hi-IN,voice,potato,small_1_to_2ha,buffalo|cow,regular
+F-000247,IN,Bihar,Pashchim Champaran,hi-IN,app,mustard|lentil,marginal_below_1ha,cow,light
+F-000248,IN,Bihar,Katihar,hi-IN,voice,wheat,marginal_below_1ha,,light
+F-000249,IN,Bihar,Purbi Champaran,hi-IN,app,mustard,medium_4_to_10ha,goat|buffalo,regular
+F-000250,IN,Bihar,Khagaria,hi-IN,app,wheat|maize|mustard,marginal_below_1ha,,regular
+F-000251,IN,Bihar,Samastipur,hi-IN,whatsapp,wheat|mustard,marginal_below_1ha,,regular
+F-000252,IN,Bihar,Bhojpur,hi-IN,app,mustard|wheat|lentil,small_1_to_2ha,,light
+F-000253,IN,Bihar,Aurangabad,hi-IN,telegram,lentil|wheat|mustard|gram,marginal_below_1ha,goat|cow,light
+F-000254,IN,Bihar,Madhubani,hi-IN,app,pea|wheat|mustard,marginal_below_1ha,cow|goat,regular
+F-000255,IN,Bihar,Saran,hi-IN,app,wheat|pea|potato|mustard,marginal_below_1ha,,light
+F-000256,IN,Bihar,Nalanda,en-IN,app,gram|potato|wheat|onion,small_1_to_2ha,,heavy
+F-000257,IN,Bihar,Begusarai,en-IN,whatsapp,wheat|lentil,marginal_below_1ha,,regular
+F-000258,IN,Bihar,Siwan,hi-IN,voice,wheat|potato|mustard,marginal_below_1ha,,light
+F-000259,IN,Bihar,Gaya,hi-IN,whatsapp,onion,marginal_below_1ha,,heavy
+F-000260,IN,Bihar,Purbi Champaran,hi-IN,app,wheat,semi_medium_2_to_4ha,,heavy
+F-000261,IN,Bihar,Nalanda,hi-IN,app,onion|potato,marginal_below_1ha,,regular
+F-000262,IN,Bihar,Samastipur,hi-IN,app,potato|wheat,marginal_below_1ha,,light
+F-000263,IN,Bihar,Nalanda,hi-IN,voice,potato|onion,marginal_below_1ha,,regular
+F-000264,IN,Bihar,Begusarai,hi-IN,voice,mustard|wheat,small_1_to_2ha,,light
+F-000265,IN,Bihar,Saran,en-IN,web,wheat|potato|mustard,marginal_below_1ha,,light
+F-000266,IN,Bihar,Saran,hi-IN,app,potato|tomato|mustard|wheat,small_1_to_2ha,,heavy
+F-000267,IN,Bihar,Bhagalpur,hi-IN,app,lentil,small_1_to_2ha,,regular
+F-000268,IN,Bihar,Patna,hi-IN,app,lentil|onion|gram|wheat,marginal_below_1ha,,light
+F-000269,IN,Bihar,Darbhanga,hi-IN,voice,lentil|mustard,small_1_to_2ha,,light
+F-000270,IN,Bihar,Samastipur,hi-IN,whatsapp,mustard|wheat|cauliflower|maize,marginal_below_1ha,,light
+F-000271,IN,Bihar,Purnia,hi-IN,app,mustard|potato,small_1_to_2ha,,regular
+F-000272,IN,Bihar,Aurangabad,hi-IN,app,wheat|lentil,marginal_below_1ha,,heavy
+F-000273,IN,Bihar,Siwan,hi-IN,app,wheat|potato|mustard,marginal_below_1ha,,regular
+F-000274,IN,Bihar,Samastipur,hi-IN,app,maize|wheat|cauliflower,marginal_below_1ha,,heavy
+F-000275,IN,Bihar,Darbhanga,en-IN,app,potato,marginal_below_1ha,,light
+F-000276,IN,Bihar,Purbi Champaran,hi-IN,app,wheat|mustard|pea,marginal_below_1ha,,regular
+F-000277,IN,Bihar,Bhagalpur,hi-IN,voice,wheat|gram|maize|lentil,marginal_below_1ha,,heavy
+F-000278,IN,Bihar,Gaya,hi-IN,app,wheat|lentil,semi_medium_2_to_4ha,cow,light
+F-000279,IN,Bihar,Katihar,hi-IN,app,lentil|maize,small_1_to_2ha,,heavy
+F-000280,IN,Bihar,Bhagalpur,hi-IN,voice,maize|gram|lentil,marginal_below_1ha,,regular
+F-000281,IN,Bihar,Saran,hi-IN,voice,potato|tomato,marginal_below_1ha,buffalo,regular
+F-000282,IN,Bihar,Rohtas,hi-IN,voice,mustard|wheat,marginal_below_1ha,,light
+F-000283,IN,Bihar,Muzaffarpur,en-IN,whatsapp,maize|wheat|potato,marginal_below_1ha,,light
+F-000284,IN,Bihar,Bhagalpur,hi-IN,app,gram|wheat,marginal_below_1ha,goat,regular
+F-000285,IN,Bihar,Purnia,en-IN,telegram,wheat,marginal_below_1ha,,light
+F-000286,IN,Bihar,Rohtas,hi-IN,app,wheat|gram|lentil|mustard,marginal_below_1ha,,regular
+F-000287,IN,Bihar,Rohtas,en-IN,whatsapp,wheat|gram|mustard|lentil,marginal_below_1ha,cow|goat,regular
+F-000288,IN,Bihar,Nalanda,hi-IN,app,potato|wheat|onion,marginal_below_1ha,goat,regular
+F-000289,IN,Bihar,Khagaria,hi-IN,voice,maize|wheat|mustard|lentil,marginal_below_1ha,,light
+F-000290,IN,Bihar,Samastipur,hi-IN,whatsapp,potato|cauliflower|maize,marginal_below_1ha,goat|cow,light
+F-000291,IN,Bihar,Nalanda,en-IN,voice,onion,small_1_to_2ha,,regular
+F-000292,IN,Bihar,Darbhanga,hi-IN,app,wheat|pea,marginal_below_1ha,buffalo,regular
+F-000293,IN,Bihar,Aurangabad,hi-IN,whatsapp,mustard|wheat|gram,small_1_to_2ha,,light
+F-000294,IN,Bihar,Katihar,en-IN,app,maize|lentil|mustard|wheat,marginal_below_1ha,cow|goat,light
+F-000295,IN,Bihar,Siwan,hi-IN,app,wheat,marginal_below_1ha,goat,regular
+F-000296,IN,Bihar,Siwan,hi-IN,whatsapp,wheat|potato|mustard,marginal_below_1ha,,heavy
+F-000297,IN,Bihar,Bhagalpur,hi-IN,app,mustard|maize|lentil,marginal_below_1ha,,regular
+F-000298,IN,Bihar,Darbhanga,hi-IN,telegram,wheat|lentil,marginal_below_1ha,,regular
+F-000299,IN,Bihar,Katihar,hi-IN,telegram,wheat|mustard|maize,marginal_below_1ha,,regular
+F-000300,IN,Bihar,Bhagalpur,hi-IN,whatsapp,wheat|maize|gram,marginal_below_1ha,,regular

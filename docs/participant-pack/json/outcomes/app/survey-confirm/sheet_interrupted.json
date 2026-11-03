@@ -1,0 +1,57 @@
+{
+  "response_key": "rk-S-21102-app-sheet_interrupted",
+  "survey_id": "S-21102",
+  "farmer_id": "F-000311",
+  "source_insight_ids": [
+    "I-004990"
+  ],
+  "channel": "app",
+  "language": "hi-IN",
+  "question_type": "survey-confirm",
+  "status": "partial",
+  "failure_code": null,
+  "sheet_outcome": "interrupted",
+  "answers": {
+    "q1": "yes"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "item_type": "survey-confirm",
+      "result": "answered",
+      "value": "yes",
+      "raw_input": "yes",
+      "input_kind": "sheet_tap",
+      "attempts": 1
+    },
+    {
+      "item_id": "q2",
+      "item_type": "survey-single-select",
+      "result": "skipped",
+      "value": null,
+      "raw_input": null,
+      "input_kind": null,
+      "attempts": 1
+    }
+  ],
+  "complete": false,
+  "delivery_attempt": 1,
+  "timestamps": {
+    "sent": "2026-12-16T07:00:00+05:30",
+    "delivered": "2026-12-16T07:01:00+05:30",
+    "opened": "2026-12-16T07:20:00+05:30",
+    "answered": "2026-12-16T07:25:00+05:30"
+  },
+  "recorded_at": "2026-12-17T07:25:00+05:30",
+  "answered_by": "F-000311",
+  "raw_event": "app closed by the phone at step 2 of 2. Answers kept on the phone and sent at next open",
+  "retry_decision": "none",
+  "retry_after_minutes": null,
+  "counts_toward_cap": true,
+  "farmerchat_reply": {
+    "http_status": 201,
+    "outcome": "accepted"
+  },
+  "needs_follow_up": false,
+  "follow_up_reasons": []
+}

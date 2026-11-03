@@ -1,0 +1,100 @@
+{
+  "channel": "app",
+  "how_it_arrives": "A notification tells the farmer there is a short question. Tapping it opens the app with the sheet. If they open the app another way inside the send window, the sheet opens then. It never covers an answer that is still arriving, a message being typed, or a call.",
+  "presentation": {
+    "type": "bottom_sheet",
+    "opens_when": [
+      "push_tapped",
+      "next_app_open"
+    ],
+    "waits_for": [
+      "answer_finished_streaming",
+      "no_typing_for_5_seconds",
+      "no_call_in_progress"
+    ],
+    "one_question_per_step": true,
+    "steps_total": 3,
+    "can_skip": true,
+    "can_close": true,
+    "swipe_down_closes": true
+  },
+  "sheet": {
+    "title": "A quick question about the advice you got",
+    "skip_label": "Skip",
+    "close_label": "Close",
+    "thank_you": "Thank you. Your answers help us give better advice.",
+    "steps": [
+      {
+        "step": 1,
+        "step_label": "1 of 3",
+        "item_id": "q1",
+        "question_type": "survey-confirm",
+        "question": "Did you check the potato leaves in the last 3 days?",
+        "options": [
+          {
+            "label": "Yes",
+            "answer": "yes"
+          },
+          {
+            "label": "No",
+            "answer": "no"
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "step_label": "2 of 3",
+        "item_id": "q2",
+        "question_type": "survey-single-select",
+        "question": "What is happening to the brown spots?",
+        "options": [
+          {
+            "label": "No new spots",
+            "answer": "no_new"
+          },
+          {
+            "label": "Same as before",
+            "answer": "same"
+          },
+          {
+            "label": "Spreading",
+            "answer": "spreading"
+          },
+          {
+            "label": "White growth seen",
+            "answer": "white_growth"
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "step_label": "3 of 3",
+        "item_id": "q3",
+        "question_type": "survey-scale",
+        "question": "How useful was the advice? 1 means not useful, 5 means very useful.",
+        "options": [
+          {
+            "label": "1",
+            "answer": 1
+          },
+          {
+            "label": "2",
+            "answer": 2
+          },
+          {
+            "label": "3",
+            "answer": 3
+          },
+          {
+            "label": "4",
+            "answer": 4
+          },
+          {
+            "label": "5",
+            "answer": 5
+          }
+        ]
+      }
+    ]
+  }
+}

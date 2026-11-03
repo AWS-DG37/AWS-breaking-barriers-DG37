@@ -1,0 +1,87 @@
+crop,crop_id,growth_stage,stage_label,start_date,end_date,season,state,source,sow_months,harvest_months,note
+wheat,CROP-WHEAT,,Land preparation and seed purchase,2026-10-25,2026-12-10,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,germination,Sowing and emergence,2026-11-10,2026-12-25,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,seedling,Seedling and crown root initiation,2026-11-20,2027-01-05,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,tillering,Tillering,2026-12-01,2027-01-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,vegetative,Jointing and boot,2027-01-01,2027-02-20,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,flowering,Heading and flowering,2027-02-10,2027-03-10,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,fruiting,Grain filling,2027-02-25,2027-03-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,maturity,Maturity,2027-03-20,2027-04-10,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+wheat,CROP-WHEAT,harvest,Harvest,2027-03-28,2027-04-25,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-4,Timely sowing 10 Nov to 15 Dec after paddy.
+lentil,CROP-LENTIL,,Land preparation,2026-10-05,2026-11-15,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,germination,Sowing and emergence,2026-10-20,2026-11-25,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,seedling,Seedling,2026-10-28,2026-12-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,vegetative,Branching,2026-11-10,2027-01-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,flowering,Flowering,2026-12-20,2027-01-31,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,fruiting,Pod formation and filling,2027-01-10,2027-02-28,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,maturity,Maturity,2027-02-10,2027-03-10,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,harvest,Harvest,2027-02-20,2027-03-25,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+lentil,CROP-LENTIL,post_harvest,Threshing and storage,2027-03-01,2027-03-31,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Includes relay (paira) sowing into standing paddy.
+gram,CROP-CHICKPEA,,Land preparation,2026-10-10,2026-11-20,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,germination,Sowing and emergence,2026-10-25,2026-11-30,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,seedling,Seedling,2026-11-01,2026-12-10,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,vegetative,Branching,2026-11-15,2027-01-10,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,flowering,Flowering,2027-01-01,2027-02-10,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,fruiting,Pod formation and filling,2027-01-20,2027-03-05,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,maturity,Maturity,2027-02-25,2027-03-25,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,harvest,Harvest,2027-03-05,2027-04-10,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+gram,CROP-CHICKPEA,post_harvest,Threshing and storage,2027-03-15,2027-04-30,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-4,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,,Land preparation,2026-10-01,2026-11-10,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,germination,Sowing and emergence,2026-10-15,2026-11-20,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,seedling,Seedling and thinning,2026-10-22,2026-11-30,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,vegetative,Rosette and branching,2026-11-05,2026-12-25,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,flowering,Flowering,2026-12-01,2027-01-20,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,fruiting,Pod (siliqua) filling,2026-12-25,2027-02-20,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,maturity,Maturity,2027-02-01,2027-03-05,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,harvest,Harvest,2027-02-15,2027-03-20,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+mustard,CROP-MUSTARD,post_harvest,Threshing and storage,2027-02-25,2027-03-31,rabi 2026-27,Bihar,digital-green-same-zone,10-11,2-3,"Dates taken from Uttar Pradesh, in the same farming zone."
+maize,CROP-MAIZE,,Land preparation,2026-10-05,2026-11-20,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,germination,Sowing and emergence,2026-10-20,2026-12-10,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,seedling,Seedling,2026-11-01,2026-12-25,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,vegetative,"Knee-high, slow winter growth",2026-11-20,2027-02-15,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,flowering,Tasselling and silking,2027-02-10,2027-03-20,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,fruiting,Cob and grain filling,2027-03-01,2027-04-20,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,maturity,Maturity,2027-04-01,2027-05-05,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+maize,CROP-MAIZE,harvest,Harvest,2027-04-15,2027-05-20,rabi 2026-27,Bihar,authored,,,"Rabi maize. Slow winter growth, harvest Apr-May."
+potato,CROP-POTATO,,Field and seed tuber preparation,2026-10-01,2026-11-10,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,germination,Planting and sprouting,2026-10-15,2026-12-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,vegetative,Haulm growth and earthing up,2026-11-05,2027-01-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,flowering,Tuber initiation,2026-11-25,2027-01-10,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,fruiting,Tuber bulking,2026-12-05,2027-02-10,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,maturity,Haulm cutting and skin setting,2027-01-10,2027-02-20,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,harvest,Digging,2027-01-20,2027-03-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+potato,CROP-POTATO,post_harvest,Sorting and cold storage,2027-02-01,2027-03-31,rabi 2026-27,Bihar,digital-green-bihar,10-11,1-2,Planting 15 Oct to 20 Nov; cold storage after harvest.
+onion,CROP-ONION,,Nursery bed preparation,2026-10-20,2026-11-20,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,germination,Nursery sowing and emergence,2026-11-01,2026-12-20,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,seedling,Nursery seedling and transplanting,2026-11-15,2027-01-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,vegetative,Leaf growth after transplanting,2027-01-01,2027-03-10,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,fruiting,Bulb development,2027-02-20,2027-04-30,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,maturity,Neck fall,2027-04-10,2027-05-15,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+onion,CROP-ONION,harvest,Harvest and curing,2027-04-20,2027-05-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Nov-Dec, transplant Dec-Jan."
+pea,CROP-PEA,,Land preparation,2026-10-01,2026-11-10,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,germination,Sowing and emergence,2026-10-15,2026-11-25,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,seedling,Seedling,2026-10-25,2026-12-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,vegetative,Vine growth,2026-11-05,2026-12-31,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,flowering,Flowering,2026-12-05,2027-01-25,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,fruiting,Pod filling,2026-12-25,2027-02-20,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,harvest,Green pod picking,2027-01-01,2027-03-15,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,maturity,Dry seed maturity,2027-01-25,2027-03-05,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+pea,CROP-PEA,post_harvest,Sale and seed storage,2027-02-15,2027-03-31,rabi 2026-27,Bihar,digital-green-bihar,10-11,2-3,Green pods picked from January.
+cauliflower,CROP-CAULIFLOWER,germination,Nursery sowing,2026-09-01,2026-11-10,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cauliflower,CROP-CAULIFLOWER,seedling,Nursery and transplanting,2026-09-20,2026-11-30,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cauliflower,CROP-CAULIFLOWER,vegetative,Leaf growth,2026-10-15,2027-01-10,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cauliflower,CROP-CAULIFLOWER,fruiting,Curd formation,2026-11-25,2027-02-15,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cauliflower,CROP-CAULIFLOWER,harvest,Curd harvest,2026-12-05,2027-03-10,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cauliflower,CROP-CAULIFLOWER,post_harvest,Sale,2026-12-10,2027-03-20,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Mid and late varieties; nursery from September.
+cabbage,CROP-CABBAGE,germination,Nursery sowing,2026-09-01,2026-11-10,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+cabbage,CROP-CABBAGE,seedling,Nursery and transplanting,2026-09-20,2026-11-30,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+cabbage,CROP-CABBAGE,vegetative,Leaf growth,2026-10-15,2027-01-15,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+cabbage,CROP-CABBAGE,fruiting,Head formation,2026-12-01,2027-02-20,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+cabbage,CROP-CABBAGE,harvest,Head harvest,2026-12-15,2027-03-20,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+cabbage,CROP-CABBAGE,post_harvest,Sale,2026-12-20,2027-03-31,rabi 2026-27,Bihar,digital-green-bihar,9-11,12-3,Nursery from September.
+tomato,CROP-TOMATO,germination,Nursery sowing,2026-10-10,2026-11-30,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."
+tomato,CROP-TOMATO,seedling,Nursery and transplanting,2026-10-25,2026-12-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."
+tomato,CROP-TOMATO,vegetative,Plant growth and staking,2026-11-20,2027-01-31,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."
+tomato,CROP-TOMATO,flowering,Flowering,2027-01-05,2027-02-28,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."
+tomato,CROP-TOMATO,fruiting,Fruit set and development,2027-01-25,2027-04-15,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."
+tomato,CROP-TOMATO,harvest,Picking,2027-03-01,2027-05-15,rabi 2026-27,Bihar,digital-green-bihar,11-12,3-5,"Nursery Oct-Nov, transplant Nov-Dec."

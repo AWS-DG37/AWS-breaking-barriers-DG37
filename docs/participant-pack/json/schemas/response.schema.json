@@ -1,0 +1,375 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://farmerchat.digitalgreen.org/mel/response.schema.json",
+  "title": "Answer record",
+  "description": "What one survey attempt produced on one channel, success or failure. answers is a map from item_id to the option value, or the number for a scale, holding only answers that were accepted. rules/outcome_codes.json lists every status and outcome code and what happens next.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "response_key",
+    "survey_id",
+    "farmer_id",
+    "source_insight_ids",
+    "channel",
+    "language",
+    "status",
+    "failure_code",
+    "answers",
+    "items",
+    "complete",
+    "delivery_attempt",
+    "timestamps",
+    "recorded_at",
+    "answered_by",
+    "sheet_outcome",
+    "raw_event",
+    "retry_decision",
+    "retry_after_minutes",
+    "counts_toward_cap",
+    "farmerchat_reply",
+    "needs_follow_up",
+    "follow_up_reasons"
+  ],
+  "properties": {
+    "response_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The sender's own key for this attempt, so a retry can be told apart from a new answer."
+    },
+    "survey_id": {
+      "type": "string",
+      "pattern": "^S-[0-9]{5,10}$"
+    },
+    "farmer_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "The farmer the survey was sent to."
+    },
+    "source_insight_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      }
+    },
+    "channel": {
+      "enum": [
+        "app",
+        "web",
+        "whatsapp",
+        "telegram",
+        "voice"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}-[A-Z]{2}$"
+    },
+    "question_type": {
+      "enum": [
+        "survey-single-select",
+        "survey-scale",
+        "survey-confirm"
+      ],
+      "description": "The question type this record is about. Set on the outcome grid examples."
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "partial",
+        "negative_outcome",
+        "expired",
+        "declined",
+        "delivery_failed",
+        "invalid_input",
+        "stale",
+        "duplicate",
+        "identity_mismatch"
+      ],
+      "description": "completed, partial and negative_outcome are successes. negative_outcome is any accepted answer set that triggers follow-up. The rest are failures and carry a failure_code."
+    },
+    "failure_code": {
+      "enum": [
+        null,
+        "window_expired",
+        "farmer_declined",
+        "farmer_opted_out",
+        "push_token_invalid",
+        "client_cannot_render",
+        "wa_session_window_closed",
+        "wa_undelivered",
+        "tg_bot_blocked",
+        "voice_no_answer",
+        "voice_busy",
+        "voice_call_dropped",
+        "free_text_instead_of_choice",
+        "keypad_out_of_range",
+        "speech_not_understood",
+        "survey_closed",
+        "survey_replaced",
+        "duplicate_answer",
+        "identity_mismatch",
+        "sheet_dismissed",
+        "push_not_opened"
+      ]
+    },
+    "sheet_outcome": {
+      "enum": [
+        null,
+        "finished",
+        "closed_partway",
+        "interrupted",
+        "dismissed",
+        "never_opened"
+      ],
+      "description": "App and web chat only, where the survey is shown as a bottom sheet. Null on WhatsApp, Telegram and voice."
+    },
+    "answers": {
+      "type": "object",
+      "maxProperties": 3,
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{1,63}$"
+      },
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_]{0,63}$"
+          },
+          {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        ]
+      },
+      "description": "Accepted answers only. A scale answer is the integer. Empty when nothing was accepted."
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "description": "One entry per survey question, in order, saying what happened to it.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_id",
+          "item_type",
+          "result",
+          "value",
+          "raw_input",
+          "input_kind",
+          "attempts"
+        ],
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{1,63}$"
+          },
+          "item_type": {
+            "enum": [
+              "survey-single-select",
+              "survey-scale",
+              "survey-confirm"
+            ]
+          },
+          "result": {
+            "enum": [
+              "answered",
+              "skipped",
+              "invalid",
+              "not_reached",
+              "discarded"
+            ],
+            "description": "skipped: shown, not answered. not_reached: never shown. discarded: an answer arrived but was not stored (stale, duplicate, wrong farmer)."
+          },
+          "value": {
+            "type": [
+              "string",
+              "integer",
+              "null"
+            ]
+          },
+          "raw_input": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 256,
+            "description": "What the channel returned: the option tapped in the sheet, button id, callback data, keypad digit, spoken words or typed text."
+          },
+          "input_kind": {
+            "enum": [
+              null,
+              "sheet_tap",
+              "button_reply",
+              "list_reply",
+              "callback_data",
+              "keypad",
+              "speech",
+              "free_text"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          }
+        }
+      }
+    },
+    "complete": {
+      "type": "boolean",
+      "description": "True when every item was answered and accepted."
+    },
+    "delivery_attempt": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "Which try on this channel this record is about."
+    },
+    "timestamps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sent",
+        "delivered",
+        "opened",
+        "answered"
+      ],
+      "description": "Null when the step did not happen or the channel cannot tell. Telegram has no read receipts, so opened is always null there.",
+      "properties": {
+        "sent": {
+          "anyOf": [
+            {
+              "$ref": "survey.schema.json#/$defs/ist_time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delivered": {
+          "anyOf": [
+            {
+              "$ref": "survey.schema.json#/$defs/ist_time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opened": {
+          "anyOf": [
+            {
+              "$ref": "survey.schema.json#/$defs/ist_time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "answered": {
+          "anyOf": [
+            {
+              "$ref": "survey.schema.json#/$defs/ist_time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "recorded_at": {
+      "$ref": "survey.schema.json#/$defs/ist_time"
+    },
+    "answered_by": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64,
+      "description": "The farmer the channel identity belongs to. Differs from farmer_id only on identity_mismatch."
+    },
+    "raw_event": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 256,
+      "description": "A channel event that is not an answer: a decline tap, an opt-out word, a delivery error."
+    },
+    "retry_decision": {
+      "enum": [
+        "none",
+        "retry_same_channel",
+        "fall_back_to_next_channel",
+        "give_up"
+      ]
+    },
+    "retry_after_minutes": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 10080
+    },
+    "counts_toward_cap": {
+      "type": "boolean",
+      "description": "True when the farmer was actually asked. A survey counts once it is shown, answered or not."
+    },
+    "farmerchat_reply": {
+      "description": "What the answer store replied when the answers were sent, or null when nothing was sent.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "http_status",
+            "outcome"
+          ],
+          "properties": {
+            "http_status": {
+              "enum": [
+                200,
+                201,
+                404,
+                422
+              ]
+            },
+            "outcome": {
+              "enum": [
+                "accepted",
+                "duplicate",
+                "unknown_flow",
+                "invalid_answer"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "needs_follow_up": {
+      "type": "boolean",
+      "description": "True when any accepted answer carries a follow-up reason. The record then goes to FarmerChat's follow-up queue."
+    },
+    "follow_up_reasons": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "survey.schema.json#/$defs/follow_up_reason"
+      }
+    }
+  }
+}
