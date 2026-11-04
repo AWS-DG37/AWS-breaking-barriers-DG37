@@ -246,6 +246,9 @@ details[open] summary {
   background:var(--deep);
   color:white;
 }
+@media(max-width:700px) {
+  .masthead-status { flex-wrap:wrap; gap:8px 16px; }
+}
 /* Hide elements above the effective level; the current section's nav link stays. */
 html[data-detail="1"] [data-level="2"]:not([aria-current="true"]),
 html[data-detail="1"] [data-level="3"]:not([aria-current="true"]),
