@@ -18,61 +18,68 @@ from mel.models import Review, SurveyDraft
 def build_agents(
     config: AgentConfig, region: str, prompts: dict[str, str], project_id: str = "default"
 ) -> tuple[Agent, Agent]:
-    responses_provider = None
-    converse_provider = None
-
-    def agent(model: ModelConfig, output: type, prompt: str) -> Agent:
-        nonlocal responses_provider, converse_provider
-        if not model.model_id:
-            raise ValueError("Resolve a Bedrock model ID before constructing an agent")
-        settings = {"max_tokens": model.max_tokens}
-        if model.temperature is not None:
-            settings["temperature"] = model.temperature
-        if model.api == "converse":
-            if converse_provider is None:
-                converse_provider = BedrockProvider(
-                    bedrock_client=boto3.client(
-                        "bedrock-runtime",
-                        region_name=region,
-                        config=Config(
-                            read_timeout=300,
-                            connect_timeout=60,
-                            retries={"total_max_attempts": 1, "mode": "standard"},
-                        ),
-                    )
-                )
-            native_model = BedrockConverseModel(
-                model.model_id, provider=converse_provider, profile=converse_profile(model.model_id)
-            )
-        else:
-            if responses_provider is None:
-                responses_provider = OpenAIProvider(
-                    openai_client=create_mantle_client(region, project_id, max_retries=0)
-                )
-            settings.update(
-                openai_store=False,
-                openai_reasoning_effort=model.reasoning_effort,
-                openai_send_reasoning_ids=False,
-            )
-            native_model = OpenAIResponsesModel(
-                model.model_id,
-                provider=responses_provider,
-                profile=OpenAIModelProfile(
-                    openai_supports_reasoning=True,
-                    openai_supports_encrypted_reasoning_content=True,
-                ),
-            )
-        return Agent(
-            native_model,
-            output_type=output,
-            instructions=prompt,
-            model_settings=settings,
-            retries=config.graph.agent_output_retries,
-        )
-
+    providers: dict = {}  # Generator and reviewer share one client per API.
+    retries = config.graph.agent_output_retries
     return (
-        agent(config.generation, SurveyDraft, prompts["generate"]),
-        agent(config.review, Review, prompts["review"]),
+        build_agent(config.generation, SurveyDraft, prompts["generate"], region, project_id,
+                    retries, providers),
+        build_agent(config.review, Review, prompts["review"], region, project_id,
+                    retries, providers),
+    )
+
+
+def build_agent(
+    model: ModelConfig, output: type, prompt: str, region: str, project_id: str = "default",
+    retries: int = 2, providers: dict | None = None,
+) -> Agent:
+    """One structured-output Bedrock agent. Pass a shared `providers` dict to reuse clients."""
+    providers = {} if providers is None else providers
+    if not model.model_id:
+        raise ValueError("Resolve a Bedrock model ID before constructing an agent")
+    settings = {"max_tokens": model.max_tokens}
+    if model.temperature is not None:
+        settings["temperature"] = model.temperature
+    if model.api == "converse":
+        if "converse" not in providers:
+            providers["converse"] = BedrockProvider(
+                bedrock_client=boto3.client(
+                    "bedrock-runtime",
+                    region_name=region,
+                    config=Config(
+                        read_timeout=300,
+                        connect_timeout=60,
+                        retries={"total_max_attempts": 1, "mode": "standard"},
+                    ),
+                )
+            )
+        native_model = BedrockConverseModel(
+            model.model_id, provider=providers["converse"],
+            profile=converse_profile(model.model_id),
+        )
+    else:
+        if "responses" not in providers:
+            providers["responses"] = OpenAIProvider(
+                openai_client=create_mantle_client(region, project_id, max_retries=0)
+            )
+        settings.update(
+            openai_store=False,
+            openai_reasoning_effort=model.reasoning_effort,
+            openai_send_reasoning_ids=False,
+        )
+        native_model = OpenAIResponsesModel(
+            model.model_id,
+            provider=providers["responses"],
+            profile=OpenAIModelProfile(
+                openai_supports_reasoning=True,
+                openai_supports_encrypted_reasoning_content=True,
+            ),
+        )
+    return Agent(
+        native_model,
+        output_type=output,
+        instructions=prompt,
+        model_settings=settings,
+        retries=retries,
     )
 
 

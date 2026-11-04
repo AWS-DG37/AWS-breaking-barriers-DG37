@@ -1,11 +1,12 @@
-# Golden prompt examples and held-out cases
+# Golden dev/test split, prompt examples and judges
 
-The current baseline (`luna-golden-patterns-v7`) retains seven compact examples
+The current baseline (`luna-golden-patterns-v8`) retains seven compact examples
 from Digital Green’s supplied golden set, introduced in the v3 generator and
 reviewer prompts. Five positive examples cover direct action (potato),
 monitoring (lentil), a plan (gram), holding off (cabbage), and expert escalation
-(buffalo). Two negative examples cover general information (onion) and an
-unfinished conversation (lentil). No mustard example is included in either prompt.
+(goat). Two negative examples cover general information (onion) and an
+unfinished conversation (maize). No mustard example is included in either prompt.
+All seven come from the dev half.
 
 These are static examples embedded in both prompt files. The agents are instructed
 to select the closest measurement pattern by resolution type before crop. There
@@ -15,21 +16,62 @@ describe what to transfer. References are not complete production survey objects
 the target language, schema, applicability choices, and follow-up semantics still
 come from the current request and contract.
 
-`prompt_example_split.json` records source IDs, the original file's SHA-256,
-excluded cases, and candidate evaluation IDs. The original 150-row source is
-untouched. Seven prompt examples and five additional related cases are excluded
-from scoring, leaving 138 candidate held-out cases, including 14 mustard cases.
+## The split (`golden-dev-test-v1`)
 
-Exclusions cover the example records, their farmers/conversations, and exact
-advice duplicates after normalizing whitespace and replacing known crop/animal
-names. This is a conservative starting split, not a semantic paraphrase detector.
-Remove further cases from scored evaluation whenever they are used for tuning.
-Repeated reference question templates do not by themselves constitute unseen-task
-evidence; inspect performance across advice types and crops separately.
+The 150 golden rows hold only 86 distinct advice texts, and only 95 rows expect a
+survey. A random row split therefore puts copies of the same advice in both halves.
+The split is grouped and stratified instead:
 
-`golden_holdout.jsonl` retains the original golden row format with nested `insight`
-and `expected`. It is evaluation data, not worker input: extract `insight` records
-when constructing a generation input, and keep `expected` away from the agents.
+- Rows that share a normalized advice text, a farmer or a conversation form one
+  group. Normalization lowercases the text, collapses whitespace and replaces the
+  source's crop and animal names. A whole group goes to one half.
+- Groups are assigned to balance expected rule (R1 to R8), `resolution_type`,
+  `conversation_language`, the survey decision and their joint stratum.
+- The build is deterministic: seed 37, 2,000 trials, best balance wins. Rebuild
+  with `uv run --locked python -m mel.evaluation.split`.
+
+The grouping yields 47 groups. One group holds 70 rows, because farmers link
+many advice texts. That group decides much of the balance, so some strata are
+uneven. Read every rate with its count.
+
+| Count | Dev | Test |
+| --- | --- | --- |
+| Rows | 74 | 76 |
+| Expect a survey | 47 | 48 |
+| R1 / R2 / R3 / R4 | 4 / 4 / 9 / 6 | 10 / 2 / 3 / 4 |
+| R5 / R6 / R7 / R8 | 2 / 1 / 1 / 47 | 8 / 1 / 0 / 48 |
+| direct_action / plan_created | 27 / 9 | 27 / 15 |
+| do_not_act / wait_and_monitor | 6 / 9 | 6 / 3 |
+| escalate_to_expert / needs_more_context | 3 / 8 | 8 / 5 |
+| generic_information | 12 | 12 |
+| hi-IN / en-IN | 67 / 7 | 74 / 2 |
+
+The only R7 row is in dev, so the test half cannot score R7.
+
+Files:
+
+- `prompt_example_split.json` records the source SHA-256, the method and seed,
+  `dev_ids`, `holdout_ids` (the test half), the counts above, the prompt examples
+  and the prompt example swaps.
+- `golden_dev.jsonl` and `golden_holdout.jsonl` hold the dev and test rows in the
+  original golden format, with nested `insight` and `expected`. They are
+  evaluation data, not worker input. Extract `insight` records with
+  `mel-worker golden-insights`, and keep `expected` away from the agents.
+
+Two of the original v3 prompt examples fell in the test half. The builder swapped
+each for the first dev row with the same resolution type, survey decision and rule:
+
+| Replaced (now test) | Replacement (dev) | Resolution type |
+| --- | --- | --- |
+| G-0045 (buffalo) | G-0113 (goat) | escalate_to_expert |
+| G-0018 (lentil) | G-0092 (maize) | needs_more_context |
+
+The replacements have the same reference questions, so only the advice context
+changed in both prompt files. The config version moved to `luna-golden-patterns-v8`.
+
+Use dev, and only dev, to tune prompts and calibrate judges. Score test, and do not
+tune on it. If a test row is used for tuning, rebuild the split and record why.
+Grouping catches exact normalized advice duplicates, not paraphrases.
 Do not use exact question-string matching as the quality metric. Assess advice
 grounding, correct survey decisions, outcome/adoption measurements, follow-up
 labels, and agreement with human reviewers.
@@ -48,13 +90,13 @@ Source precedence remains unconfirmed by Digital Green. Changing this setting
 changes runtime windows; it does not select the input dataset or scoring reference.
 
 The console's **Agreement with golden examples** check runs this configuration's
-deterministic decision engine on the 138 holdout cases, without model calls. It
+deterministic decision engine on the 76 test-half cases, without model calls. It
 uses `score_decisions`, rather than the CLI's provenance-rich `score_policy` report.
 A lower exact-window score under `pack` can reflect compliance with the written
 rules. Neither score is an independent generalization estimate: the rules were
 developed using all 150 source cases, as described below.
 
-## Run the offline policy comparison
+## Run the rules regression baseline
 
 From the repository root, after `uv sync --locked`:
 
@@ -73,9 +115,14 @@ inputs or another execution failure, rather than a minimum score threshold.
 
 `--golden` defaults to `eval/golden_holdout.jsonl`; `--split` defaults to
 `eval/prompt_example_split.json`. The split's `source` path is resolved relative
-to the project directory containing `eval/`. The scorer verifies the source
-SHA-256, the complete holdout/exclusion partition, prompt exclusions, and exact
-agreement between held-out records and their source records before scoring.
+to the project directory containing `eval/`. Before scoring, the verifier checks:
+
+- the source SHA-256;
+- that dev and test partition the source, with the prompt examples in dev;
+- that no normalized advice, farmer or conversation is in both halves;
+- that the recorded seed and counts match the rows;
+- that each held-out record equals its source record.
+
 Use this with local project files; it does not download datasets or config.
 
 The report records source, holdout, split, scorer and resolved bundle hashes;
@@ -92,29 +139,95 @@ interchangeable with the primary score. The reference package is installed with
 the worker; its pack assets still come from the repository. If those assets are
 unavailable in another installation, the comparator is explicitly `not_assessed`.
 
-## Policy evidence after the decision engine, 4 November 2026
+## Rules regression baseline, 4 November 2026
+
+The rules and the `golden_v1` window settings were written while reading all 150
+golden rows, test half included. The scores below are a regression baseline, not a
+generalization estimate. Every report carries a `label` field that says so.
 
 With the checked-in rules, split and `decision.window_policy: golden_v1`:
 
-| Dimension | Result | Interpretation |
+| Dimension | Test half | Dev half (`eval-rules --golden eval/golden_dev.jsonl`) |
 | --- | --- | --- |
-| Current worker eligibility | 138/138 | 88 true positives, 50 true negatives; every rule R1–R8 at 100% |
-| Legacy eligibility | 145/150 (96.7%) | Reproduces the historical full-source regression |
-| Reason agreement | 50/50 | The engine emits golden reason codes directly; no equivalence table |
-| Exact send-window agreement | 88/88 | `golden_v1` windows; `pack` windows open at 07:00 and mostly differ |
+| Eligibility | 76/76 (48 true positives, 28 true negatives) | 74/74 |
+| Deciding rule | every test rule R1–R6, R8 correct (R7: 0 rows) | 74/74 |
+| Reason agreement | 28/28 | not reported by `eval-rules` |
+| Exact send-window agreement | 48/48 | 47/47 |
+| Legacy eligibility, all 150 rows | 145/150 | (same source) |
 
-These rules and the `golden_v1` window settings were written while reading all
-150 golden cases, holdout included. The holdout therefore does not independently
-measure the decision engine; treat 138/138 as a regression baseline, not a
-generalization estimate. `mel-worker eval-rules` scores the same engine on all 150.
+Before the grouped split, the same engine scored 138/138 on the earlier 138-row
+holdout. Before the engine (3 November 2026, `mel.policy`), the worker scored
+132/138 eligibility and 0/88 exact windows on that holdout.
 
-Before the engine (3 November 2026, `mel.policy`), the worker scored 132/138
-eligibility, 0/88 exact windows, and could not express the critical-case and
-harvested-crop reasons.
+The policy score assesses decisions before inference. It does not score generated
+questions. Language quality, channel precedence and generation reliability stay
+`not_assessed`. The relevance judge below scores generated questions.
 
-This slice assesses policy before inference. Relevance/grounding, actual language
-quality, follow-up semantics, channel precedence and generation reliability are
-separate `not_assessed` dimensions. It does not score generated questions or add
-new runtime acceptance gates. The next evaluation slice can consume recorded
-worker artifacts, reuse suitable deterministic survey checks, and add independent
-MEL and Hindi review without introducing another inference loop.
+## Relevance judge (calls Bedrock)
+
+The judge reads saved worker results. It does not run the worker and adds no
+inference loop to it. Only these two commands call a model. The judge model is the
+config's review model unless you set `--model-id` and `--api`.
+
+The rubric is `eval/relevance_rubric.txt`. For each generated survey, the judge
+marks six criteria as met, not met or not applicable:
+
+| Criterion | Met when |
+| --- | --- |
+| `advice_grounding` | every question is about this advice, crop or animal and problem |
+| `measures_adoption` | a question asks whether the farmer followed the advice |
+| `measures_outcome` | a question asks what happened since |
+| `follow_up_routing` | follow-up codes sit only on answers that show the named problem |
+| `no_new_advice` | no question or option gives new advice |
+| `no_personal_info` | no question asks for identifying information |
+
+A survey passes (`core_pass`) when the first, second, fifth and sixth criteria are
+met. The golden reference questions go to the judge as English evidence of what a
+good survey measures. The judge does not match strings, and the survey can be in
+Hindi. The judge message leaves out farmer, conversation, location and insight IDs.
+
+### 1. Calibrate on dev
+
+```bash
+uv run --locked mel-worker eval calibrate-relevance --max-cases 10
+```
+
+Calibration builds known-answer controls from dev rows only:
+
+- the row's own reference questions (grounded, measures adoption, no new advice,
+  no personal information);
+- a reference from an unrelated dev row (not grounded);
+- a generic app question (not grounded, no adoption, no outcome);
+- the own reference plus an injected new-advice question, or plus an injected
+  personal-information question;
+- follow-up codes on "Worse" or "Could not reach" (correct routing), and on
+  "Better" or "All steps" (wrong routing).
+
+The report gives agreement as counts per criterion and lists each disagreement
+with the judge's rationale. Calibration passes when every criterion reaches 90%
+agreement and no call fails. If it fails, edit the rubric and calibrate again on
+dev. Omit `--max-cases` to use all 47 dev survey rows (up to seven controls each).
+
+### 2. Score saved results
+
+```bash
+uv run --locked mel-worker golden-insights --golden eval/golden_holdout.jsonl \
+  --output outputs/eval/test-insights.jsonl
+# Generate surveys from those insights (preview, run or the console), then:
+uv run --locked mel-worker eval relevance --part test \
+  --results outputs/local/<run-id>/results.jsonl \
+  --calibration outputs/eval/relevance-calibration-<uuid>.json
+```
+
+`--part test` refuses to call the model unless the calibration report passed and
+matches the same rubric hash, judge model and split hash. `--part dev` runs
+without a calibration, to support rubric iteration. Results must all come from the
+named half.
+
+The report gives each rate as a numerator and denominator. It also counts results,
+judged surveys, failed calls, rows where the golden set expects a survey but the
+worker made none, and the reverse. Only rows where both have a survey are judged.
+Each report records the split, rubric, results hashes and token usage. Reports
+are never overwritten.
+
+An LLM judge does not replace Hindi-speaking MEL review.

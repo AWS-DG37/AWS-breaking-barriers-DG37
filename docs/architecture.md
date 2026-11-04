@@ -142,8 +142,9 @@ Use the existing checks as the reference foundation, with one production owner:
 
 The existing **145/150** result is an all-150 eligibility regression. It does not
 measure generated questions. The current prompts already contain seven golden
-examples; the split excludes those and five related cases, leaving **138
-candidate held-out records**. That split is not a semantic paraphrase detector.
+examples. The grouped split puts them in a **74-row dev half** and keeps a
+**76-row test half** with no shared advice text, farmer or conversation. That
+split is not a semantic paraphrase detector.
 The new evaluation must keep `expected` labels out of generation and report the
 actual dataset hash and denominator for every score.
 
@@ -249,7 +250,8 @@ shared null-ID fallbacks can change both resolved roles.
 The offline policy scorer uses the documented holdout, existing production policy
 and reference comparator. Tests cover provenance, denominators, unresolved reasons,
 offline execution and parity with the actual worker selection boundary. The first
-run reports 132/138 holdout eligibility agreement and the separate historical
+run reported 132/138 eligibility on the earlier holdout; the engine now scores
+76/76 on the grouped test half as a regression baseline, beside the separate historical
 145/150 baseline; see the [evaluation guide](../eval/README.md) for coverage and
 the unresolved policy/timing differences. Generation acceptance is unchanged.
 

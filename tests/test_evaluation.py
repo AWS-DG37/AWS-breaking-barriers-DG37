@@ -18,6 +18,7 @@ from mel import evaluation
 from mel.bundle import Bundle
 from mel.config import Settings
 from mel.evaluation import policy as scorer
+from mel.evaluation import split as partition
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -37,6 +38,9 @@ def dataset(tmp_path):
     for name in ("prompt", "eligible", "junk", "critical"):
         record = copy.deepcopy(insight)
         record["insight_id"] = f"I-{name}"
+        # Distinct grouping keys, so the dev/holdout halves cannot leak.
+        record.update(farmer_id=f"F-{name}", conversation_id=f"C-{name}")
+        record["advice_summary"] += f" ({name})"
         if name == "junk":
             record.update(quality_flag="junk", created_at=None)
         if name == "critical":
@@ -61,15 +65,25 @@ def dataset(tmp_path):
         "version": "test-split",
         "source": "docs/participant-pack/data/golden_set.jsonl",
         "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "method": {"seed": 1},
         "prompt_example_ids": ["G-prompt"],
         "prompt_example_insight_ids": ["I-prompt"],
-        "excluded": [{"golden_id": "G-prompt", "reasons": ["prompt_example"]}],
+        "dev_ids": ["G-prompt"],
         "holdout_ids": ["G-eligible", "G-junk", "G-critical"],
     }
-    split.write_text(json.dumps(manifest))
+    split.write_text(json.dumps(with_counts(manifest, rows)))
     golden = split.parent / "golden_holdout.jsonl"
     golden.write_text("".join(json.dumps(r) + "\n" for r in rows[1:]))
     return SimpleNamespace(source=source, split=split, golden=golden, rows=rows)
+
+
+def with_counts(manifest, rows):
+    by_id = {row["golden_id"]: row for row in rows}
+    manifest["counts"] = {
+        half: partition.counts(by_id[key] for key in manifest[ids])
+        for half, ids in (("dev", "dev_ids"), ("test", "holdout_ids"))
+    }
+    return manifest
 
 
 def score(bundle, dataset):
@@ -217,11 +231,8 @@ def test_holdout_must_match_the_declared_partition(bundle, dataset, mutation):
 def test_empty_holdout_is_unassessed_instead_of_perfect(bundle, dataset):
     manifest = json.loads(dataset.split.read_text())
     manifest["holdout_ids"] = []
-    manifest["excluded"] = [
-        {"golden_id": row["golden_id"], "reasons": ["held_out_of_scoring"]}
-        for row in dataset.rows
-    ]
-    dataset.split.write_text(json.dumps(manifest))
+    manifest["dev_ids"] = [row["golden_id"] for row in dataset.rows]
+    dataset.split.write_text(json.dumps(with_counts(manifest, dataset.rows)))
     dataset.golden.write_text("")
     report = score(bundle, dataset)
     assert report.eligibility.kind == "not_assessed"
@@ -312,13 +323,13 @@ def test_evaluation_edits_do_not_invalidate_generation_resume(bundle, tmp_path, 
     assert bundle.fingerprint(b"input", "us-east-1") != before
 
 
-@pytest.mark.parametrize("mutation", ["overlap", "missing_exclusion", "wrong_prompt"])
+@pytest.mark.parametrize("mutation", ["overlap", "missing_dev", "wrong_prompt"])
 def test_manifest_cannot_reintroduce_a_prompt_example(bundle, dataset, mutation):
     manifest = json.loads(dataset.split.read_text())
     if mutation == "overlap":
         manifest["holdout_ids"].append("G-prompt")
-    elif mutation == "missing_exclusion":
-        manifest["excluded"] = []
+    elif mutation == "missing_dev":
+        manifest["dev_ids"] = []
     else:
         manifest["prompt_example_insight_ids"] = ["I-wrong"]
     dataset.split.write_text(json.dumps(manifest))
@@ -332,6 +343,44 @@ def test_manifest_cannot_read_a_source_outside_its_project(bundle, dataset):
     dataset.split.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="source"):
         score(bundle, dataset)
+
+
+def test_a_shared_farmer_across_halves_is_rejected(bundle, dataset):
+    dataset.rows[0]["insight"]["farmer_id"] = "F-eligible"
+    dataset.source.write_text("".join(json.dumps(r) + "\n" for r in dataset.rows))
+    manifest = json.loads(dataset.split.read_text())
+    manifest["source_sha256"] = hashlib.sha256(dataset.source.read_bytes()).hexdigest()
+    dataset.split.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="farmer:F-eligible"):
+        score(bundle, dataset)
+
+
+def test_shared_advice_with_another_crop_name_is_rejected(bundle, dataset):
+    rows = dataset.rows
+    rows[1]["insight"]["asset"]["name"] = "wheat"
+    rows[0]["insight"]["advice_summary"] = "Advised to spray the Wheat  field."
+    rows[1]["insight"]["advice_summary"] = "advised to spray the mustard field."
+    dataset.source.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    manifest = json.loads(dataset.split.read_text())
+    manifest["source_sha256"] = hashlib.sha256(dataset.source.read_bytes()).hexdigest()
+    dataset.split.write_text(json.dumps(manifest))
+    dataset.golden.write_text("".join(json.dumps(r) + "\n" for r in rows[1:]))
+    with pytest.raises(ValueError, match="advice:"):
+        score(bundle, dataset)
+
+
+def test_recorded_counts_must_match_the_rows(bundle, dataset):
+    manifest = json.loads(dataset.split.read_text())
+    manifest["counts"]["test"]["survey"] += 1
+    dataset.split.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="counts"):
+        score(bundle, dataset)
+
+
+def test_report_labels_the_rules_score_as_a_regression_baseline(bundle, dataset):
+    report = score(bundle, dataset)
+    assert report.label.startswith("regression_baseline")
+    assert (report.dev_cases, report.test_cases) == (1, 3)
 
 
 def test_measurement_cannot_claim_more_successes_than_cases():

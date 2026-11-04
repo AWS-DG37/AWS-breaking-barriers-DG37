@@ -157,8 +157,8 @@ Reference question: How is your cabbage now?
 Answer meanings: Better / Same / Worse
 Transferable lesson: Following advice can mean holding off; do not assume taking an action is always the desired adoption.
 
-Reference G-0045 | escalate_to_expert | buffalo
-Advice context: Advised to call the nearest veterinary doctor because fever and poor appetite needs a closer look.
+Reference G-0113 | escalate_to_expert | goat
+Advice context: Advised to call the nearest veterinary doctor because vaccination needs a closer look.
 Reference question: Did you meet the veterinary doctor?
 Answer meanings: Yes / Not yet / Could not reach
 Reference question: Did their advice help?
@@ -170,8 +170,8 @@ Advice context: Explained damping off in the nursery in general terms without a 
 Reference decision: no survey; no question is supported yet.
 Transferable lesson: General information with no advised action should not become an adoption questionnaire.
 
-Reference G-0018 | needs_more_context | lentil
-Advice context: Asked for more details on uneven emergence, such as the sowing date, before giving advice.
+Reference G-0092 | needs_more_context | maize
+Advice context: Asked for more details on leaf blight, such as the sowing date, before giving advice.
 Reference decision: no survey; no question is supported yet.
 Transferable lesson: An unfinished conversation with no advice has no action to follow up.
 

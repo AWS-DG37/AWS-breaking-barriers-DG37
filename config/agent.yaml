@@ -1,5 +1,5 @@
 # Paths resolve relative to this file. Override with --config or MEL_CONFIG_PATH.
-version: luna-golden-patterns-v8
+version: luna-golden-patterns-v9  # v9: two prompt examples swapped to the dev half
 generation:
   model_id: null  # Null uses MEL_BEDROCK_MODEL_ID; set an explicit ID to override it.
   temperature: null  # Omit sampling parameters for reasoning models.
