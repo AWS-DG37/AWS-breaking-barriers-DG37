@@ -197,11 +197,37 @@ def test_counts_sit_beside_every_rate():
         assert measurement["denominator"] >= 1
 
 
+def test_failed_judge_calls_still_count_their_usage(tmp_path, monkeypatch):
+    from mel import agents, worker
+
+    class Exhausted:
+        async def run(self, message, usage):
+            usage.requests += 3  # Retries spent before output validation gave up.
+            usage.input_tokens += 30
+            usage.output_tokens += 12
+            raise RuntimeError("exceeded maximum retries for output validation")
+
+    monkeypatch.setattr(agents, "build_agent", lambda *args, **kwargs: Exhausted())
+    output = tmp_path / "calibration.json"
+    monkeypatch.setattr(sys, "argv", [
+        "mel-worker", "eval", "calibrate-relevance", "--max-cases", "1",
+        "--split", str(SPLIT), "--rubric", str(ROOT / "eval/relevance_rubric.txt"),
+        "--config", str(ROOT / "config/agent.yaml"), "--output", str(output),
+    ])
+    worker.main()
+    report = json.loads(output.read_text())
+    calls = report["controls"]
+    assert report["failed_calls"] == calls and report["passed"] is False
+    assert report["usage"] == {
+        "requests": 3 * calls, "input_tokens": 30 * calls, "output_tokens": 12 * calls,
+    }
+
+
 def test_relevance_cli_refuses_the_test_half_before_any_model_call(tmp_path, monkeypatch):
     from mel import agents, worker
 
     class NoCalls:
-        async def run(self, message):
+        async def run(self, message, usage=None):
             raise AssertionError("the judge called a model")
 
     monkeypatch.setattr(agents, "build_agent", lambda *args, **kwargs: NoCalls())

@@ -400,6 +400,8 @@ def eval_surveys(args: argparse.Namespace) -> None:
 async def eval_relevance(args: argparse.Namespace) -> None:
     """LLM judge over saved results, or its dev calibration. These are the only eval
     commands that call a model."""
+    from pydantic_ai.usage import RunUsage
+
     from mel.agents import build_agent
     from mel.evaluation import relevance
 
@@ -417,12 +419,13 @@ async def eval_relevance(args: argparse.Namespace) -> None:
     usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
 
     async def judge(message: str) -> relevance.RelevanceJudgment:
-        result = await agent.run(message)
-        spent = result.usage()
-        usage["requests"] += spent.requests
-        usage["input_tokens"] += spent.input_tokens or 0
-        usage["output_tokens"] += spent.output_tokens or 0
-        return result.output
+        spent = RunUsage()  # Filled during the run, so failed calls still count.
+        try:
+            return (await agent.run(message, usage=spent)).output
+        finally:
+            usage["requests"] += spent.requests
+            usage["input_tokens"] += spent.input_tokens or 0
+            usage["output_tokens"] += spent.output_tokens or 0
 
     common = {
         "split_path": args.split, "rubric": rubric, "judge_model": model.model_id,
