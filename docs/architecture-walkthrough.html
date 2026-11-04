@@ -49,6 +49,17 @@ h1 span{color:var(--ink)}
 .phone-result img{display:block;width:100%;height:auto}.phone-result figcaption{font-size:12px;line-height:1.6;padding:0 20px 18px;color:var(--muted)}.phone-result figcaption span{display:block;margin-top:6px}
 @media(max-width:700px){.overview{grid-template-columns:1fr;gap:24px;padding:12px 0 28px}.overview .preview-context{margin-top:18px}.phone-result{max-width:360px}}
 </style>
+<link rel="stylesheet" href="explorer-preview/survey-player.css">
+<script type="module" src="explorer-preview/recorded-preview.mjs"></script>
+<style>
+.phone-result { padding:16px 10px; overflow:visible; }
+.phone-result .phone-field { width:100%; height:126px; }
+.recorded-picker { display:flex; flex-direction:column; gap:8px; font-size:13px; padding:0 8px; }
+.recorded-picker select { width:100%; font:inherit; padding:10px; background:white; border:1px solid #bdc9c0; border-radius:8px; }
+.recorded-context,.recorded-evidence { padding:0 8px; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }
+.recorded-evidence { margin:20px 0; }
+.recorded-evidence pre { overflow:auto; max-width:100%; font-size:11px; white-space:pre-wrap; }
+</style>
 </head>
 <body>
 <header><div class="identity">Digital Green <small>FarmerChat follow-up surveys</small></div><div class="ref">AWS-breaking-barriers-DG37<br>Agreed architecture · 3 November 2026</div></header>
@@ -57,7 +68,7 @@ h1 span{color:var(--ink)}
 <h1>Follow an insight.<br><span>Explain every question.</span></h1>
 <p class="intro">One pipeline turns conversation insights into short surveys. Saved decisions and independent evaluation let the team show where a change improves quality, and where it does not.</p>
 <p class="preview-context">The explorer connects the farmer-facing question to the insight, rules and model that produced it. Select a question to inspect its measurement purpose, then compare the same case across candidates.</p>
-</div><figure class="phone-result"><img src="explorer-preview/phone-preview.webp" width="760" height="1476" alt="FarmerChat phone preview with a mustard-field photo and a recorded Hindi question asking whether recommended pesticide was applied, with four equally styled answers."><figcaption><strong>One recorded question, in context.</strong> OpenAI Luna · Hindi · synthetic insight I-004512. Captured from the pipeline explorer; answers are not submitted.<span>Illustrative field photography by <a href="https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4">Abhi Verma / Unsplash</a>. The pictured field and person are unrelated to this case.</span></figcaption></figure></div>
+</div><figure class="phone-result"><div id="recorded-preview"><p>Loading recorded survey. To run locally, build with <code>python scripts/build_architecture_viewer.py &lt;output-folder&gt;</code> and serve that folder over HTTP.</p></div><figcaption><strong>Try the recorded survey.</strong> Choose a candidate and answer inside the phone. Answers stay in this page only and are not submitted. Outputs come from one synthetic insight I-004512.<span>Illustrative field photography by <a href="https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4">Abhi Verma / Unsplash</a>. The pictured field and person are unrelated to this case.</span></figcaption></figure></div>
 <nav class="tabs" aria-label="Architecture views" role="tablist">
 <button type="button" role="tab" id="tab-flow" aria-controls="flow-panel" aria-selected="true">The pipeline</button>
 <button type="button" role="tab" id="tab-seams" aria-controls="seams-panel" aria-selected="false">Where the team can change it</button>

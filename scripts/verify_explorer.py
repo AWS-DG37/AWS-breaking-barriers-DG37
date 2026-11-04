@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
+from verify_architecture_viewer import exercise
 
 
 def main():
@@ -29,7 +30,13 @@ def main():
             assert page.get_by_role("heading", name="Question preview").is_visible()
             phone = page.get_by_role("region", name="FarmerChat survey preview")
             expect(phone).to_be_visible()
+            exercise(page, phone)
             expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
+            phone.get_by_role("radio").first.check()
+            assert phone.get_by_role("radio").first.evaluate(
+                "node => document.activeElement === node"
+            )
+            phone_height = phone.bounding_box()["height"]
             photo = phone.get_by_role("img", name="Mustard flowers in a field in Rajasthan, India")
             expect(photo).to_have_js_property("complete", True)
             assert photo.evaluate("image => image.complete && image.naturalWidth > 0")
@@ -39,10 +46,21 @@ def main():
             expect(phone.get_by_text("2 / 2", exact=True)).to_be_visible()
             assert phone.locator("h3").inner_text() != first_prompt
             expect(phone.locator(".answers")).to_have_attribute("lang", "hi-IN")
+            phone.get_by_role("radio").first.check()
+            phone.get_by_role("button", name="पीछे", exact=True).click()
+            expect(phone.get_by_role("radio").first).to_be_checked()
+            expect(page.get_by_role("button", name="Question 1", exact=True)).to_have_attribute(
+                "aria-pressed", "true"
+            )
+            expect(page.get_by_text("q1 · survey-single-select", exact=True)).to_be_visible()
+            assert phone.bounding_box()["height"] == phone_height
+            page.get_by_role("button", name="Review survey", exact=False).click()
+            expect(phone.get_by_role("radio").first).to_be_checked()
             page.get_by_label("Reanalyze saved outputs").select_option("golden")
             page.get_by_text("Evaluation reference · golden.", exact=False).wait_for()
             page.get_by_label("Reanalyze saved outputs").select_option("rules")
             page.get_by_text("Evaluation reference · rules.", exact=False).wait_for()
+            expect(phone.get_by_role("radio").first).to_be_checked()
             candidate = page.get_by_label("Candidate", exact=True)
             candidate.select_option("1")
             assert page.get_by_text("UnexpectedModelBehavior", exact=True).is_visible()
@@ -50,6 +68,9 @@ def main():
             expect(phone).to_have_count(0)
             candidate.select_option("0")
             page.get_by_role("button", name="Review survey", exact=False).click()
+            expect(phone.get_by_role("button", name="शुरू करें", exact=True)).to_be_visible()
+            phone.get_by_role("button", name="शुरू करें", exact=True).click()
+            expect(phone.locator("input:checked")).to_have_count(0)
             if args.screenshots:
                 args.screenshots.mkdir(parents=True, exist_ok=True)
                 page.evaluate(

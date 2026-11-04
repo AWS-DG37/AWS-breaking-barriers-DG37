@@ -102,3 +102,33 @@ MEL_TEST_DB_PORT=55437 uv run --locked pytest tests/test_postgres_integration.py
 The PostgreSQL tests use rollback-only transactions. They check experiment/outbox
 isolation, atomic result/handoff writes, and migration history. Live inference and
 browser checks are separate from the offline suite.
+
+## Build the standalone architecture viewer
+
+On **macdaddy-laptop**, from the repository root:
+
+```bash
+python scripts/build_architecture_viewer.py /tmp/dg37-architecture
+python -m http.server 8766 --directory /tmp/dg37-architecture
+```
+
+Open <http://127.0.0.1:8766>. Stop the server with Ctrl-C when finished.
+The build copies the shared phone player, CSS and field photo into the output.
+It derives a small candidate catalog from `src/mel/explorer/demo/recorded-run.json`.
+The catalog retains OpenAI Luna and Anthropic Haiku outputs and Amazon Nova Lite's
+recorded failure. It does not invoke models or call the explorer API.
+
+`mountSurveyPlayer` in `src/mel/explorer/static/survey-player.mjs` is the seam
+shared by the app and the standalone viewer. It owns intro, question navigation,
+required answers, completion and restart. Answers live only in browser memory.
+Changing the candidate resets them. App stage and reference inspection preserve
+them for the same candidate and survey. Model explanations remain diagnostic
+and do not establish independent question quality.
+
+Run the browser check against a temporary build with an automatically stopped
+server, or point it at an existing hosted viewer:
+
+```bash
+python scripts/verify_architecture_viewer.py
+python scripts/verify_architecture_viewer.py --url http://127.0.0.1:8766
+```

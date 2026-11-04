@@ -1,18 +1,11 @@
+import {el} from './dom.mjs';
+import {mountSurveyPlayer} from './survey-player.mjs';
 import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
 
 const $ = id => document.getElementById(id);
 const state = {config:null, models:[], experiments:[], detail:null, run:0, result:0, stage:null, event:0, question:0, request:0};
 let poll;
-function el(tag, attrs={}, ...children) {
-  const node=document.createElement(tag);
-  for (const [key,value] of Object.entries(attrs)) {
-    if (key.startsWith('on')) node.addEventListener(key.slice(2).toLowerCase(),value);
-    else if (key === 'class') node.className=value;
-    else if (value !== null && value !== undefined && value !== false) node.setAttribute(key,String(value));
-  }
-  node.append(...children.flat().filter(c=>c !== null && c !== undefined).map(c=>c instanceof Node ? c : document.createTextNode(String(c))));
-  return node;
-}
+let rehearsalKey, rehearsalSession;
 const text=(value)=>typeof value === 'object' ? JSON.stringify(value,null,2) : displayValue(value);
 const raw=value=>el('pre',{},text(value));
 const badge=value=>el('span',{class:`badge ${['failed','rejected','completed_with_errors'].includes(value)?'warning':''}`},value?.replaceAll('_',' ') || 'Unknown');
@@ -44,7 +37,7 @@ async function openExperiment(id, refresh=false, reference=null) {
     const detail=await api(`/experiments/${encodeURIComponent(id)}${query}`);
     if(ticket!==state.request) return;
     state.detail=detail;
-    if(!refresh) Object.assign(state,{run:0,result:0,stage:null,event:0,question:0});
+    if(!refresh) { rehearsalKey=null; Object.assign(state,{run:0,result:0,stage:null,event:0,question:0}); }
     renderExperiment(); await listExperiments();
     if(['queued','running'].includes(detail.status)) poll=setTimeout(()=>openExperiment(id,true),3000);
   } catch(error) { if(ticket===state.request) { notice(`Cannot load experiment. ${error.message} Use Refresh to try again.`,true); $('content').replaceChildren(el('h1',{},'Experiment unavailable')); } }
@@ -57,7 +50,7 @@ function selected() {
 function renderExperiment() {
   const d=state.detail, {run,result,outcome}=selected();
   const heading=el('div',{class:'heading'},el('div',{},el('h1',{},d.name),el('p',{class:'muted'},d.source==='recorded'?'Recorded experiment. Saved results only.':'Live experiment. Selected native models and API configurations.')),el('div',{class:'status-group'},badge(d.source),badge(d.status)));
-  const controls=el('div',{class:'selection'},picker('Candidate',d.runs.map((r,i)=>[i,`${r.label} · ${r.api || 'API not recorded'}`]),state.run,value=>{state.run=Number(value);state.result=0;state.stage=null;state.question=0;renderExperiment();}),picker('Insight',(run?.results || []).map((r,i)=>[i,`${r.insight_id} · ${r.outcome.status}`]),state.result,value=>{state.result=Number(value);state.stage=null;state.question=0;renderExperiment();}));
+  const controls=el('div',{class:'selection'},picker('Candidate',d.runs.map((r,i)=>[i,`${r.label} · ${r.api || 'API not recorded'}`]),state.run,value=>{rehearsalKey=null;state.run=Number(value);state.result=0;state.stage=null;state.question=0;renderExperiment();}),picker('Insight',(run?.results || []).map((r,i)=>[i,`${r.insight_id} · ${r.outcome.status}`]),state.result,value=>{rehearsalKey=null;state.result=Number(value);state.stage=null;state.question=0;renderExperiment();}));
   const sections=[heading,controls];
   if(outcome) {
     sections.push(el('div',{class:'outcome-line'},badge(outcome.status),el('span',{},outcome.reason || 'No additional outcome reason recorded.'),el('span',{class:'small muted'},run.model_id)));
@@ -105,25 +98,33 @@ function renderInspector(result,outcome) {
   return panel;
 }
 function renderSurvey(outcome) {
-  const survey=outcome.survey || outcome.candidate_survey;
+  const survey=outcome.status==='failed'?null:outcome.survey || outcome.candidate_survey;
   const panel=el('section',{class:'survey-panel'},el('h2',{},outcome.candidate_survey && !outcome.survey?'Rejected draft':'Question preview'));
   if(!survey?.items?.length) { panel.append(el('p',{class:'muted'},'No survey questions recorded for this outcome.')); return panel; }
-  panel.append(el('p',{class:'small muted'},'Farmer-facing text. Select a question for its measurement evidence. Answers are shown for inspection only.'));
-  const item=survey.items[state.question] || survey.items[0];
-  panel.append(el('div',{class:'question-tabs',role:'group','aria-label':'Questions'},survey.items.map((q,i)=>el('button',{'aria-pressed':q===item,onClick:()=>{state.question=i;renderExperiment();}},`Question ${i+1}`))));
-  panel.append(el('p',{class:'small muted question-record'},`${item.item_id} · ${item.type}`));
-  const language=survey.language || undefined;
-  const preview=el('div',{class:'question',lang:language},el('div',{class:'survey-progress'},el('span',{},language?.split('-')[0]==='hi'?'आपकी राय':'Your feedback'),el('span',{},`${survey.items.indexOf(item)+1} / ${survey.items.length}`)),el('h3',{},item.prompt));
-  if(item.options) preview.append(el('ul',{class:'answers',lang:language},item.options.map(option=>el('li',{},el('span',{'aria-hidden':true,class:'answer-marker'}),option.label))));
-  else preview.append(el('p',{class:'scale'},`${displayValue(item.scale_min)} to ${displayValue(item.scale_max)}`));
-  const phone=el('div',{class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview'},
-    el('div',{class:'phone-screen'},
-      el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
-      el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),el('span',{},'Digital Green')),
-      el('img',{class:'phone-field',src:'/static/assets/mustard-field.webp',alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768}),
-      preview,
-      el('div',{class:'phone-home','aria-hidden':true})));
-  panel.append(el('figure',{class:'phone-stage'},phone,el('figcaption',{},'Survey preview · answers are not submitted',el('span',{},'Illustrative field photo, unrelated to the selected case. ',el('a',{href:'https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4',target:'_blank',rel:'noreferrer'},'Abhi Verma / Unsplash')))));
+  panel.append(el('p',{class:'small muted'},'Try the survey. Answers stay in this page only and are not submitted. Inspection tabs show question evidence.'));
+  const {run:chosenRun,result:chosenResult}=selected();
+  const key=JSON.stringify([state.detail.experiment_id,chosenRun.run_id,chosenResult.insight_id,chosenResult.input,survey]);
+  if(key!==rehearsalKey) {
+    rehearsalKey=key;
+    rehearsalSession={phase:'intro',question:0,answers:{}};
+    state.question=0;
+  }
+  const tabs=el('div',{class:'question-tabs',role:'group','aria-label':'Questions'});
+  const analysis=el('div',{});
+  const host=el('div',{class:'survey-player'});
+  const updateAnalysis=index=>{
+    state.question=index;
+    [...tabs.children].forEach((tab,i)=>tab.setAttribute('aria-pressed',String(i===index)));
+    analysis.replaceChildren(renderQuestionAnalysis(outcome,survey.items[index]));
+  };
+  const player=mountSurveyPlayer(host,{survey,session:rehearsalSession,photoUrl:'/static/assets/mustard-field.webp',onQuestionChange:updateAnalysis});
+  survey.items.forEach((q,i)=>tabs.append(el('button',{type:'button',onClick:()=>player.showQuestion(i)},`Question ${i+1}`)));
+  panel.append(tabs,el('figure',{class:'phone-stage'},host,el('figcaption',{},'Survey preview · answers are not submitted',el('span',{},'Illustrative field photo, unrelated to the selected case. ',el('a',{href:'https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4',target:'_blank',rel:'noreferrer'},'Abhi Verma / Unsplash')))),analysis);
+  updateAnalysis(rehearsalSession.question);
+  return panel;
+}
+function renderQuestionAnalysis(outcome,item) {
+  const panel=el('div',{},el('p',{class:'small muted question-record'},`${item.item_id} · ${item.type}`));
   const evidence=(outcome.question_evidence || []).filter(e=>e.item_id===item.item_id);
   panel.append(el('div',{class:'evidence'},el('h3',{},'What this question measures'),evidence.length?evidence.map(e=>el('div',{},el('strong',{},e.measurement.replaceAll('_',' ')),el('p',{},e.explanation),el('p',{class:'small'},`Source fields · ${e.source_fields.join(', ') || 'Not recorded'}`))):el('p',{},'Question-level evidence not recorded.'),el('p',{class:'small muted'},'Diagnostic explanation supplied by the model. It is not independent validation.')));
   const {run,result}=selected();
