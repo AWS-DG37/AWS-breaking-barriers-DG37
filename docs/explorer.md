@@ -114,7 +114,7 @@ The **Send window timing source** choices have different meanings:
 
 The supplied sources disagree; Digital Green has not confirmed precedence. This
 selects runtime timing behavior, not the input dataset or evaluation reference.
-The agreement score compares against the 138 golden holdout cases. Written-rule
+The agreement score compares against the 76 golden test-half cases. Written-rule
 compliance can reduce that score. The rules were developed using all 150 source
 cases, so the score is a regression check, not independent unseen-case evidence.
 

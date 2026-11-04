@@ -14,6 +14,10 @@ from typing import Protocol
 from mel.decision import Decision
 from mel.evaluation.golden import GoldenCase
 
+BASELINE_LABEL = (
+    "regression_baseline: the rules were written while reading all 150 golden rows"
+)
+
 
 class Decider(Protocol):
     def decide(self, insight: Mapping) -> Decision: ...
@@ -39,9 +43,12 @@ class DecisionReport:
             return round(hits / total, 4) if total else None
 
         return {
+            "label": BASELINE_LABEL,
             "cases": self.cases,
             "decision_accuracy": rate(self.decision_correct, self.cases),
+            "decision_correct": self.decision_correct,
             "rule_accuracy": rate(self.rule_correct, self.cases),
+            "rule_correct": self.rule_correct,
             "confusion": {
                 key: self.confusion[key]
                 for key in ("true_survey", "true_no_survey", "false_survey", "false_no_survey")
@@ -53,8 +60,11 @@ class DecisionReport:
             "window": {
                 "compared": self.windows_compared,
                 "start_date_match": rate(self.window_start_date_match, self.windows_compared),
+                "start_date_matches": self.window_start_date_match,
                 "end_date_match": rate(self.window_end_date_match, self.windows_compared),
+                "end_date_matches": self.window_end_date_match,
                 "exact_match": rate(self.window_exact_match, self.windows_compared),
+                "exact_matches": self.window_exact_match,
             },
             "mismatches": self.mismatches,
             "window_mismatches": self.window_mismatches,
