@@ -86,6 +86,26 @@ Open `http://localhost:8737/voice/` and press **Read aloud**. Query parameters:
 - `?survey=<url>` loads any survey JSON. A survey without recordings uses the browser's own
   voice.
 
+### Switch the demo between Hindi and English
+
+Use **English text** to translate the questions, choices, answer confirmation and
+follow-up messages. Use **English audio** to hear the English wording while keeping
+the screen in either language. Turn both off to return to the original Hindi survey.
+Changing these controls preserves the current question, answers and follow-up codes;
+the answer record retains the original survey identity and language.
+
+The MEL Console's survey preview has the same controls and a **Read aloud** button.
+Console audio uses the browser voice. The voice page prefers its recorded clips and
+uses the browser voice for English lines without recordings. Voice availability and
+pronunciation depend on the browser and installed voices.
+
+English demo translations cover the two bundled MEL-agent surveys and five
+participant-pack reference surveys. Other Hindi wording disables the English controls
+with an explanation. These are bundled translations, not live model translation.
+Add new prompt/choice translations to `src/mel/explorer/static/demo-language.mjs`, then
+run `voice/export_surveys.py` to update the voice page's shared copy. Original agent
+output is preserved.
+
 ## Choices and limits
 
 - **Voice:** "Mahi", a warm Indian female voice, with `eleven_multilingual_v2` for Hindi

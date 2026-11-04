@@ -39,6 +39,7 @@ jobs:
       - run: uv sync --locked
       - run: uv run ruff check src deploy
       - run: uv run cfn-lint template.yaml infra/bootstrap.yaml deploy/*.yaml
+      - run: uv run playwright install --with-deps chromium
       - run: uv run pytest -q
       - run: node --test src/mel/explorer/static/*.test.mjs
       - name: Check stdlib host paths on Python 3.9
@@ -47,7 +48,6 @@ jobs:
           uv run --no-project --python 3.9 python -I deploy/fieldecho.py --help
       - name: Build exact checkout with locked runtime dependencies
         run: docker build --platform linux/amd64 --label org.opencontainers.image.revision="$GITHUB_SHA" -t fieldecho:tested .
-      - run: uv run playwright install --with-deps chromium
       - name: Smoke the built image offline
         env:
           FIELDECHO_BROWSER_URL: http://127.0.0.1:8879

@@ -2,6 +2,7 @@
 // The farmer never speaks. With no tap within REPEAT.timeout_seconds after a question ends,
 // the question plays again, REPEAT.repeats times. Clips come from voice/render_audio.py.
 import {REPEAT, createSession, finishSurvey, markShown, optionsFor, recordAnswer, spokenLines, clipName, voiceLanguage} from './survey-session.mjs';
+import {englishSurvey} from './generated/demo-language.mjs';
 
 const SCENARIOS = {
   '1-mustard-aphid-spray': 'Mustard aphids: spray within 2 days',
@@ -31,6 +32,7 @@ const $ = id => document.getElementById(id);
 // cut off by a tap, a page change or Stop, and must not start the repeat timer.
 // load counts survey loads the same way: only the latest choice may install its survey.
 const state = {lang: 'en', generated: [], survey: null, session: null, index: 0, done: false,
+  english: null, englishText: false, englishAudio: false,
   voiceOn: false, speech: 0, load: 0, audio: null, timer: null, repeats: 0, mode: 'off', caption: ''};
 
 function h(tag, attrs = {}, ...children) {
@@ -43,8 +45,10 @@ function h(tag, attrs = {}, ...children) {
   return node;
 }
 
-const copy = () => COPY[state.lang];
-const currentItem = () => state.survey.items[state.index];
+const displaySurvey = () => state.englishText ? state.english : state.survey;
+const audioSurvey = () => state.englishAudio ? state.english : state.survey;
+const copy = () => COPY[voiceLanguage(displaySurvey())];
+const currentItem = () => displaySurvey().items[state.index];
 const answered = () => state.session.items[currentItem().item_id].result === 'answered';
 
 // ---- Voice ------------------------------------------------------------------------------
@@ -65,7 +69,7 @@ async function speak(text) {
   const speech = state.speech;
   Object.assign(state, {mode: 'reading', caption: text});
   renderVoice();
-  const name = await clipName(state.survey.language, text);
+  const name = await clipName(audioSurvey().language, text);
   if (speech !== state.speech) return false;
   const ended = await new Promise(resolve => {
     // A missing clip fires both onerror and the play() rejection; settle only once, so the
@@ -90,7 +94,7 @@ function speakWithBrowser(text, speech) {
   addEvent('No recording for this line: using the browser voice');
   return new Promise(resolve => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = state.survey.language;
+    utterance.lang = audioSurvey().language;
     utterance.onend = () => resolve(true);
     utterance.onerror = () => resolve(false);
     speechSynthesis.speak(utterance);
@@ -100,7 +104,7 @@ function speakWithBrowser(text, speech) {
 async function readQuestion() {
   if (!state.voiceOn || state.done) return;
   const item = currentItem();
-  const text = spokenLines(state.survey).items[item.item_id];
+  const text = spokenLines(audioSurvey()).items[item.item_id];
   addEvent(state.repeats ? `No tap in ${REPEAT.timeout_seconds} s: read ${item.item_id} again` : `Read ${item.item_id}`);
   if (!(await speak(text))) return;
   if (answered()) {
@@ -126,7 +130,7 @@ async function startVoice() {
   Object.assign(state, {voiceOn: true, repeats: 0});
   addEvent('Voice on');
   // A tap, Stop or survey change during the opening cuts it off; then read nothing more.
-  if (state.index === 0 && !state.done && !(await speak(spokenLines(state.survey).opening))) return;
+  if (state.index === 0 && !state.done && !(await speak(spokenLines(audioSurvey()).opening))) return;
   readQuestion();
 }
 
@@ -163,6 +167,8 @@ async function loadSurvey(load) {
   const survey = await response.json();
   if (load !== state.load) return false;
   state.survey = survey;
+  state.english = englishSurvey(survey);
+  if (!state.english) Object.assign(state, {englishText: false, englishAudio: false});
   state.lang = voiceLanguage(state.survey);
   document.querySelector(`input[name=lang][value=${state.lang}]`).checked = true;
   document.querySelector('.lang').disabled = Boolean(generated);
@@ -189,7 +195,7 @@ async function finish() {
   render();
   if (!state.voiceOn) return;
   const record = finishSurvey(state.session);
-  const lines = spokenLines(state.survey);
+  const lines = spokenLines(audioSurvey());
   // The voice ends with the survey. A Stop or survey change during the closing owns the state.
   if (!(await speak(record.needs_follow_up ? lines.closing_if_follow_up : lines.closing))) return;
   Object.assign(state, {voiceOn: false, mode: 'off', caption: ''});
@@ -213,7 +219,7 @@ function renderCard() {
   const card = $('card');
   if (state.done) {
     const record = finishSurvey(state.session);
-    const lines = spokenLines(state.survey);
+    const lines = spokenLines(displaySurvey());
     card.replaceChildren(h('h2', {tabindex: -1}, c.thanks),
       h('p', {}, record.needs_follow_up ? lines.closing_if_follow_up : lines.closing));
     $('progress').textContent = '';
@@ -248,6 +254,7 @@ function renderVoice() {
   button.dataset.mode = state.mode;
   $('status').textContent = c[state.mode] ?? c.off;
   $('caption').textContent = state.caption;
+  $('caption').lang = audioSurvey().language;
 }
 
 function renderRecord() {
@@ -260,6 +267,17 @@ function renderRecord() {
 }
 
 function render() {
+  const nativeEnglish = voiceLanguage(state.survey) === 'en';
+  for (const [id, enabled] of [['english-text', state.englishText], ['english-audio', state.englishAudio]]) {
+    $(id).checked = nativeEnglish || enabled;
+    $(id).disabled = !state.english || nativeEnglish;
+  }
+  $('translation-note').textContent = !state.english
+    ? 'English demo translation is unavailable for this survey.'
+    : nativeEnglish ? 'This survey is already in English.'
+    : 'Text and audio can use different languages. Answers keep the original survey language.';
+  $('card').lang = displaySurvey().language;
+  $('progress').lang = displaySurvey().language;
   renderCard();
   renderVoice();
   renderRecord();
@@ -310,6 +328,21 @@ async function init() {
     radio.addEventListener('change', () => { state.lang = radio.value; restart(); });
   }
   $('voice').addEventListener('click', () => (state.voiceOn ? stopVoice() : startVoice()));
+  $('english-text').addEventListener('change', event => {
+    state.englishText = event.target.checked;
+    render();
+  });
+  $('english-audio').addEventListener('change', event => {
+    silence();
+    state.englishAudio = event.target.checked;
+    Object.assign(state, {repeats: 0, caption: '', mode: state.voiceOn ? 'waiting' : 'off'});
+    render();
+    if (state.voiceOn) {
+      if (state.done) finish();
+      else readQuestion();
+    }
+  });
+  window.addEventListener('pagehide', silence);
   restart();
 }
 

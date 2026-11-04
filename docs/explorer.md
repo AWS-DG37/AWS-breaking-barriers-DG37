@@ -326,6 +326,13 @@ Changing the candidate resets them. App stage and reference inspection preserve
 them for the same candidate and survey. Model explanations remain diagnostic
 and do not establish independent question quality.
 
+The player includes independent **English text** and **English audio** demo controls
+and **Read aloud** using the browser voice. Switching languages preserves the current
+question and answers. Bundled English translations cover the recorded demo and five
+participant-pack reference surveys; other Hindi wording disables these controls with
+an explanation. Native English surveys use their original wording. These controls
+change the preview only; saved results and question evidence retain the original.
+
 Run the browser check against a temporary build with an automatically stopped
 server, or point it at an existing hosted viewer:
 
