@@ -58,8 +58,6 @@ def decide(insight):
     if (i.get("concern") is None or not i.get("query_summary") or not i.get("advice_summary")
             or not i.get("resolution_type") or i.get("decision_episode_type") == "casual"):
         return {"survey": False, "rule": "R1", "reason_code": "junk_insight"}
-    if i["severity"] == "critical":
-        return {"survey": False, "rule": "R2", "reason_code": "critical_needs_human_call"}
     if i["resolution_type"] == "generic_information":
         return {"survey": False, "rule": "R3", "reason_code": "nothing_to_verify"}
     if i["resolution_type"] == "needs_more_context":

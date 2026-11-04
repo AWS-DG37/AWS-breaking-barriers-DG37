@@ -46,11 +46,6 @@ class DecisionRuleTests(unittest.TestCase):
         self.assertEqual((decision.rule, decision.reason_code), ("R1", "junk_insight"))
         self.assertIn("farmer_id", decision.explanation)
 
-    def test_critical_severity_is_r2_before_resolution_rules(self):
-        decision = self.decide(severity="critical", resolution_type="needs_more_context")
-        self.assertEqual((decision.rule, decision.survey), ("R2", False))
-        self.assertIsNone(decision.no_survey_code)
-
     def test_no_advice_resolutions_carry_the_pack_no_survey_code(self):
         info = self.decide(resolution_type="generic_information")
         waiting = self.decide(resolution_type="needs_more_context")

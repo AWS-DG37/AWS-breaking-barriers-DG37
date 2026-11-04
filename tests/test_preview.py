@@ -69,11 +69,11 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
             manifest = json.loads((run / "run.json").read_text())
             self.assertEqual(len(results), DEFAULT_ROW_LIMIT)
             surveys = {r["survey"]["survey_id"] for r in results if "survey" in r}
-            self.assertEqual(len(surveys), 6)
-            self.assertEqual(summary["counts"], {"accepted": 6, "skipped": 4})
+            self.assertEqual(len(surveys), 7)
+            self.assertEqual(summary["counts"], {"accepted": 7, "skipped": 3})
             self.assertEqual(
                 sorted(r["rule"] for r in results if r["status"] == "skipped"),
-                ["R2", "R3", "R5", "R7"],
+                ["R3", "R5", "R7"],
             )
             self.assertEqual(manifest["status"], "completed")
             self.assertEqual(manifest["mode"], "local_preview")
