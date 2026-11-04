@@ -79,6 +79,7 @@ def capped_run(db):
 
 
 def test_console_runs_are_refused_until_a_spend_cap_is_set(database):
+    set_cap(database, CapUpdate(expected_version=cap_view(database)["version"]))
     _, model, _ = setup_run(database, budget=None)
     with pytest.raises(CostRefused, match="spend cap"):
         reserve(capped_run(database), model)

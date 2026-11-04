@@ -1,11 +1,14 @@
 import {budgetInput, capPanel, costSummary, money} from './costs.mjs';
-import {el} from './dom.mjs';
+import {el, skeleton} from './dom.mjs';
 import {signedIn, signOut} from './auth.mjs';
-import {api} from './api.mjs';
-import {showGenerate, leaveGenerate} from './generate.mjs';
-import {showConfigure} from './configure.mjs';
+import {api as globalApi, requestScope} from './api.mjs';
+import {showGenerate, showRuns, leaveGenerate} from './generate.mjs';
+import {showConfigure, leaveConfigure} from './configure.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
+import {insightJourney} from './journey.mjs';
+const requests=requestScope();
+const api=(path,options)=>requests.api(path,options);
 
 const $ = id => document.getElementById(id);
 const state = {config:null, experiments:[], detail:null, run:0, result:0, stage:null, event:0, question:0, request:0};
@@ -27,20 +30,25 @@ async function listExperiments() {
   },el('strong',{},item.name),el('span',{class:'small muted'},`${item.source==='recorded'?'Recorded':'Live'} · ${item.insight_count} insights · ${item.candidate_count} versions`),badge(item.status))) : [el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or compare saved versions with New comparison.')]));
 }
 async function openExperiment(id, refresh=false, reference=null) {
+  requests.renew();
   const ticket=++state.request;
   clearTimeout(poll);
+  notice('');
+  $('composer').hidden=true; $('content').hidden=false;
   // Shareable address without a hashchange, which would route back here.
   if (location.hash!==`#compare/${id}`) history.replaceState(null,'',`#compare/${id}`);
-  if(!refresh) { $('composer').hidden=true; $('content').hidden=false; $('content').replaceChildren(el('p',{class:'empty-note'},'Loading saved evidence…')); }
+  if(!refresh) $('content').replaceChildren(skeleton('Loading saved evidence…'));
   try {
     reference=reference || (state.detail?.experiment_id===id ? state.detail.comparison?.reference : null);
     const query=reference?`?evaluation_reference=${encodeURIComponent(reference)}`:'';
     const detail=await api(`/experiments/${encodeURIComponent(id)}${query}`);
     if(ticket!==state.request) return;
+    const previousStatus=state.detail?.status;
     state.detail=detail;
     if(!refresh) { rehearsalKey=null; Object.assign(state,{run:0,result:0,stage:null,event:0,question:0}); }
-    renderExperiment(); await listExperiments();
-    if(['queued','running'].includes(detail.status)) poll=setTimeout(()=>openExperiment(id,true),3000);
+    renderExperiment();
+    if(!refresh || previousStatus!==detail.status) listExperiments().catch(()=>{});
+    if(ticket===state.request && ['queued','running'].includes(detail.status)) poll=setTimeout(()=>openExperiment(id,true),3000);
   } catch(error) { if(ticket===state.request) { notice(`Cannot load experiment. ${error.message} Use Refresh to try again.`,true); $('content').replaceChildren(el('h1',{},'Experiment unavailable')); } }
 }
 function selected() {
@@ -66,7 +74,7 @@ function renderExperiment() {
   sections.push(controls);
   if(outcome) {
     sections.push(el('div',{class:'outcome-line'},badge(outcome.status),el('span',{},outcome.reason || 'No additional outcome reason recorded.'),el('span',{class:'small muted'},run.model_id)));
-    sections.push(renderJourney(d.flow || state.config?.flow,outcome));
+    sections.push(renderJourney(outcome));
     sections.push(el('div',{class:'inspect-grid'},renderInspector(result,outcome),renderSurvey(outcome)));
   } else sections.push(el('div',{class:'empty-note'},['queued','running'].includes(d.status)?'Waiting for persisted results. This view refreshes while execution is active.':'No result records are available for this candidate.'));
   sections.push(renderComparison(d));
@@ -82,25 +90,20 @@ function renderProgress(d) {
     el('div',{class:'progress',role:'progressbar','aria-valuemin':0,'aria-valuemax':progress.total,'aria-valuenow':progress.done,'aria-label':'Results saved'},el('span',{style:`width:${Math.round(100*progress.done/progress.total)}%`})),
     el('p',{class:'small muted'},`${progress.done} of ${progress.total} results saved · running version ${current} of ${versions}`));
 }
-function renderJourney(flow,outcome) {
-  const events=outcome.events || [];
-  const nodes=flow?.nodes || [];
-  if(!state.stage) state.stage=events[0]?.stage || nodes[0]?.id || 'input';
-  const extra=[...new Set(events.map(e=>e.stage))].filter(stage=>!nodes.some(n=>n.id===stage)).map(id=>({id,label:id.replaceAll('_',' ')}));
-  const diagram=el('div',{class:'journey',role:'group','aria-label':'Pipeline stages'});
-  for(const node of [...nodes,...extra]) {
-    const count=eventsForStage(events,node.id).length;
-    diagram.append(el('button',{class:'stage','aria-pressed':node.id===state.stage,onClick:()=>{state.stage=node.id;state.event=Math.max(0,eventsForStage(events,node.id).length-1);renderExperiment();}},el('strong',{},node.label),el('span',{class:'small'},count?`${count} recorded event${count===1?'':'s'}`:'No recorded event')));
-    const edges=(flow?.edges || []).filter(edge=>edge.from===node.id);
-    if(edges.length) diagram.append(el('div',{class:'edges','aria-label':`Connections from ${node.label}`},edges.map(edge=>el('span',{},`${edge.label?edge.label+' → ': '→ '}${flow.nodes.find(n=>n.id===edge.to)?.label || edge.to}`))));
+function renderJourney(outcome) {
+  if (!state.stage && outcome.events?.length) {
+    state.stage=outcome.events.at(-1).stage;
+    state.event=eventsForStage(outcome.events,state.stage).length-1;
   }
-  return el('section',{class:'journey-section'},el('div',{class:'section-heading'},el('h2',{},'Insight journey'),el('span',{class:'small muted'},'Select a stage to inspect saved evidence')),diagram,!events.length?el('p',{class:'missing'},'Intermediate history not recorded. The final outcome remains available below.'):null);
+  return insightJourney(outcome,{stage:state.stage,event:state.event,onSelect:(stage,event)=>{
+    state.stage=stage; state.event=event; renderExperiment();
+  }});
 }
 function renderInspector(result,outcome) {
   const events=eventsForStage(outcome.events || [],state.stage);
   const event=events[state.event] || events[0];
   const panel=el('section',{class:'inspector'},el('h2',{},'Stage evidence'));
-  if(!event) panel.append(el('p',{class:'muted'},'No event was recorded for this stage. The diagram describes the pipeline, not proof that every stage ran.'));
+  if(!event) panel.append(el('p',{class:'muted'},'No event was recorded for this step.'));
   else {
     panel.append(picker('Recorded event',events.map((e,i)=>[i,`#${e.sequence} · ${e.source} · attempt ${e.attempt}`]),state.event,value=>{state.event=Number(value);renderExperiment();}),el('p',{class:'small muted'},`${event.stage} · ${event.source} evidence · ${event.created_at || 'Time not recorded'}`));
     const data=event.data;
@@ -177,14 +180,16 @@ function renderComparison(d) {
 }
 // A comparison runs saved configuration versions over the same insights.
 async function renderComposer() {
-  clearTimeout(poll); ++state.request;
+  requests.renew();
+  clearTimeout(poll); const ticket=++state.request;
   $('content').hidden=true; $('composer').hidden=false;
-  $('composer').replaceChildren(el('p',{class:'empty-note'},'Loading versions and datasets…'));
+  $('composer').replaceChildren(skeleton('Loading versions and datasets…'));
   let configs, active, datasets;
   try {
     const [list,data]=await Promise.all([api('/configs'),api('/datasets')]);
+    if (ticket!==state.request) return;
     configs=list.configs.filter(c=>c.status!=='retired'); active=list.active_config_id; datasets=data.datasets;
-  } catch(error) { $('composer').replaceChildren(el('p',{class:'notice error'},`Cannot load versions. ${error.message}`)); return; }
+  } catch(error) { if (ticket!==state.request) return; $('composer').replaceChildren(el('p',{class:'notice error'},`Cannot load versions. ${error.message}`)); return; }
   const back=el('button',{class:'secondary',onClick:()=>{ $('composer').hidden=true; $('content').hidden=false; if(state.detail) openExperiment(state.detail.experiment_id); }},'Back to comparisons');
   const heading=el('div',{class:'heading'},el('div',{},el('h1',{id:'form-title'},'New comparison'),el('p',{class:'muted'},'Run saved versions on the same insights and see them side by side.')),back);
   if (!datasets.length) { $('composer').replaceChildren(heading,el('p',{class:'notice'},'Load the participant pack in Generate first.'),el('a',{href:'#generate'},'Open Generate')); return; }
@@ -201,8 +206,9 @@ async function renderComposer() {
   addCandidate(configs.find(c=>c.config_id===active) || configs[0]);
   const dataset=el('select',{name:'dataset','aria-label':'Dataset'},datasets.map(d=>el('option',{value:d.dataset_id},`${d.name} · ${d.row_count.toLocaleString()} insights`)));
   const crop=el('select',{name:'crop','aria-label':'Crop'},el('option',{value:''},'Any crop'));
-  const loadCrops=async()=>{ const f=await api(`/datasets/${dataset.value}/facets`); crop.replaceChildren(el('option',{value:''},'Any crop'),...f.facets.crop.map(o=>el('option',{value:o.value},`${o.value} (${o.count.toLocaleString()})`))); };
-  dataset.addEventListener('change',loadCrops); loadCrops().catch(()=>{});
+  let cropRequest=0;
+  const loadCrops=async()=>{ const current=++cropRequest; crop.disabled=true; const f=await api(`/datasets/${dataset.value}/facets`); if(current!==cropRequest || ticket!==state.request) return; crop.disabled=false; crop.replaceChildren(el('option',{value:''},'Any crop'),...f.facets.crop.map(o=>el('option',{value:o.value},`${o.value} (${o.count.toLocaleString()})`))); };
+  dataset.addEventListener('change',()=>loadCrops().catch(error=>{if(ticket===state.request) notice(error.message,true);})); loadCrops().catch(()=>{});
   const form=el('form',{onSubmit:async event=>{
     event.preventDefault();
     const submit=form.querySelector('[type=submit]');
@@ -216,7 +222,7 @@ async function renderComposer() {
       submit.disabled=true; notice('Starting the comparison…');
       const result=await api('/experiments',{method:'POST',body:JSON.stringify(spec)});
       notice('Comparison queued. Results appear as each version finishes an insight.'); await openExperiment(result.experiment_id);
-    } catch(error) { notice(`Comparison was not started. ${error.message}`,true); }
+    } catch(error) { if(error.name!=='AbortError') notice(`Comparison was not started. ${error.message}`,true); }
     finally {submit.disabled=!state.config?.live_enabled;}
   }});
   form.append(
@@ -246,40 +252,53 @@ async function renderComposer() {
   $('composer').replaceChildren(heading,form);
 }
 $('new').addEventListener('click',renderComposer);
-$('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
-$('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
+$('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){if(error.name!=='AbortError') notice(error.message,true);}});
+$('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){if(error.name!=='AbortError') notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 let compareLoaded=false;
+let activeTab=null;
 function route() {
   const hash=location.hash || '#generate';
-  const tab=['compare','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
-  for (const name of ['generate','compare','configure']) $(`${name}-view`).hidden=name!==tab;
+  const tab=['runs','compare','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
+  if (tab!==activeTab) {
+    leaveGenerate(); leaveConfigure();
+    clearTimeout(poll); ++state.request; requests.renew();
+    activeTab=tab;
+  }
+  for (const name of ['generate','runs','compare','configure']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
+  if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
   if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),hash); return; }
   leaveGenerate();
   if (tab==='configure') { clearTimeout(poll); showConfigure($('configure-view'),hash); return; }
   const id=hash.split('/')[1];
   if (!compareLoaded) { compareLoaded=true; bootCompare(id); }
-  else if (id && id!==state.detail?.experiment_id) openExperiment(id);
+  else if (id) openExperiment(id,id===state.detail?.experiment_id);
+  else if (state.detail) openExperiment(state.detail.experiment_id,true);
+  else bootCompare();
 }
 async function boot() {
   try {
-    const session=await api('/auth/session');
+    const session=await globalApi('/auth/session');
     if (session.auth) { signedIn(); $('sign-out').hidden=false; }
   } catch(error) { $('health').textContent='Sign-in unavailable'; $('generate-view').replaceChildren(el('p',{class:'notice error'},error.message)); return; }
-  api('/health').then(h=>{$('health').textContent=`Database ${h.database}`;}).catch(()=>{$('health').textContent='Server unavailable';});
+  globalApi('/health').then(h=>{$('health').textContent=`Database ${h.database}`;}).catch(()=>{$('health').textContent='Server unavailable';});
   window.addEventListener('hashchange',route);
   route();
 }
 async function bootCompare(id) {
+  const ticket=state.request;
+  $('content').replaceChildren(skeleton('Loading comparisons…'));
   const results=await Promise.allSettled([api('/config'),listExperiments()]);
+  if(ticket!==state.request) return;
   const [config,experiments]=results;
   if(config.status==='fulfilled') state.config=config.value;
   if(experiments.status==='rejected') notice(`Cannot read experiments. ${experiments.reason.message} Use Refresh to try again.`,true);
   else if(id) await openExperiment(id);
   else if(state.experiments.length) await openExperiment(state.experiments[0].experiment_id);
+  else $('content').replaceChildren(el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or create a new comparison.'));
 }
 boot();
-window.addEventListener('pagehide',()=>clearTimeout(poll));
+window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();});
 $('sign-out').addEventListener('click',signOut);
 // The skip link focuses the visible section; a hash link would switch tabs.
-document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});
