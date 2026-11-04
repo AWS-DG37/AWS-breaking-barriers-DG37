@@ -598,20 +598,27 @@ def test_website_native_mantle_has_no_hidden_retries_and_enforces_wire_limit(sto
 
 
 def test_website_converse_passes_explicit_single_attempt_transport(stores, monkeypatch):
-    import boto3
+    from types import SimpleNamespace
 
     from mel.agents import build_agents
     from mel.bundle import Bundle
     from mel.usage import usage_scope
+    from mel.worker import close_model_clients
 
-    real_client = boto3.client
     received = []
+
+    class OfflineClient:
+        meta = SimpleNamespace(endpoint_url="https://offline.invalid", region_name="us-east-1")
+
+        def close(self):
+            pass
+
+        def converse(self, **kwargs):
+            raise AssertionError("Native calls are forbidden in this constructor check")
 
     def client(service, **kwargs):
         received.append((service, kwargs["config"].retries))
-        return real_client(
-            service, **kwargs, aws_access_key_id="offline", aws_secret_access_key="offline"
-        )
+        return OfflineClient()
 
     monkeypatch.setattr("boto3.client", client)
     bundle = Bundle.load(Settings(bedrock_model_id="offline"))
@@ -620,9 +627,7 @@ def test_website_converse_passes_explicit_single_attempt_transport(stores, monke
         with usage_scope(gateway=gate):
             agents = build_agents(bundle.config, "us-east-1", bundle.snapshot["prompts"])
         assert received == [("bedrock-runtime", {"total_max_attempts": 1, "mode": "standard"})]
-        asyncio.run(
-            __import__("mel.worker", fromlist=["close_model_clients"]).close_model_clients(*agents)
-        )
+        asyncio.run(close_model_clients(*agents))
 
 
 def test_overrun_response_stops_pipeline_immediately(stores):
