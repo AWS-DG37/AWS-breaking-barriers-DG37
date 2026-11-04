@@ -53,6 +53,15 @@ AWS_PROFILE=digital-green AWS_EC2_METADATA_DISABLED=true \
   uv run --locked mel-explorer --port 8765
 ```
 
+Start a job runner in a second terminal, with the same environment. The API only
+queues experiments; the runner executes them:
+
+```bash
+AWS_PROFILE=digital-green AWS_EC2_METADATA_DISABLED=true \
+  MEL_DATABASE_PORT=55437 MEL_DATABASE_SSLMODE=disable \
+  uv run --locked mel-worker jobs
+```
+
 Open <http://127.0.0.1:8765> and select **New live experiment**. Supply normalized
 insight JSONL with no golden expectations. Choose candidate models and native APIs,
 a shared reviewer, and a configured ruleset. Model discovery does not prove access
@@ -61,8 +70,10 @@ automatic provider or API substitution.
 
 Only **Run live experiment** invokes models and incurs AWS usage. A request allows
 at most six candidates and fifty insights, defaults to three insight rows, and uses
-the existing revision and timeout limits. At most two experiments run concurrently
-in one API process. Comparison results never enter the scheduler handoff queue.
+the existing revision and timeout limits. Each runner executes one job at a time;
+start more runners for more concurrency. Each candidate is saved as a configuration
+version derived from the active one. Comparison results never enter the scheduler
+handoff queue.
 
 The API defaults to loopback and has no authentication. Keep it local. The existing
 Fargate stack runs the batch worker; it does not deploy this web API. Its IAM policy
@@ -79,6 +90,7 @@ permissions before using Converse candidates in a deployed worker.
 | Models, budgets, and revision settings | `config/agent.yaml` |
 | Native SDK construction and catalog | `src/mel/agents.py`, `src/mel/bedrock_models/` |
 | Grouped experiments and comparison analysis | `src/mel/experiments/` |
+| Configuration versions, datasets and the job queue | `src/mel/configs.py`, `src/mel/datasets.py`, `src/mel/jobs.py` |
 | Golden reference and holdout provenance | `eval/` |
 | Database schema | New numbered files in `migrations/` |
 | HTTP boundary and browser UI | `src/mel/explorer/` |

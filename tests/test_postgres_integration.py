@@ -1,37 +1,14 @@
 import json
-import os
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from postgres import requires_postgres
 from psycopg.errors import UniqueViolation
 
-from mel.config import Settings
 from mel.models import Outcome, TraceEvent
-from mel.store import Store
 
-pytestmark = pytest.mark.skipif(
-    not os.environ.get("MEL_TEST_DB_PORT"),
-    reason="Set MEL_TEST_DB_PORT for local PostgreSQL checks",
-)
-
-
-@pytest.fixture
-def database():
-    db = Store(
-        Settings(
-            database_host="localhost",
-            database_port=int(os.environ["MEL_TEST_DB_PORT"]),
-            database_sslmode="disable",
-        )
-    )
-    db.initialize()
-    db.initialize()
-    try:
-        with db.connection.transaction(force_rollback=True):
-            yield db
-    finally:
-        db.close()
+pytestmark = requires_postgres
 
 
 def test_comparison_results_persist_without_scheduler_handoffs(database):

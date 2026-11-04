@@ -2,6 +2,7 @@ import asyncio
 import copy
 
 import pytest
+from memory_configs import MemoryConfigs
 from pydantic import ValidationError
 from test_trace import dependencies, insight
 
@@ -23,8 +24,9 @@ def specification():
     )
 
 
-class MemoryStore:
+class MemoryStore(MemoryConfigs):
     def __init__(self):
+        super().__init__()
         self.spec = None
         self.runs = {}
         self.status = None

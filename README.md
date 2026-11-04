@@ -268,6 +268,42 @@ For only the small offline worker tests:
 uv run python -m unittest discover -s tests -p test_worker.py -v
 ```
 
+### Configuration versions, datasets and jobs
+
+Runs are tied to saved **configuration versions**: the resolved config, prompts, rules,
+crop calendar and schemas, stored immutably in `agent_configs`. Saving an unchanged
+definition returns the existing version. One version is active; batch jobs and
+experiments use it unless told otherwise. When no version exists yet, the first
+request seeds one from `config/agent.yaml` and activates it. `mel-worker run` also
+saves its configuration as a version, so every run records a `config_id`.
+
+```bash
+uv run mel-worker config save --note "Shorter outcome options" --activate
+uv run mel-worker config list
+uv run mel-worker config activate <config_id>
+```
+
+Insight files are imported once into `datasets`/`insights` and queried by farmer,
+crop, concern, resolution type, quality flag and India Standard Time day:
+
+```bash
+uv run mel-worker dataset import --input docs/participant-pack/data/insights.jsonl
+uv run mel-worker dataset list
+```
+
+Long work is a row in `jobs`: `batch` (a dataset selection with one configuration
+version) or `experiment` (the explorer's model comparison). The API only queues jobs;
+a runner executes them, and several runners can share the queue:
+
+```bash
+uv run mel-worker jobs                      # Poll and run jobs until stopped
+uv run mel-worker jobs --once               # Run what is queued, then exit
+uv run mel-worker jobs --job-id <id> --resume  # Reclaim a stopped job; runs resume
+```
+
+A batch job's run ID is derived from its job ID, so a resumed job continues from the
+same checkpoints. Jobs record progress, final status and the error of a failed job.
+
 The worker bootstraps the SQL under a PostgreSQL migration lock. This MVP uses the
 RDS-managed master secret to initialize and access the schema; split migration and
 application database roles before a production deployment. RDS connections verify

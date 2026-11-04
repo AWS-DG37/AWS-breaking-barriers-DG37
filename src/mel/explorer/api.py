@@ -1,37 +1,59 @@
-"""Local HTTP boundary for explicit experiments and recorded outcomes."""
+"""HTTP boundary for configuration versions, datasets, jobs, experiments and recorded
+outcomes. Long work is queued as jobs; `mel-worker jobs` executes them."""
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import hashlib
 import json
 import logging
-from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
 from mel.bundle import Bundle
-from mel.config import Settings
+from mel.config import Settings, StrictModel
+from mel.configs import active_config
+from mel.datasets import InsightFilter, parse_insights
 from mel.experiments import (
     ExperimentSpec,
     QualityAssessment,
     compare_runs,
-    execute_experiment,
     ruleset_registry,
     select_rules,
     validate_assessment,
 )
+from mel.jobs import BatchJobSpec
 from mel.models import Outcome
 from mel.store import Store
 
 logger = logging.getLogger("mel.explorer")
+PACK_INSIGHTS = Path("docs/participant-pack/data/insights.jsonl")
+BROWSE_LIMIT = 500
+
+
+class NewConfig(StrictModel):
+    definition: dict
+    parent_id: UUID | None = None
+    note: str | None = None
+
+
+class NewDataset(StrictModel):
+    name: str
+    jsonl: str
+
+
+class NewBatchJob(StrictModel):
+    dataset_id: UUID
+    config_id: UUID | None = None  # Unset uses the active version.
+    selection: InsightFilter = InsightFilter()
+
+
 FLOW = {
     "nodes": [
         {"id": key, "label": label}
@@ -133,23 +155,12 @@ def create_app(
     settings: Settings | None = None,
     store_factory=Store,
     catalog_loader=discover_models,
-    executor=execute_experiment,
     demo_path: Path | None = None,
     live_enabled: bool = True,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
-    jobs: set[asyncio.Task] = set()
-    job_lock = asyncio.Lock()
-
-    @asynccontextmanager
-    async def lifespan(app):
-        yield
-        for task in jobs:
-            task.cancel()
-        await asyncio.gather(*jobs, return_exceptions=True)
-
-    app = FastAPI(title="FarmerChat experiment explorer", lifespan=lifespan)
+    app = FastAPI(title="FarmerChat MEL console")
 
     def database():
         db = None
@@ -186,8 +197,9 @@ def create_app(
     @app.get("/api/config")
     def configuration():
         try:
-            bundle = Bundle.load(settings)
+            config_id, bundle = database_call(lambda db: active_config(db, settings))
             return {
+                "active_config_id": config_id,
                 "rulesets": [
                     {"id": row["id"], "label": row["label"]} for row in ruleset_registry(settings)
                 ],
@@ -201,10 +213,124 @@ def create_app(
                 "flow": FLOW,
                 "live_enabled": live_enabled,
             }
+        except HTTPException:
+            raise
         except Exception as error:
             raise HTTPException(
                 503, f"Configuration unavailable ({type(error).__name__})"
             ) from None
+
+    @app.get("/api/configs")
+    def configs():
+        return {
+            "configs": database_call(lambda db: db.list_configs()),
+            "active_config_id": database_call(lambda db: db.active_config_id()),
+        }
+
+    @app.get("/api/configs/{config_id}")
+    def config_version(config_id: UUID):
+        record = database_call(lambda db: db.config(str(config_id)))
+        if record is None:
+            raise HTTPException(404, "Configuration version not found")
+        return record
+
+    @app.post("/api/configs", status_code=201)
+    def create_config(value: NewConfig):
+        try:
+            definition = Bundle.from_definition(value.definition).definition
+        except Exception as error:
+            raise HTTPException(422, f"Invalid configuration ({type(error).__name__})") from None
+
+        def save(db):
+            if value.parent_id and db.config(str(value.parent_id)) is None:
+                raise HTTPException(422, "Unknown parent configuration version")
+            parent = str(value.parent_id) if value.parent_id else None
+            return db.config(db.save_config(definition, parent_id=parent, note=value.note))
+
+        return database_call(save)
+
+    @app.post("/api/configs/{config_id}/activate")
+    def activate_config(config_id: UUID):
+        def activate(db):
+            if db.config(str(config_id)) is None:
+                raise HTTPException(404, "Configuration version not found")
+            db.activate_config(str(config_id))
+            return {"active_config_id": str(config_id)}
+
+        return database_call(activate)
+
+    @app.get("/api/datasets")
+    def datasets():
+        return {"datasets": database_call(lambda db: db.list_datasets())}
+
+    @app.post("/api/datasets", status_code=201)
+    def upload_dataset(value: NewDataset):
+        body = value.jsonl.encode()
+        return import_rows(value.name, body)
+
+    @app.post("/api/datasets/import-pack", status_code=201)
+    def import_pack():
+        if not PACK_INSIGHTS.is_file():
+            raise HTTPException(503, "The participant pack insights file is unavailable")
+        return import_rows("Participant pack insights", PACK_INSIGHTS.read_bytes())
+
+    def import_rows(name: str, body: bytes) -> dict:
+        try:
+            rows = parse_insights(body)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from None
+        if not rows:
+            raise HTTPException(422, "The dataset contains no insights")
+        digest = hashlib.sha256(body).hexdigest()
+        return database_call(lambda db: db.import_dataset(name, rows, digest))
+
+    @app.get("/api/datasets/{dataset_id}/insights")
+    def dataset_insights(
+        dataset_id: UUID,
+        selection: Annotated[InsightFilter, Query()],
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ):
+        limit = min(selection.limit or BROWSE_LIMIT, BROWSE_LIMIT)
+        bounded = selection.model_copy(update={"limit": limit})
+
+        def query(db):
+            if db.dataset(str(dataset_id)) is None:
+                raise HTTPException(404, "Dataset not found")
+            return db.insights(str(dataset_id), bounded, offset)
+
+        return {"insights": database_call(query), "limit": limit, "offset": offset}
+
+    @app.get("/api/jobs")
+    def jobs():
+        return {"jobs": database_call(lambda db: db.list_jobs())}
+
+    @app.get("/api/jobs/{job_id}")
+    def job(job_id: UUID):
+        record = database_call(lambda db: db.job(str(job_id)))
+        if record is None:
+            raise HTTPException(404, "Job not found")
+        return record
+
+    @app.post("/api/jobs/batch", status_code=202)
+    def start_batch(value: NewBatchJob):
+        if not live_enabled:
+            raise HTTPException(403, "Live execution is disabled")
+
+        def enqueue(db):
+            if db.dataset(str(value.dataset_id)) is None:
+                raise HTTPException(422, "Unknown dataset")
+            if value.config_id is None:
+                config_id, _ = active_config(db, settings)
+            elif db.config(str(value.config_id)) is None:
+                raise HTTPException(422, "Unknown configuration version")
+            else:
+                config_id = str(value.config_id)
+            spec = BatchJobSpec(
+                dataset_id=value.dataset_id, config_id=config_id, selection=value.selection
+            )
+            return db.create_job(str(uuid4()), "batch", spec.model_dump(mode="json"))
+
+        return database_call(enqueue)
 
     @app.get("/api/models")
     async def models():
@@ -238,42 +364,23 @@ def create_app(
             "flow": FLOW,
         }
 
-    async def execute(spec, key):
-        db = None
-        try:
-            db = await asyncio.to_thread(database)
-            await executor(spec, settings=settings, store=db, experiment_id=key)
-        except BaseException as error:
-            logger.error("Experiment %s failed (%s)", key, type(error).__name__)
-            if db is not None:
-                await asyncio.to_thread(db.finish_experiment, key, "failed")
-        finally:
-            if db is not None:
-                await asyncio.to_thread(db.close)
-
     @app.post("/api/experiments", status_code=202)
-    async def start_experiment(spec: ExperimentSpec):
+    def start_experiment(spec: ExperimentSpec):
         if not live_enabled:
             raise HTTPException(403, "Live execution is disabled")
-        try:
-            select_rules(Bundle.load(settings), settings, spec.ruleset)
-        except ValueError:
-            raise HTTPException(422, "Unknown or invalid configured ruleset") from None
-        except Exception as error:
-            raise HTTPException(
-                503, f"Configuration unavailable ({type(error).__name__})"
-            ) from None
-        async with job_lock:
-            if len(jobs) >= 2:
-                raise HTTPException(429, "Two experiments are already active. Wait for completion.")
+
+        def enqueue(db):
+            _, bundle = active_config(db, settings)
+            try:
+                select_rules(bundle, settings, spec.ruleset)
+            except ValueError:
+                raise HTTPException(422, "Unknown or invalid configured ruleset") from None
             key = str(uuid4())
-            await asyncio.to_thread(
-                database_call, lambda db: db.create_experiment(key, spec.model_dump(mode="json"))
-            )
-            task = asyncio.create_task(execute(spec, key))
-            jobs.add(task)
-            task.add_done_callback(jobs.discard)
-        return {"experiment_id": key, "status": "queued"}
+            db.create_experiment(key, spec.model_dump(mode="json"))
+            job = db.create_job(str(uuid4()), "experiment", {"experiment_id": key})
+            return {"experiment_id": key, "job_id": job["job_id"], "status": "queued"}
+
+        return database_call(enqueue)
 
     @app.post("/api/experiments/{experiment_id}/assessments")
     def assessment(experiment_id: UUID, value: QualityAssessment):

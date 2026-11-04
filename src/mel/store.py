@@ -9,13 +9,18 @@ from hashlib import sha256
 from pathlib import Path
 from threading import RLock
 from typing import Literal
+from uuid import uuid4
 
 import boto3
 
+from mel.bundle import definition_sha256
 from mel.config import Settings
+from mel.datasets import InsightFilter, index_columns
 from mel.models import Outcome
 
 RunPurpose = Literal["handoff", "experiment"]
+JobKind = Literal["batch", "experiment"]
+JobStatus = Literal["queued", "running", "completed", "completed_with_errors", "failed"]
 
 
 class Store:
@@ -79,6 +84,8 @@ class Store:
         *,
         purpose: RunPurpose = "handoff",
         experiment_id: str | None = None,
+        config_id: str | None = None,
+        job_id: str | None = None,
     ) -> None:
         from psycopg.types.json import Jsonb
 
@@ -95,10 +102,18 @@ class Store:
             with self.connection.transaction():
                 self.connection.execute(
                     "INSERT INTO generation_runs"
-                    "(run_id,fingerprint,manifest,purpose,experiment_id) "
-                    "VALUES (%s,%s,%s,%s,%s) "
+                    "(run_id,fingerprint,manifest,purpose,experiment_id,config_id,job_id) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s) "
                     "ON CONFLICT (run_id) DO NOTHING",
-                    (run_id, fingerprint, Jsonb(manifest), purpose, experiment_id),
+                    (
+                        run_id,
+                        fingerprint,
+                        Jsonb(manifest),
+                        purpose,
+                        experiment_id,
+                        config_id,
+                        job_id,
+                    ),
                 )
                 previous = self.connection.execute(
                     "SELECT fingerprint,purpose,experiment_id FROM generation_runs WHERE run_id=%s",
@@ -289,5 +304,273 @@ class Store:
             )
         return assessment
 
+    # Agent configuration versions. Versions are immutable; saving an identical
+    # definition returns the existing version.
+
+    def save_config(
+        self, definition: dict, *, parent_id: str | None = None, note: str | None = None
+    ) -> str:
+        from psycopg.types.json import Jsonb
+
+        digest = definition_sha256(definition)
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO agent_configs(config_id,parent_id,definition,definition_sha256,note) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (definition_sha256) DO NOTHING",
+                (str(uuid4()), parent_id, Jsonb(definition), digest, note),
+            )
+            row = self.connection.execute(
+                "SELECT config_id FROM agent_configs WHERE definition_sha256=%s", (digest,)
+            ).fetchone()
+        return str(row[0])
+
+    def config(self, config_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,definition "
+                "FROM agent_configs WHERE config_id=%s",
+                (config_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {**_config_summary(row[:6], row[6]), "definition": row[6]}
+
+    def list_configs(self) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,"
+                "definition->'config' FROM agent_configs ORDER BY created_at DESC LIMIT 500"
+            ).fetchall()
+        return [_config_summary(row[:6], {"config": row[6]}) for row in rows]
+
+    def config_count(self) -> int:
+        with self.lock:
+            return self.connection.execute("SELECT count(*) FROM agent_configs").fetchone()[0]
+
+    def active_config_id(self) -> str | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT config_id FROM agent_configs WHERE status='active'"
+            ).fetchone()
+        return str(row[0]) if row else None
+
+    def activate_config(self, config_id: str) -> None:
+        with self.lock, self.connection.transaction():
+            if not self.connection.execute(
+                "SELECT 1 FROM agent_configs WHERE config_id=%s FOR UPDATE", (config_id,)
+            ).fetchone():
+                raise ValueError("unknown config_id")
+            self.connection.execute(
+                "UPDATE agent_configs SET status='retired' WHERE status='active' AND config_id<>%s",
+                (config_id,),
+            )
+            self.connection.execute(
+                "UPDATE agent_configs SET status='active' WHERE config_id=%s", (config_id,)
+            )
+
+    # Insight datasets. A dataset is identified by its source bytes; importing the
+    # same file twice returns the existing dataset.
+
+    def import_dataset(self, name: str, rows: list[dict], source_sha256: str) -> dict:
+        from psycopg.types.json import Jsonb
+
+        with self.lock, self.connection.transaction():
+            created = self.connection.execute(
+                "INSERT INTO datasets(dataset_id,name,source_sha256,row_count) "
+                "VALUES (%s,%s,%s,%s) ON CONFLICT (source_sha256) DO NOTHING RETURNING dataset_id",
+                (str(uuid4()), name, source_sha256, len(rows)),
+            ).fetchone()
+            if created:
+                dataset_id = str(created[0])
+                with self.connection.cursor() as cursor:
+                    cursor.executemany(
+                        "INSERT INTO insights(dataset_id,ordinal,insight_id,farmer_id,crop,"
+                        "concern,resolution_type,quality_flag,created_at,body) "
+                        "VALUES (%(dataset_id)s,%(ordinal)s,%(insight_id)s,%(farmer_id)s,"
+                        "%(crop)s,%(concern)s,%(resolution_type)s,%(quality_flag)s,"
+                        "%(created_at)s,%(body)s)",
+                        [
+                            {
+                                **index_columns(row),
+                                "dataset_id": dataset_id,
+                                "ordinal": ordinal,
+                                "body": Jsonb(row),
+                            }
+                            for ordinal, row in enumerate(rows, 1)
+                        ],
+                    )
+            row = self.connection.execute(
+                "SELECT dataset_id,name,row_count,created_at FROM datasets WHERE source_sha256=%s",
+                (source_sha256,),
+            ).fetchone()
+        return {**_dataset_summary(row), "created": created is not None}
+
+    def list_datasets(self) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT dataset_id,name,row_count,created_at FROM datasets ORDER BY created_at DESC"
+            ).fetchall()
+        return [_dataset_summary(row) for row in rows]
+
+    def dataset(self, dataset_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT dataset_id,name,row_count,created_at FROM datasets WHERE dataset_id=%s",
+                (dataset_id,),
+            ).fetchone()
+        return _dataset_summary(row) if row else None
+
+    def insights(self, dataset_id: str, selection: InsightFilter, offset: int = 0) -> list[dict]:
+        """Insight bodies in file order. Untyped NULL parameters are cast so an unset
+        filter field matches every row."""
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT body FROM insights WHERE dataset_id=%(dataset_id)s "
+                "AND (%(farmer_id)s::text IS NULL OR farmer_id=%(farmer_id)s) "
+                "AND (%(crop)s::text IS NULL OR crop=%(crop)s) "
+                "AND (%(concern)s::text IS NULL OR concern=%(concern)s) "
+                "AND (%(resolution_type)s::text IS NULL OR resolution_type=%(resolution_type)s) "
+                "AND (%(quality_flag)s::text IS NULL OR quality_flag=%(quality_flag)s) "
+                "AND (%(created_from)s::date IS NULL "
+                "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date >= %(created_from)s) "
+                "AND (%(created_to)s::date IS NULL "
+                "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date <= %(created_to)s) "
+                "ORDER BY ordinal LIMIT %(limit)s OFFSET %(offset)s",
+                {**selection.model_dump(), "dataset_id": dataset_id, "offset": offset},
+            ).fetchall()
+        return [row[0] for row in rows]
+
+    # Jobs. Workers claim queued jobs with SKIP LOCKED, so several runners can share
+    # one queue without running a job twice.
+
+    def create_job(self, job_id: str, kind: JobKind, spec: dict) -> dict:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO jobs(job_id,kind,spec) VALUES (%s,%s,%s)",
+                (job_id, kind, Jsonb(spec)),
+            )
+        return self.job(job_id)
+
+    def claim_job(self, job_id: str | None = None, *, resume: bool = False) -> dict | None:
+        """The next queued job, or one named job. `resume` also reclaims a named job
+        that stopped running; its runs resume from their checkpoints."""
+        claimable = ["queued"] + (["running", "failed", "completed_with_errors"] if resume else [])
+        with self.lock, self.connection.transaction():
+            row = self.connection.execute(
+                "SELECT job_id FROM jobs WHERE status = ANY(%s) "
+                "AND (%s::uuid IS NULL OR job_id=%s) "
+                "ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED",
+                (claimable, job_id, job_id),
+            ).fetchone()
+            if row is None:
+                return None
+            self.connection.execute(
+                "UPDATE jobs SET status='running',started_at=now(),finished_at=NULL,error=NULL "
+                "WHERE job_id=%s",
+                (row[0],),
+            )
+        return self.job(str(row[0]))
+
+    def job_progress(self, job_id: str, progress: dict) -> None:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "UPDATE jobs SET progress=%s WHERE job_id=%s", (Jsonb(progress), job_id)
+            )
+
+    def finish_job(self, job_id: str, status: JobStatus, error: str | None = None) -> None:
+        with self.lock:
+            self.connection.execute(
+                "UPDATE jobs SET status=%s,error=%s,finished_at=now() WHERE job_id=%s",
+                (status, error, job_id),
+            )
+
+    def job(self, job_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT job_id,kind,spec,status,progress,error,created_at,started_at,finished_at "
+                "FROM jobs WHERE job_id=%s",
+                (job_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            runs = self.connection.execute(
+                "SELECT r.run_id,r.status,r.config_id,"
+                "coalesce(jsonb_object_agg(i.status,i.n) FILTER (WHERE i.status IS NOT NULL),"
+                "'{}') FROM generation_runs r LEFT JOIN (SELECT run_id,status,count(*) n "
+                "FROM insight_results GROUP BY run_id,status) i ON i.run_id=r.run_id "
+                "WHERE r.job_id=%s GROUP BY r.run_id ORDER BY r.created_at",
+                (job_id,),
+            ).fetchall()
+        return {
+            **_job_summary(row),
+            "runs": [
+                {
+                    "run_id": str(run_id),
+                    "status": status,
+                    "config_id": str(config_id) if config_id else None,
+                    "counts": counts,
+                }
+                for run_id, status, config_id, counts in runs
+            ],
+        }
+
+    def list_jobs(self, limit: int = 100) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT job_id,kind,spec,status,progress,error,created_at,started_at,finished_at "
+                "FROM jobs ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+        return [_job_summary(row) for row in rows]
+
     def close(self) -> None:
         self.connection.close()
+
+
+def _iso(value) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _config_summary(row, definition: dict) -> dict:
+    config_id, parent_id, status, note, created, digest = row
+    config = definition["config"]
+    return {
+        "config_id": str(config_id),
+        "parent_id": str(parent_id) if parent_id else None,
+        "status": status,
+        "note": note,
+        "created_at": _iso(created),
+        "definition_sha256": digest,
+        "version": config.get("version"),
+        "generation_model": config["generation"]["model_id"],
+        "review_model": config["review"]["model_id"],
+    }
+
+
+def _dataset_summary(row) -> dict:
+    dataset_id, name, row_count, created = row
+    return {
+        "dataset_id": str(dataset_id),
+        "name": name,
+        "row_count": row_count,
+        "created_at": _iso(created),
+    }
+
+
+def _job_summary(row) -> dict:
+    job_id, kind, spec, status, progress, error, created, started, finished = row
+    return {
+        "job_id": str(job_id),
+        "kind": kind,
+        "spec": spec,
+        "status": status,
+        "progress": progress,
+        "error": error,
+        "created_at": _iso(created),
+        "started_at": _iso(started),
+        "finished_at": _iso(finished),
+    }

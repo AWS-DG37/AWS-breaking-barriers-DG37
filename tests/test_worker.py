@@ -8,16 +8,19 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+from memory_configs import MemoryConfigs
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
 from mel.config import Settings
+from mel.datasets import parse_insights
 from mel.models import Review, SurveyDraft
-from mel.worker import DEFAULT_ROW_LIMIT, parse_insights, run_batch
+from mel.worker import DEFAULT_ROW_LIMIT, run_batch
 
 
-class MemoryStore:
+class MemoryStore(MemoryConfigs):
     def __init__(self):
+        super().__init__()
         self.records = {}
         self.number = 0
         self.saved = 0
@@ -26,8 +29,8 @@ class MemoryStore:
     def initialize(self):
         pass
 
-    def start_run(self, run_id, fingerprint, manifest):
-        pass
+    def start_run(self, run_id, fingerprint, manifest, **binding):
+        self.binding = binding
 
     def completed(self, run_id, retry_failed):
         return {

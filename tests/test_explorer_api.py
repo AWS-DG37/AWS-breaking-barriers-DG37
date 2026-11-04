@@ -1,13 +1,17 @@
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
+from memory_configs import MemoryConfigs
 from test_experiments import specification
 
+from mel.config import Settings
 from mel.explorer.api import create_app
 
 
-class Store:
+class Store(MemoryConfigs):
     def __init__(self):
+        super().__init__()
+        self.jobs = []
         self.assessments = []
         self.created = []
         self.closed = 0
@@ -20,6 +24,10 @@ class Store:
 
     def create_experiment(self, key, spec, source="live"):
         self.created.append(key)
+
+    def create_job(self, key, kind, spec):
+        self.jobs.append((kind, spec))
+        return {"job_id": key, "kind": kind, "spec": spec, "status": "queued"}
 
     def list_experiments(self):
         return []
@@ -111,23 +119,47 @@ def test_unavailable_database_and_catalog_are_visible_without_secrets():
         assert "secret-token" not in models.text
 
 
-def test_get_does_not_start_live_execution_and_invalid_requests_do_not_queue():
+def test_get_does_not_queue_and_invalid_requests_do_not_queue():
     store = Store()
-    invoked = []
-
-    async def execute(*args, **kwargs):
-        invoked.append(kwargs["experiment_id"])
-
-    with TestClient(create_app(store_factory=lambda _: store, executor=execute)) as client:
+    settings = Settings(bedrock_model_id="test")
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
         assert client.get("/api/experiments").status_code == 200
-        assert not invoked
+        assert not store.jobs
         spec = specification().model_dump(mode="json")
         spec["row_limit"] = 51
         assert client.post("/api/experiments", json=spec).status_code == 422
-        assert not store.created
+        assert not store.created and not store.jobs
         spec["row_limit"] = 1
-        assert client.post("/api/experiments", json=spec).status_code == 202
-    assert invoked
+        response = client.post("/api/experiments", json=spec)
+    assert response.status_code == 202
+    experiment_id = response.json()["experiment_id"]
+    assert store.created == [experiment_id]
+    assert store.jobs == [("experiment", {"experiment_id": experiment_id})]
+
+
+def test_experiments_and_batches_are_refused_when_live_execution_is_disabled():
+    store = Store()
+    app = create_app(
+        settings=Settings(bedrock_model_id="test"),
+        store_factory=lambda _: store,
+        live_enabled=False,
+    )
+    with TestClient(app) as client:
+        spec = specification().model_dump(mode="json")
+        assert client.post("/api/experiments", json=spec).status_code == 403
+        batch = {"dataset_id": "00000000-0000-0000-0000-000000000001"}
+        assert client.post("/api/jobs/batch", json=batch).status_code == 403
+    assert not store.jobs
+
+
+def test_first_configuration_request_seeds_and_activates_the_yaml_version():
+    store = Store()
+    settings = Settings(bedrock_model_id="test")
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
+        first = client.get("/api/config").json()
+        second = client.get("/api/config").json()
+    assert first["active_config_id"] == second["active_config_id"] == store.active
+    assert len(store.configs) == 1
 
 
 def test_recorded_import_preserves_actual_relevance_and_absent_history(tmp_path):

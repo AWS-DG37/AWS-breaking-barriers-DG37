@@ -18,6 +18,7 @@ from dg_agent.models import Insight, Survey
 from mel.agents import build_agents
 from mel.bundle import Bundle
 from mel.config import AgentConfig, ModelConfig, Settings, StrictModel
+from mel.configs import active_config
 from mel.contracts import Contracts
 from mel.decision import DecisionEngine
 from mel.graph import Dependencies
@@ -172,13 +173,17 @@ async def execute_experiment(
     settings: Settings,
     store: Store,
     experiment_id: str | None = None,
+    job_id: str | None = None,
     agent_factory=build_agents,
 ) -> str:
+    """Each candidate is the active configuration version with the candidate's model,
+    the shared reviewer and the chosen ruleset. Candidates are saved as child versions,
+    so every experiment run records the exact configuration it used."""
     key = experiment_id or str(uuid4())
     await asyncio.to_thread(store.create_experiment, key, spec.model_dump(mode="json"))
     await asyncio.to_thread(store.finish_experiment, key, "running")
     try:
-        bundle = Bundle.load(settings)
+        base_id, bundle = await asyncio.to_thread(active_config, store, settings)
         rules = select_rules(bundle, settings, spec.ruleset)
         rows = spec.insights[: spec.row_limit]
         had_errors = False
@@ -201,6 +206,12 @@ async def execute_experiment(
                 "bedrock_project_id": settings.bedrock_project_id,
             }
             candidate_bundle = Bundle(config, snapshot, bundle.contracts)
+            config_id = await asyncio.to_thread(
+                store.save_config,
+                candidate_bundle.definition,
+                parent_id=base_id,
+                note=f"Experiment {spec.name}: {candidate.label}",
+            )
             fingerprint = candidate_bundle.fingerprint(
                 json.dumps(rows, sort_keys=True).encode(), settings.aws_region
             )
@@ -211,6 +222,8 @@ async def execute_experiment(
                 snapshot,
                 purpose="experiment",
                 experiment_id=key,
+                config_id=config_id,
+                job_id=job_id,
             )
             agents = ()
             try:

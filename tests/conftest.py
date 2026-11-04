@@ -5,6 +5,8 @@ import pytest
 
 from dg_agent.models import PACK
 
+pytest_plugins = ["postgres"]
+
 
 def jsonl(p: Path) -> list[dict]:
     return [json.loads(line) for line in p.read_text().splitlines() if line.strip()]
