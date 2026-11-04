@@ -230,13 +230,14 @@ function renderComposer() {
   $('composer').replaceChildren(el('div',{class:'heading'},el('div',{},el('h1',{id:'form-title'},'New live experiment'),el('p',{class:'muted'},'Make a deliberate change. Keep the evidence.')),el('button',{class:'secondary',onClick:()=>{ $('composer').hidden=true; $('content').hidden=false; if(state.detail) openExperiment(state.detail.experiment_id); }},'Back to saved runs')),form);
 }
 $('new').addEventListener('click',renderComposer);
-$('usage').addEventListener('click',async()=>{
+async function openUsage() {
   clearTimeout(poll);++state.request;
   $('content').hidden=true;$('composer').hidden=true;$('usage-panel').hidden=false;
   try {await mountUsage($('usage-panel'),{api,config:state.config||{},detail:state.detail,onPolicy:policy=>{state.policy=policy;},notice});}
   catch(error) {notice(`Usage controls unavailable. ${error.message}`,true);}
-});
-$('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
+}
+$('usage').addEventListener('click',openUsage);
+$('refresh').addEventListener('click',async()=>{try {const usageVisible=!$('usage-panel').hidden;await listExperiments();if(usageVisible) await openUsage();else if(state.detail) await openExperiment(state.detail.experiment_id,true); notice(usageVisible?'Usage and saved experiments refreshed.':'Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
 $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST',body:'{}'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 async function boot() {
   const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));

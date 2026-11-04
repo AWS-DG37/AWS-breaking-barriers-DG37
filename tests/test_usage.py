@@ -617,7 +617,7 @@ def test_website_converse_passes_explicit_single_attempt_transport(stores, monke
             raise AssertionError("Native calls are forbidden in this constructor check")
 
     def client(service, **kwargs):
-        received.append((service, kwargs["config"].retries))
+        received.append((service, kwargs["config"]))
         return OfflineClient()
 
     monkeypatch.setattr("boto3.client", client)
@@ -626,7 +626,12 @@ def test_website_converse_passes_explicit_single_attempt_transport(stores, monke
     with gateway(stores) as gate:
         with usage_scope(gateway=gate):
             agents = build_agents(bundle.config, "us-east-1", bundle.snapshot["prompts"])
-        assert received == [("bedrock-runtime", {"total_max_attempts": 1, "mode": "standard"})]
+        assert len(received) == 1
+        service, transport = received[0]
+        assert service == "bedrock-runtime"
+        assert transport.retries == {"total_max_attempts": 1, "mode": "standard"}
+        assert transport.read_timeout == 300
+        assert transport.connect_timeout == 60
         asyncio.run(close_model_clients(*agents))
 
 
@@ -676,3 +681,71 @@ def test_quote_terms_reject_changed_request_configuration(stores):
         spec.candidates[0].model.max_tokens = 101
         with pytest.raises(PolicyConflict):
             gate.launch(str(uuid4()), spec, 1, "us-east-1", graph, quote_hash=quote["terms_hash"])
+
+
+@pytest.mark.parametrize("provider_result", ["success", "failure", "cancellation"])
+def test_settlement_database_failure_stops_experiment_with_pending_reservation(
+    stores, provider_result
+):
+    from test_experiments import specification
+
+    from mel.experiments import execute_experiment
+    from mel.usage import MeteredModel, UsageRefused, usage_scope
+
+    with gateway(stores) as gate:
+        configure(gate, "1")
+        gate.store.connection.execute(
+            "CREATE FUNCTION reject_settlement() RETURNS trigger LANGUAGE plpgsql AS $$ "
+            "BEGIN RAISE EXCEPTION 'offline settlement failure'; END $$"
+        )
+        gate.store.connection.execute(
+            "CREATE TRIGGER reject_settlement BEFORE UPDATE ON website_calls "
+            "FOR EACH ROW EXECUTE FUNCTION reject_settlement()"
+        )
+        observed = []
+
+        async def native(messages, info):
+            observed.append(provider_result)
+            if provider_result == "failure":
+                raise RuntimeError("offline provider failure")
+            if provider_result == "cancellation":
+                raise asyncio.CancelledError()
+            return ModelResponse(
+                parts=[TextPart("done")], usage=RequestUsage(input_tokens=10, output_tokens=5)
+            )
+
+        def agents(config, region, prompts, project_id):
+            return tuple(
+                Agent(MeteredModel(FunctionModel(native), gate, model, region, role))
+                for model, role in [(config.generation, "generate"), (config.review, "review")]
+            )
+
+        spec = specification()
+        spec.insights.append({**spec.insights[0], "insight_id": "second-insight"})
+        for candidate in spec.candidates:
+            candidate.model = ModelConfig(model_id="offline", max_tokens=100)
+        spec.reviewer = ModelConfig(model_id="offline", max_tokens=100)
+        key = str(uuid4())
+
+        async def run():
+            with usage_scope(gateway=gate):
+                await execute_experiment(
+                    spec,
+                    settings=Settings(bedrock_model_id="offline"),
+                    store=gate.store,
+                    experiment_id=key,
+                    agent_factory=agents,
+                )
+
+        with pytest.raises(UsageRefused, match="accounting"):
+            asyncio.run(run())
+        assert observed == [provider_result]
+        view = gate.view()
+        assert view["pending_calls"] == 1
+        assert Decimal(view["held_usd"]) == Decimal("0.0024")
+        assert Decimal(view["estimated_usd"]) == 0
+        detail = gate.store.experiment_detail(key)
+        assert detail["status"] == "failed"
+        assert len(detail["runs"]) == 1
+        assert detail["runs"][0]["status"] == "failed"
+        assert detail["runs"][0]["results"] == []

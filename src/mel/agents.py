@@ -36,7 +36,11 @@ def build_agents(
                     client = boto3.client(
                         "bedrock-runtime",
                         region_name=region,
-                        config=Config(retries={"total_max_attempts": 1, "mode": "standard"}),
+                        config=Config(
+                            read_timeout=300,
+                            connect_timeout=60,
+                            retries={"total_max_attempts": 1, "mode": "standard"},
+                        ),
                     )
                     converse_provider = BedrockProvider(bedrock_client=client)
             native_model = BedrockConverseModel(model.model_id, provider=converse_provider)

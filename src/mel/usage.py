@@ -226,39 +226,44 @@ class UsageGateway:
             return Reservation(call_id, amount)
 
     def settle(self, call_id, inputs, outputs, *, error_type=None, provider_request_id=None):
-        with self.transaction():
-            row = self.store.connection.execute(
-                "SELECT c.state,c.reserved_usd,p.input_per_million,p.output_per_million,"
-                "p.max_input_tokens,c.max_output_tokens FROM website_calls c "
-                "JOIN website_prices p USING(price_id) WHERE c.call_id=%s",
-                (call_id,),
-            ).fetchone()
-            if row is None or row[0] != "pending":
-                return
-            _, reserved, input_rate, output_rate, max_input, max_output = row
-            known = [value for value in (inputs, outputs) if value is not None]
-            if any(not isinstance(value, int) or value < 0 for value in known):
-                inputs = outputs = None
-            complete = inputs is not None and outputs is not None and error_type is None
-            estimate = ((inputs or 0) * input_rate + (outputs or 0) * output_rate) / 1_000_000
-            state = "settled" if complete else "unknown"
-            if estimate > reserved or (inputs or 0) > max_input or (outputs or 0) > max_output:
-                state = "overrun" if complete else "unknown"
-            self.store.connection.execute(
-                "UPDATE website_calls SET state=%s,input_tokens=%s,output_tokens=%s,"
-                "estimated_usd=%s,error_type=%s,provider_request_id=%s,settled_at=now() "
-                "WHERE call_id=%s",
-                (
-                    state,
-                    inputs,
-                    outputs,
-                    estimate if known else None,
-                    error_type,
-                    provider_request_id,
-                    call_id,
-                ),
-            )
-            return state
+        try:
+            with self.transaction():
+                row = self.store.connection.execute(
+                    "SELECT c.state,c.reserved_usd,p.input_per_million,p.output_per_million,"
+                    "p.max_input_tokens,c.max_output_tokens FROM website_calls c "
+                    "JOIN website_prices p USING(price_id) WHERE c.call_id=%s",
+                    (call_id,),
+                ).fetchone()
+                if row is None or row[0] != "pending":
+                    return
+                _, reserved, input_rate, output_rate, max_input, max_output = row
+                known = [value for value in (inputs, outputs) if value is not None]
+                if any(not isinstance(value, int) or value < 0 for value in known):
+                    inputs = outputs = None
+                complete = inputs is not None and outputs is not None and error_type is None
+                estimate = ((inputs or 0) * input_rate + (outputs or 0) * output_rate) / 1_000_000
+                state = "settled" if complete else "unknown"
+                if estimate > reserved or (inputs or 0) > max_input or (outputs or 0) > max_output:
+                    state = "overrun" if complete else "unknown"
+                self.store.connection.execute(
+                    "UPDATE website_calls SET state=%s,input_tokens=%s,output_tokens=%s,"
+                    "estimated_usd=%s,error_type=%s,provider_request_id=%s,settled_at=now() "
+                    "WHERE call_id=%s",
+                    (
+                        state,
+                        inputs,
+                        outputs,
+                        estimate if known else None,
+                        error_type,
+                        provider_request_id,
+                        call_id,
+                    ),
+                )
+                return state
+        except Exception as error:
+            raise UsageRefused(
+                "Request accounting failed. Further execution is blocked pending reconciliation."
+            ) from error
 
     def quote(self, spec, region, graph, *, expected_version=None):
         with self.transaction() as policy:
