@@ -2,7 +2,7 @@
 
 | Topic | Brief (index.html, rules.json) | Golden set v1 | What decide.py does |
 |---|---|---|---|
-| Critical severity | priority high | no survey, critical_needs_human_call (R2) | follows golden |
+| Critical severity | priority high | no survey, critical_needs_human_call (R2) | follows the brief: R2 removed, critical insights follow the normal rules (6 golden rows differ on purpose) |
 | verification.needed false | not mentioned | no survey, no_check_needed (R5) | follows golden |
 | Window hours | 07:00 to 19:00 | 09:00 to 19:00 | follows golden |
 | Window start | not before the action window ends, day 1 minimum | created date plus timing range, action_window_days ignored | follows golden |

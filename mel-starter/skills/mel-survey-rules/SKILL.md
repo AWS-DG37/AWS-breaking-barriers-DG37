@@ -19,14 +19,15 @@ This skill holds the deterministic half of the MEL Survey Agent: which insights 
 
 Run `scripts/decide.py` (import `decide(insight)`). The first rule that matches wins.
 
-1. R1 junk_insight: concern is null, or query_summary, advice_summary or resolution_type is missing, or decision_episode_type is casual. Do not use quality_flag, it is practice-data labelling only.
-2. R2 critical_needs_human_call: severity is critical.
-3. R3 nothing_to_verify: resolution_type is generic_information.
-4. R4 waiting_for_details: resolution_type is needs_more_context.
-5. R5 no_check_needed: verification.needed is false.
-6. R6 window_after_season: the send window opens after 31 March 2027.
-7. R7 crop_already_harvested: the window opens after the crop's last calendar end date (crop_calendar_bihar_rabi.csv, livestock has none).
-8. R8 survey.
+- R1 junk_insight: concern is null, or query_summary, advice_summary or resolution_type is missing, or decision_episode_type is casual. Do not use quality_flag, it is practice-data labelling only.
+- R3 nothing_to_verify: resolution_type is generic_information.
+- R4 waiting_for_details: resolution_type is needs_more_context.
+- R5 no_check_needed: verification.needed is false.
+- R6 window_after_season: the send window opens after 31 March 2027.
+- R7 crop_already_harvested: the window opens after the crop's last calendar end date (crop_calendar_bihar_rabi.csv, livestock has none).
+- R8 survey.
+
+R2 (critical_needs_human_call: severity critical goes to a human call, no survey) was removed on purpose. Severity is not a decision input: a critical insight follows R3 to R8 like any other. The rule codes keep their golden-set names, so there is no R2 in the list.
 
 ## Send window (golden set, decoded)
 
@@ -41,19 +42,19 @@ action_window_days is ignored for the window in the golden set. The brief says o
 
 ## Verification status
 
-Run `python scripts/test_against_golden.py <golden_set.jsonl>` to re-check. At the time of writing it gave 150 of 150 decisions and 95 of 95 windows correct on golden set version 1. The golden set may be updated during the event, so re-run it after any update.
+Run `python scripts/test_against_golden.py <golden_set.jsonl>` to re-check. On golden set version 1 it gives 144 of 144 decisions and 95 of 95 windows correct, not counting the 6 golden cases that expect R2. Those 6 are an intended difference since R2 was removed, and the script lists them separately rather than as errors. The golden set may be updated during the event, so re-run it after any update.
 
 Known limits, say them out loud rather than hiding them:
 - R7 is a hypothesis that fits the single golden row. On all 6,999 practice insights it fires once.
 - same_day edge cases (start exactly at 19:00, start before 09:00) and the seasonal start come from very few rows.
-- On all practice insights the result is R1 723, R2 25, R3 1,287, R4 875, R5 1,312, R6 64, R7 1, R8 2,712. This is before the weekly cap.
+- On all practice insights the result is R1 723, R3 1,288, R4 880, R5 1,315, R6 64, R7 1, R8 2,728. This is before the weekly cap.
 
 ## Not in the golden set (use the brief, rules_brief.json)
 
 Channel order, wait hours, priority, weekly cap and expiry are not tested by the golden set. Take them from references/rules_brief.json:
 
 - Channels: preferred_channel, then the verification method's channel, then whatsapp, then voice only for high priority. Wait 6, 24 or 48 hours for high, normal or low priority.
-- Priority: high for escalate_to_expert, severity high, or emergency intent (critical never reaches here, R2 removes it). Low for plan_created and do_not_act.
+- Priority: high for escalate_to_expert, severity high or critical, or emergency intent. Low for plan_created and do_not_act.
 - Cap: 1 survey per farmer per 7 days across channels, high priority exempt but still counted. Expiry 2 days after the window closes.
 
 ## Conflicts to raise with the user
