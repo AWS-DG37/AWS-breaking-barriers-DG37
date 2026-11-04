@@ -1,0 +1,77 @@
+{
+  "mode": "privacy_calibration",
+  "part": "dev",
+  "split_version": "golden-dev-test-v2",
+  "split_sha256": "f575b9931ea4a5eef36d62582fd1f499c523b492bd489219d4bf79a051148270",
+  "review_prompt_sha256": "b10fd3955faec84ee46a262408e19e381c0d0eb2a53ac4aa42cd30aede9968f8",
+  "scorer_sha256": "667a67ebcfbf938d42108cff1585ae293322c2d6dbf7658821ce6c327d71c149",
+  "review_model": "openai.gpt-6-luna",
+  "dev_rows": 75,
+  "dev_survey_rows": 48,
+  "controls": 192,
+  "false_positive_limit": 2,
+  "false_negatives": {
+    "all": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 96
+    },
+    "en": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 48
+    },
+    "hi": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 48
+    }
+  },
+  "false_positives": {
+    "all": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 96
+    },
+    "en": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 48
+    },
+    "hi": {
+      "kind": "assessed",
+      "numerator": 0,
+      "denominator": 48
+    },
+    "by_trap": {
+      "dont_know": {
+        "kind": "assessed",
+        "numerator": 0,
+        "denominator": 16
+      },
+      "based_on": {
+        "kind": "assessed",
+        "numerator": 0,
+        "denominator": 16
+      },
+      "phone_expert": {
+        "kind": "assessed",
+        "numerator": 0,
+        "denominator": 16
+      }
+    }
+  },
+  "failed_calls": 0,
+  "failures": [],
+  "disagreements": [],
+  "gate": {
+    "build_narrow_check": false,
+    "reason": "No false negatives, at most two false positives, and no failed calls."
+  },
+  "passed": true,
+  "usage": {
+    "requests": 193,
+    "input_tokens": 516538,
+    "output_tokens": 49212
+  }
+}
