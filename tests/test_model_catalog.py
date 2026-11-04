@@ -1,5 +1,3 @@
-"""Offline model discovery and native API selection contracts."""
-
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock

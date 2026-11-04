@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from referencing import Registry, Resource
 
 PACK = Path(__file__).resolve().parent.parent / "docs" / "participant-pack"
+if not PACK.is_dir():
+    PACK = (Path.cwd() / "docs" / "participant-pack").resolve()
 SCHEMAS = PACK / "json" / "schemas"
 SCHEMA_NAMES = ("insight", "survey", "schedule_handoff", "response", "no_survey", "bottom_sheet")
 

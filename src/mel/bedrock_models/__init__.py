@@ -1,5 +1,3 @@
-"""Discover Bedrock catalog entries without invoking or verifying a model."""
-
 import asyncio
 from typing import Literal
 
@@ -20,7 +18,6 @@ class ModelCandidate(StrictModel):
 
 
 class CatalogDiscoveryError(RuntimeError):
-    """Keep successful discoveries available when another catalog source fails."""
 
     def __init__(self, models: list[ModelCandidate], errors: list[str]):
         self.models = models

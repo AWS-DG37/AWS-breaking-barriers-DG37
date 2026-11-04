@@ -1,5 +1,3 @@
-"""Construct native Pydantic AI models for the selected Bedrock API."""
-
 from pydantic_ai import Agent
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.models.openai import OpenAIResponsesModel

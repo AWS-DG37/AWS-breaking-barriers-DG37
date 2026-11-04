@@ -9,9 +9,11 @@ import json
 import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
@@ -64,47 +66,65 @@ FLOW = {
 def import_recorded(path: Path, store: Store) -> str:
     body = path.read_bytes()
     envelope = json.loads(body)
-    bundle = envelope["bundle"]
-    config = bundle["config"]
-    manifest = envelope["manifest"]
-    pairs = envelope["results"]
-    if not pairs:
-        raise ValueError("recorded artifact contains no outcomes")
-    spec = ExperimentSpec.model_validate(
-        {
-            "name": manifest.get("name", "Recorded FarmerChat run"),
-            "insights": [r["input"] for r in pairs],
-            "candidates": [{"label": "Recorded run", "model": config["generation"]}],
-            "reviewer": config["review"],
-            "row_limit": min(50, len(pairs)),
-        }
-    )
+    if "runs" in envelope:
+        spec = ExperimentSpec.model_validate(envelope["spec"])
+        runs = envelope["runs"]
+    else:
+        bundle = envelope["bundle"]
+        pairs = envelope["results"]
+        spec = ExperimentSpec.model_validate(
+            {
+                "name": envelope["manifest"].get("name", "Recorded FarmerChat run"),
+                "insights": [r["input"] for r in pairs],
+                "candidates": [{"label": "Recorded run", "model": bundle["config"]["generation"]}],
+                "reviewer": bundle["config"]["review"],
+                "row_limit": min(50, len(pairs)),
+            }
+        )
+        runs = [
+            {"manifest": {**bundle, "recorded_manifest": envelope["manifest"]}, "results": pairs}
+        ]
+    if len(runs) != len(spec.candidates):
+        raise ValueError("recorded runs must match the declared candidates")
+    validated = []
+    selected = {r["insight_id"]: r for r in spec.insights[: spec.row_limit]}
+    for run in runs:
+        pairs = []
+        for pair in run["results"]:
+            raw = pair["outcome"]
+            usage = raw.get("usage_complete", "input_tokens" in raw and "output_tokens" in raw)
+            outcome = Outcome.model_validate({**raw, "usage_complete": usage})
+            if selected.get(outcome.insight_id) != pair["input"]:
+                raise ValueError("recorded insight and outcome IDs or source records differ")
+            pairs.append((pair["input"], outcome))
+        if not pairs:
+            raise ValueError("recorded artifact contains no outcomes")
+        validated.append(pairs)
     key = str(uuid5(NAMESPACE_URL, hashlib.sha256(body).hexdigest()))
-    run_id = str(uuid5(NAMESPACE_URL, f"{key}/recorded"))
     store.create_experiment(key, spec.model_dump(mode="json"), source="recorded")
-    snapshot = {
-        **bundle,
-        "label": "Recorded run",
-        "recorded_manifest": manifest,
-        "provenance": envelope["provenance"],
-    }
-    store.start_run(
-        run_id, hashlib.sha256(body).hexdigest(), snapshot, purpose="experiment", experiment_id=key
-    )
-    done = store.completed(run_id, False)
-    outcomes = []
-    for pair in pairs:
-        raw = pair["outcome"]
-        usage = raw.get("usage_complete", "input_tokens" in raw and "output_tokens" in raw)
-        outcome = Outcome.model_validate({**raw, "usage_complete": usage})
-        if pair["input"]["insight_id"] != outcome.insight_id:
-            raise ValueError("recorded insight and outcome IDs differ")
-        outcomes.append(outcome)
-        if outcome.insight_id not in done:
-            store.save(run_id, pair["input"], outcome)
-    status = "completed_with_errors" if any(o.status == "failed" for o in outcomes) else "completed"
-    store.finish(run_id, status)
-    store.finish_experiment(key, status)
+    had_errors = False
+    for index, (run, pairs, candidate) in enumerate(zip(runs, validated, spec.candidates)):
+        run_id = str(uuid5(NAMESPACE_URL, f"{key}/recorded/{index}"))
+        snapshot = {
+            **run["manifest"],
+            "label": candidate.label,
+            "provenance": envelope["provenance"],
+        }
+        store.start_run(
+            run_id,
+            hashlib.sha256(body).hexdigest(),
+            snapshot,
+            purpose="experiment",
+            experiment_id=key,
+        )
+        done = store.completed(run_id, False)
+        for insight, outcome in pairs:
+            if outcome.insight_id not in done:
+                store.save(run_id, insight, outcome)
+        failed = any(outcome.status == "failed" for _, outcome in pairs)
+        had_errors |= failed
+        store.finish(run_id, "completed_with_errors" if failed else "completed")
+    store.finish_experiment(key, "completed_with_errors" if had_errors else "completed")
     return key
 
 
@@ -206,11 +226,17 @@ def create_app(
         return {"experiments": database_call(lambda db: db.list_experiments())}
 
     @app.get("/api/experiments/{experiment_id}")
-    def experiment(experiment_id: UUID):
+    def experiment(
+        experiment_id: UUID, evaluation_reference: Literal["rules", "golden"] | None = None
+    ):
         detail = database_call(lambda db: db.experiment_detail(str(experiment_id)))
         if detail is None:
             raise HTTPException(404, "Experiment not found")
-        return {**detail, "comparison": compare_runs(detail), "flow": FLOW}
+        return {
+            **detail,
+            "comparison": compare_runs(detail, reference=evaluation_reference),
+            "flow": FLOW,
+        }
 
     async def execute(spec, key):
         db = None
@@ -276,7 +302,12 @@ def create_app(
 
     static = Path(__file__).parent / "static"
     if static.exists():
-        app.mount("/", StaticFiles(directory=static, html=True), name="explorer")
+        app.mount("/static", StaticFiles(directory=static), name="explorer-assets")
+
+        @app.get("/", include_in_schema=False)
+        def index():
+            return FileResponse(static / "index.html")
+
     return app
 
 
@@ -284,7 +315,8 @@ def main() -> None:
     import uvicorn
 
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-live", action="store_true", help="Disable live model execution")
     args = parser.parse_args()
-    uvicorn.run(create_app(live_enabled=not args.no_live), host="127.0.0.1", port=args.port)
+    uvicorn.run(create_app(live_enabled=not args.no_live), host=args.host, port=args.port)

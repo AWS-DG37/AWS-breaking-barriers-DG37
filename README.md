@@ -2,6 +2,11 @@
 
 Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 
+The [local pipeline explorer](docs/explorer.md) compares Bedrock candidates,
+shows saved decisions and question evidence, and runs a recorded demo in Docker.
+The [interactive architecture walkthrough](docs/architecture-walkthrough.html)
+maps these extensions to the team documents and module boundaries.
+
 - System diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/system-diagram.html
   (source: [docs/system-diagram.html](docs/system-diagram.html), published by GitHub Pages from `main` `/docs`)
 - System diagram: [docs/system-diagram.html](docs/system-diagram.html). Open the file in a browser.

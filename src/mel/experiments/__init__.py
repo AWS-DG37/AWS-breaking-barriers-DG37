@@ -1,18 +1,20 @@
-"""Bounded model experiments through the existing survey graph."""
-
 from __future__ import annotations
 
 import asyncio
 import copy
 import json
 from collections import Counter
+from hashlib import sha256
 from pathlib import Path
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid4, uuid5
 
 import yaml
-from pydantic import Field, model_validator
+from pydantic import Field, ValidationError, model_validator
 
+from dg_agent.checks import check_survey
+from dg_agent.checks import rules as reference_rules
+from dg_agent.models import Insight, Survey
 from mel.agents import build_agents
 from mel.bundle import Bundle
 from mel.config import ModelConfig, Settings, StrictModel
@@ -282,14 +284,45 @@ def _policy_reference(insight: dict, rules: dict) -> dict:
         }
 
 
-def compare_runs(detail: dict) -> dict:
+def reference_checks(insight: dict, outcome: dict) -> dict:
+    evidence = {
+        "assessor": "code",
+        "scope": "survey",
+        "reference": "legacy participant pack",
+        "assessment": "not_assessed",
+        "checks": {},
+        "limitations": (
+            "Language checks compare metadata. Advice and PII patterns cover "
+            "English only. This diagnostic does not change runtime acceptance."
+        ),
+    }
+    survey = outcome.get("survey") or outcome.get("candidate_survey")
+    if survey is None:
+        return evidence
+    try:
+        source = Insight.model_validate(insight)
+        checks = check_survey(Survey.model_validate(survey), {source.insight_id: source})
+    except ValidationError:
+        return {**evidence, "reason": "Record is incompatible with the reference model"}
+    return {
+        **evidence,
+        "assessment": "assessed",
+        "checks": checks,
+        "rules_sha256": sha256(json.dumps(reference_rules(), sort_keys=True).encode()).hexdigest(),
+    }
+
+
+def compare_runs(detail: dict, *, reference: Literal["rules", "golden"] | None = None) -> dict:
     spec = detail["spec"]
-    reference = spec.get("evaluation_reference", "rules")
+    reference = reference or spec.get("evaluation_reference", "rules")
     selected = spec.get("insights", [])[: spec.get("row_limit", 3)]
     golden = {}
+    reference_snapshot = {"source": "each saved run manifest"}
     if reference == "golden":
         path = Path("eval/golden_holdout.jsonl")
+        reference_snapshot = {"source": str(path), "sha256": None}
         if path.exists():
+            reference_snapshot["sha256"] = sha256(path.read_bytes()).hexdigest()
             golden = {
                 r["insight_id"]: r
                 for r in (
@@ -367,6 +400,7 @@ def compare_runs(detail: dict) -> dict:
                     "scope": "survey",
                     "assessor": "code",
                     "reference": reference,
+                    "deterministic_checks": reference_checks(insight, outcome),
                     "assessment": "assessed" if assessed else "not_assessed",
                     "expected": expected,
                     "observed_status": outcome["status"],
@@ -394,6 +428,7 @@ def compare_runs(detail: dict) -> dict:
                 )
     return {
         "reference": reference,
+        "reference_snapshot": reference_snapshot,
         "rows": rows,
         "cases": cases,
         "assessments": [*evidence, *detail.get("assessments", [])],

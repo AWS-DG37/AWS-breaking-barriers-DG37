@@ -21,6 +21,8 @@
   --purple-soft:#F1EBF8;
   --purple-ink:#4F3475;
   --error:#B33125;
+  --aqua:#187E83;
+  --aqua-soft:#EDF8F7;
   font-family:Figtree,'Noto Sans Devanagari','Devanagari Sangam MN',system-ui,sans-serif;
   color:var(--ink);
   background:white;
@@ -688,7 +690,7 @@ form h2+p {
     font-size:12px;
   }
   .shell {
-    grid-template-columns:1fr;
+    grid-template-columns:minmax(0,1fr);
   }
   .sidebar {
     border-right:0;
@@ -770,3 +772,10 @@ form h2+p {
     scroll-behavior:auto!important;
   }
 }
+.stage:nth-of-type(3n) { border-top-color:var(--aqua); }
+.check-grid { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0; }
+.check { border-radius:6px; padding:5px 9px; font-size:.75rem; }
+.check.pass { background:var(--aqua-soft); color:#174F53; }
+.check.fail,.finding { background:#FFF0EB; color:#81392C; }
+.finding { padding:12px; border-left:3px solid #B65D4D; margin-top:12px; }
+.comparison>label { max-width:360px; margin:16px 0 8px; }

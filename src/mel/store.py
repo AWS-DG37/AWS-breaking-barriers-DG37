@@ -5,6 +5,7 @@ short DB operations through this connection; model calls remain concurrent.
 """
 
 import json
+from hashlib import sha256
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -49,8 +50,26 @@ class Store:
     def initialize(self) -> None:
         with self.lock, self.connection.transaction():
             self.connection.execute("SELECT pg_advisory_xact_lock(31890241)")
+            self.connection.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations "
+                "(name text PRIMARY KEY, checksum text NOT NULL, "
+                "applied_at timestamptz NOT NULL DEFAULT now())"
+            )
             for migration in sorted(Path("migrations").glob("*.sql")):
-                self.connection.execute(migration.read_text())
+                source = migration.read_bytes()
+                checksum = sha256(source).hexdigest()
+                previous = self.connection.execute(
+                    "SELECT checksum FROM schema_migrations WHERE name=%s", (migration.name,)
+                ).fetchone()
+                if previous:
+                    if previous[0] != checksum:
+                        raise ValueError(f"Applied migration changed: {migration.name}")
+                    continue
+                self.connection.execute(source.decode())
+                self.connection.execute(
+                    "INSERT INTO schema_migrations(name,checksum) VALUES (%s,%s)",
+                    (migration.name, checksum),
+                )
 
     def start_run(
         self,

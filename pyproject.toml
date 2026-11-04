@@ -10,7 +10,7 @@ requires-python = ">=3.12,<3.14"
 dependencies = [
   "boto3>=1.35,<2",
   "pydantic>=2.12,<3",
-  "pydantic-ai-slim[openai]==1.84.1",
+  "pydantic-ai-slim[openai,bedrock]==1.84.1",
   "openai>=2.30,<3",
   "httpx>=0.28,<1",
   "botocore>=1.35,<2",
@@ -20,13 +20,22 @@ dependencies = [
   "PyYAML>=6,<7",
   "jsonschema>=4.23,<5",
   "referencing>=0.36,<1",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.34,<1",
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.11,<1", "cfn-lint>=1,<2", "pytest>=9,<10", "streamlit>=1.66.1,<2"]
+dev = [
+    "ruff>=0.11,<1",
+    "cfn-lint>=1,<2",
+    "pytest>=9,<10",
+    "streamlit>=1.66.1,<2",
+    "playwright>=1.55,<2",
+]
 
 [project.scripts]
 mel-worker = "mel.worker:main"
+mel-explorer = "mel.explorer.api:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mel", "dg_agent"]

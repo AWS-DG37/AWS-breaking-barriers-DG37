@@ -12,3 +12,4 @@ export function parseJsonLines(text) {
 export const displayValue = value => value === null || value === undefined ? 'Not recorded' : String(value);
 export const questionAssessments = (assessments, runId, insightId, itemId) => assessments.filter(a => a.scope === 'question' && a.run_id === runId && a.insight_id === insightId && a.item_id === itemId);
 export const eventsForStage = (events, stage) => events.filter(event => event.stage === stage);
+export const selectedModel = (choice, defaults) => ({...defaults,model_id:choice.model_id,api:choice.api});

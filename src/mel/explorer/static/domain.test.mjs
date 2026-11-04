@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseJsonLines, questionAssessments, displayValue, eventsForStage} from './domain.mjs';
+import {parseJsonLines, questionAssessments, displayValue, eventsForStage, selectedModel} from './domain.mjs';
+
+test('switching model and native API preserves configured role budgets', () => {
+  const base={model_id:'old',api:'responses',max_output_tokens:4096,temperature:0.2};
+  assert.deepEqual(selectedModel({model_id:'new',api:'converse'},base), {...base,model_id:'new',api:'converse'});
+  assert.equal(base.model_id,'old');
+});
 
 test('JSONL retains records and identifies a bad line before submission', () => {
   assert.deepEqual(parseJsonLines('\n{"insight_id":"a"}\n{"insight_id":"b"}'), [{insight_id:'a'}, {insight_id:'b'}]);

@@ -1,4 +1,4 @@
-import {parseJsonLines, displayValue, questionAssessments, eventsForStage} from './domain.mjs';
+import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
 
 const $ = id => document.getElementById(id);
 const state = {config:null, models:[], experiments:[], detail:null, run:0, result:0, stage:null, event:0, question:0, request:0};
@@ -25,7 +25,7 @@ async function api(path, options={}) {
 }
 const disclosure=(label,value,open=false)=>el('details',open?{open:true}:{},el('summary',{},label),raw(value));
 function picker(label,options,value,change) {
-  return el('label',{},label,el('select',{onChange:event=>change(event.target.value)},options.map(([id,title])=>el('option',{value:id,selected:String(id)===String(value)},title))));
+  return el('label',{},label,el('select',{'aria-label':label,onChange:event=>change(event.target.value)},options.map(([id,title])=>el('option',{value:id,selected:String(id)===String(value)},title))));
 }
 async function listExperiments() {
   const data=await api('/experiments'); state.experiments=data.experiments;
@@ -34,12 +34,14 @@ async function listExperiments() {
     onClick:()=>openExperiment(item.experiment_id),
   },el('strong',{},item.name),el('span',{class:'small muted'},`${item.source==='recorded'?'Recorded':'Live'} · ${item.insight_count} insights · ${item.candidate_count} candidates`),badge(item.status))) : [el('p',{class:'empty-note'},'No experiments saved yet. Import a recorded run or create a bounded live experiment.')]));
 }
-async function openExperiment(id, refresh=false) {
+async function openExperiment(id, refresh=false, reference=null) {
   const ticket=++state.request;
   clearTimeout(poll);
   if(!refresh) { $('composer').hidden=true; $('content').hidden=false; $('content').replaceChildren(el('p',{class:'empty-note'},'Loading saved evidence…')); }
   try {
-    const detail=await api(`/experiments/${encodeURIComponent(id)}`);
+    reference=reference || (state.detail?.experiment_id===id ? state.detail.comparison?.reference : null);
+    const query=reference?`?evaluation_reference=${encodeURIComponent(reference)}`:'';
+    const detail=await api(`/experiments/${encodeURIComponent(id)}${query}`);
     if(ticket!==state.request) return;
     state.detail=detail;
     if(!refresh) Object.assign(state,{run:0,result:0,stage:null,event:0,question:0});
@@ -74,7 +76,7 @@ function renderJourney(flow,outcome) {
   const diagram=el('div',{class:'journey',role:'group','aria-label':'Pipeline stages'});
   for(const node of [...nodes,...extra]) {
     const count=eventsForStage(events,node.id).length;
-    diagram.append(el('button',{class:'stage','aria-pressed':node.id===state.stage,onClick:()=>{state.stage=node.id;state.event=0;renderExperiment();}},el('strong',{},node.label),el('span',{class:'small'},count?`${count} recorded event${count===1?'':'s'}`:'No recorded event')));
+    diagram.append(el('button',{class:'stage','aria-pressed':node.id===state.stage,onClick:()=>{state.stage=node.id;state.event=Math.max(0,eventsForStage(events,node.id).length-1);renderExperiment();}},el('strong',{},node.label),el('span',{class:'small'},count?`${count} recorded event${count===1?'':'s'}`:'No recorded event')));
     const edges=(flow?.edges || []).filter(edge=>edge.from===node.id);
     if(edges.length) diagram.append(el('div',{class:'edges','aria-label':`Connections from ${node.label}`},edges.map(edge=>el('span',{},`${edge.label?edge.label+' → ': '→ '}${flow.nodes.find(n=>n.id===edge.to)?.label || edge.to}`))));
   }
@@ -86,7 +88,17 @@ function renderInspector(result,outcome) {
   const panel=el('section',{class:'inspector'},el('h2',{},'Stage evidence'));
   if(!event) panel.append(el('p',{class:'muted'},'No event was recorded for this stage. The diagram describes the pipeline, not proof that every stage ran.'));
   else {
-    panel.append(picker('Recorded event',events.map((e,i)=>[i,`#${e.sequence} · ${e.source} · attempt ${e.attempt}`]),state.event,value=>{state.event=Number(value);renderExperiment();}),el('p',{class:'small muted'},`${event.stage} · ${event.source} evidence · ${event.created_at || 'Time not recorded'}`),raw(event.data));
+    panel.append(picker('Recorded event',events.map((e,i)=>[i,`#${e.sequence} · ${e.source} · attempt ${e.attempt}`]),state.event,value=>{state.event=Number(value);renderExperiment();}),el('p',{class:'small muted'},`${event.stage} · ${event.source} evidence · ${event.created_at || 'Time not recorded'}`));
+    const data=event.data;
+    if('eligible' in data) panel.append(el('h3',{},data.eligible?'Eligible for a survey':'Survey not required'),el('p',{},data.reason || 'The insight passed the configured eligibility rules.'));
+    if('valid' in data) panel.append(el('h3',{},`${data.target} schema ${data.valid?'passed':'failed'}`),...(data.errors || []).map(issue=>el('p',{class:'missing'},text(issue))));
+    if(data.send_window) panel.append(el('h3',{},'Send window'),el('p',{},`${data.send_window.not_before} → ${data.send_window.not_after}`));
+    if(data.survey) panel.append(el('h3',{},`${data.survey.items?.length || 0} questions ${data.kind==='response'?'generated':'submitted for review'}`),el('p',{},`Language · ${data.survey.language}`));
+    if(data.review) panel.append(el('h3',{},'Reviewer findings'),el('p',{},`Survey relevance · ${data.review.relevance_score}`),...(data.review.issues || []).map(issue=>el('p',{class:'finding'},issue)));
+    if(data.context) panel.append(el('h3',{},'Context and provenance'),el('p',{},`${data.context.profile?'Farmer profile matched':'No farmer profile matched'} · ${(data.context.crop_calendar || []).length} calendar rows`),...(data.context.conflicts || []).map(issue=>el('p',{class:'missing'},issue)));
+    if(data.status) panel.append(el('h3',{},`Ruling · ${data.status}`),el('p',{},data.reason || 'The saved result satisfied the configured acceptance gates.'));
+    if(data.error_type) panel.append(el('h3',{},'Execution failed'),el('p',{class:'missing'},data.error_type));
+    panel.append(disclosure('Full recorded event',event.data));
   }
   panel.append(disclosure('Original insight',result.input),disclosure('Final outcome',outcome));
   if(outcome.review) panel.append(el('h3',{},'Survey-wide model review'),el('p',{class:'small muted'},'Model judgment across the survey. This is not an independent question-quality score.'),raw(outcome.review));
@@ -113,12 +125,21 @@ function renderSurvey(outcome) {
 function renderComparison(d) {
   const c=d.comparison;
   const section=el('section',{class:'comparison'},el('h2',{},'Compare candidates'),el('p',{class:'muted'},`Evaluation reference · ${c?.reference || d.spec?.evaluation_reference || 'Not recorded'}. All saved cases remain in the reliability counts.`));
+  section.append(picker('Reanalyze saved outputs',[['rules','Saved execution rules'],['golden','Current golden reference']],c?.reference || 'rules',value=>openExperiment(d.experiment_id,true,value)),el('p',{class:'small muted'},'Changing the analysis reference reuses saved outputs. It makes no model calls and does not change execution rules.'));
   if(!c?.rows?.length) {section.append(el('p',{},'Comparison is not available yet.')); return section;}
-  const columns=[['Candidate',r=>r.label],['Cases',r=>r.total],['Accepted',r=>r.accepted],['Skipped',r=>r.skipped],['Rejected',r=>r.rejected],['Failed',r=>r.failed],['Input tokens',r=>r.usage_complete?r.input_tokens:null],['Output tokens',r=>r.usage_complete?r.output_tokens:null],['Survey relevance',r=>r.mean_relevance]];
+  const agreement=row=>{const cases=(c.cases || []).filter(item=>item.run_id===row.run_id);return `${cases.filter(item=>item.decision_agreement===true).length} matched · ${cases.filter(item=>item.assessment==='assessed').length}/${row.total} assessed`;};
+  const columns=[['Candidate',r=>r.label],['Cases',r=>r.total],['Accepted',r=>r.accepted],['Skipped',r=>r.skipped],['Rejected',r=>r.rejected],['Failed',r=>r.failed],['Missing',r=>r.missing],['Decision agreement',agreement],['Input tokens',r=>r.usage_complete?r.input_tokens:null],['Output tokens',r=>r.usage_complete?r.output_tokens:null],['Survey relevance',r=>r.mean_relevance]];
   const header=el('thead',{},el('tr',{},columns.map(([label])=>el('th',{scope:'col'},label))));
   const body=el('tbody',{},c.rows.map(row=>el('tr',{},columns.map(([,get],i)=>el(i===0?'th':'td',i===0?{scope:'row'}:{},displayValue(get(row)))))));
   section.append(el('div',{class:'table-scroll',tabindex:0,'aria-label':'Candidate comparison'},el('table',{},header,body)),el('p',{class:'small muted'},'Survey relevance is a survey-wide model judgment. Missing scores and incomplete token usage are not zero. No overall quality score is inferred.'));
   for(const note of c.notes || []) section.append(el('p',{class:'small'},note));
+  const {run,result}=selected();
+  const diagnostic=c.cases?.find(item=>item.run_id===run?.run_id && item.insight_id===result?.insight_id);
+  if(diagnostic) {
+    const checks=diagnostic.deterministic_checks;
+    section.append(el('h3',{},'Selected survey checks'),el('div',{class:'check-grid'},Object.entries(checks?.checks || {}).map(([key,value])=>el('span',{class:`check ${value?'pass':'fail'}`},`${value?'Pass':'Fail'} · ${key.replaceAll('_',' ')}`))),el('p',{class:'small muted'},checks?.assessment==='assessed'?checks.limitations:'Reference checks are not assessed for this result.'),disclosure('Case-level reference evidence',diagnostic));
+  }
+  section.append(disclosure('Analysis reference version',c.reference_snapshot));
   const other=(d.assessments || []).filter(a=>a.scope!=='question');
   section.append(disclosure(`Scoped survey and run assessments (${other.length})`,other.length?other:'No survey or run assessments recorded.'));
   return section;
@@ -137,7 +158,7 @@ function renderComposer() {
   const config=state.config;
   if(!config) { $('composer').replaceChildren(el('h1',{},'Configuration unavailable'),el('p',{},'Refresh the page after the server configuration is available.')); return; }
   const choices=modelOptions();
-  const selectModel=(name,defaultModel)=>el('select',{name,required:true},el('option',{value:''},'Choose a native model and API'),choices.map((m,i)=>el('option',{value:i,disabled:m.status==='unavailable',selected:m.model_id===defaultModel?.model_id && m.api===(defaultModel.api || 'responses')},`${m.name || m.model_id} · ${m.api} · ${m.status}${m.reason?' · '+m.reason:''}`)));
+  const selectModel=(name,defaultModel)=>el('select',{name,required:true,'aria-label':name==='reviewer'?'Reviewer model and native API':'Model and native API'},el('option',{value:''},'Choose a native model and API'),choices.map((m,i)=>el('option',{value:i,disabled:m.status==='unavailable',selected:m.model_id===defaultModel?.model_id && m.api===(defaultModel.api || 'responses')},`${m.name || m.model_id} · ${m.api} · ${m.status}${m.reason?' · '+m.reason:''}`)));
   const input=el('textarea',{name:'insights',rows:7,required:true,spellcheck:false,placeholder:'One normalized insight JSON object per line'});
   const profiles=el('textarea',{name:'profiles',rows:4,spellcheck:false,placeholder:'Optional profile JSONL. One source record per line.'});
   const candidates=el('div',{class:'candidate-fields'});
@@ -157,8 +178,8 @@ function renderComposer() {
       const data=new FormData(form), insights=parseJsonLines(input.value), profileRows=parseJsonLines(profiles.value);
       if(!insights.length) throw new Error('Add at least one normalized insight.');
       if(!candidates.children.length) throw new Error('Select at least one candidate.');
-      const model=index=>{const c=choices[Number(index)]; return {model_id:c.model_id,api:c.api};};
-      const spec={name:data.get('name').trim(),insights,profiles:profileRows,candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value.trim(),model:model(row.querySelector('select').value)})),reviewer:model(data.get('reviewer')),row_limit:Number(data.get('row_limit')),ruleset:data.get('ruleset'),evaluation_reference:data.get('reference')};
+      const model=(index,defaults)=>selectedModel(choices[Number(index)],defaults);
+      const spec={name:data.get('name').trim(),insights,profiles:profileRows,candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value.trim(),model:model(row.querySelector('select').value,config.default_candidates[0]?.model)})),reviewer:model(data.get('reviewer'),config.default_reviewer),row_limit:Number(data.get('row_limit')),ruleset:data.get('ruleset'),evaluation_reference:data.get('reference')};
       submit.disabled=true; notice('Submitting bounded live experiment…');
       const result=await api('/experiments',{method:'POST',body:JSON.stringify(spec)});
       notice('Live experiment queued. Execution results will appear as they are saved.'); await openExperiment(result.experiment_id);
@@ -191,14 +212,14 @@ $('new').addEventListener('click',renderComposer);
 $('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
 $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 async function boot() {
-  const results=await Promise.allSettled([api('/health'),api('/config'),api('/models'),listExperiments()]);
-  const [health,config,models,experiments]=results;
+  const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));
+  const results=await Promise.allSettled([api('/health'),api('/config'),listExperiments()]);
+  const [health,config,experiments]=results;
   $('health').textContent=health.status==='fulfilled'?`Database ${health.value.database}`:'Server unavailable';
   if(config.status==='fulfilled') state.config=config.value;
-  if(models.status==='fulfilled') {state.models=models.value.models;if(models.value.error) notice(`Model catalog unavailable. ${models.value.error} Recorded runs remain usable.`,true);}
-  else notice(`Model catalog unavailable. ${models.reason.message} Recorded runs remain usable.`,true);
   if(experiments.status==='rejected') notice(`Cannot read experiments. ${experiments.reason.message} Use Refresh to try again.`,true);
   else if(state.experiments.length) await openExperiment((state.experiments.find(e=>e.source==='recorded') || state.experiments[0]).experiment_id);
+  await catalog;
 }
 boot();
 window.addEventListener('pagehide',()=>clearTimeout(poll));
