@@ -64,6 +64,25 @@ def test_swaps_keep_the_resolution_type_and_record_the_replaced_example():
             assert source[swap[key]]["insight"]["resolution_type"] == swap["resolution_type"]
 
 
+def test_rows_used_for_tuning_sit_in_dev_and_the_verifier_enforces_it(tmp_path):
+    manifest, _, _ = load_split(MANIFEST)
+    exposed = {x["golden_id"] for x in manifest["tuning_exposures"]}
+    assert exposed == set(partition.TUNING_EXPOSURES)
+    assert exposed <= set(manifest["dev_ids"])
+    moved = dict(manifest, tuning_exposures=[{"golden_id": manifest["holdout_ids"][0]}])
+    copy = tmp_path / "eval" / "split.json"
+    copy.parent.mkdir()
+    copy.write_text(json.dumps(moved))
+    (tmp_path / partition.SOURCE).parent.mkdir(parents=True)
+    (tmp_path / partition.SOURCE).write_bytes(SOURCE.read_bytes())
+    try:
+        load_split(copy)
+    except ValueError as error:
+        assert "tuning" in str(error)
+    else:
+        raise AssertionError("a tuning exposure in test was accepted")
+
+
 def test_grouping_joins_rows_by_any_shared_key():
     def row(gid, farmer, conversation, advice, asset):
         return gid, {"golden_id": gid, "insight": {
