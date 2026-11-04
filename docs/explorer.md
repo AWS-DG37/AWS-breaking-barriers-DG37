@@ -15,6 +15,20 @@ MEL_LOCAL_DATABASE_PORT=55437 MEL_EXPLORER_PORT=8877 \
   docker compose -p dg37-explorer up --build -d
 ```
 
+Compose allows browser actions from `localhost` and `127.0.0.1` at
+`MEL_EXPLORER_PORT`, which defaults to `8080`. To use an SSH tunnel with local
+port `8878`, include that browser origin in the explicit JSON allowlist on the
+server when starting or recreating the explorer:
+
+```bash
+MEL_LOCAL_DATABASE_PORT=55437 MEL_EXPLORER_PORT=8877 \
+  MEL_EXPLORER_ALLOWED_ORIGINS='["http://localhost:8877","http://127.0.0.1:8877","http://127.0.0.1:8878"]' \
+  docker compose -p dg37-explorer up --build -d
+```
+
+`MEL_EXPLORER_ALLOWED_ORIGINS` replaces the derived defaults. List each exact
+browser origin you use, including its scheme and port. Other origins remain blocked.
+
 Open <http://127.0.0.1:8877> and select **Import recorded run**. This imports an
 actual Bedrock comparison on one synthetic mustard insight. OpenAI and Anthropic
 produced accepted surveys. Amazon Nova's original execution failure remains visible.

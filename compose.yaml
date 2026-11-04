@@ -20,6 +20,7 @@ services:
     ports:
       - '127.0.0.1:${MEL_EXPLORER_PORT:-8080}:8080'
     environment:
+      MEL_EXPLORER_ALLOWED_ORIGINS: '${MEL_EXPLORER_ALLOWED_ORIGINS:-["http://localhost:${MEL_EXPLORER_PORT:-8080}","http://127.0.0.1:${MEL_EXPLORER_PORT:-8080}"]}'
       MEL_DATABASE_HOST: postgres
       MEL_DATABASE_SSLMODE: disable
       AWS_EC2_METADATA_DISABLED: 'true'

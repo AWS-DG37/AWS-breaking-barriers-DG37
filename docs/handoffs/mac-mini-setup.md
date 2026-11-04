@@ -49,8 +49,15 @@ Use a dedicated Compose project, dg37-explorer-mini. Check ports 8877 and 55437 
 From the checkout, with the chosen ports:
 
 ```bash
-MEL_LOCAL_DATABASE_PORT=55437 MEL_EXPLORER_PORT=8877 docker compose -p dg37-explorer-mini up --build -d --wait
+MEL_LOCAL_DATABASE_PORT=55437 MEL_EXPLORER_PORT=8877 \
+  MEL_EXPLORER_ALLOWED_ORIGINS='["http://localhost:8877","http://127.0.0.1:8877","http://127.0.0.1:8878"]' \
+  docker compose -p dg37-explorer-mini up --build -d --wait
 ```
+
+The JSON allowlist includes the mac-mini browser on port `8877` and the
+macdaddy-laptop tunnel browser on port `8878`. If you choose different ports,
+update each origin to match. This override replaces Compose's derived `localhost`
+and `127.0.0.1` defaults at `MEL_EXPLORER_PORT`. Other origins remain blocked.
 
 The explorer service already uses mel-explorer --no-live. Keep live execution disabled. Open http://127.0.0.1:8877 on mac-mini. Import the recorded run. An unavailable AWS model catalog must not block the recorded demo.
 
