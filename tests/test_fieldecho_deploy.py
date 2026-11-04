@@ -160,6 +160,11 @@ class Runtime:
     def compose(self, release):
         return json.dumps({"services": {"explorer": {"image": release["image"]}}})
 
+    def validate_compose(self, compose, name):
+        self.events.append("validate:" + name)
+        if self.fail == "compose-" + name:
+            raise ValueError("Compose rejected rendered service")
+
 
 @pytest.fixture
 def host(tmp_path, d, target):
@@ -660,3 +665,175 @@ def test_already_deployed_is_a_successful_host_command(d, tmp_path, monkeypatch,
     )
     assert d.main() == 0
     assert '"outcome": "ALREADY_DEPLOYED"' in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("failure", ["healthy", "candidate"])
+def test_invalid_rendered_compose_preserves_original_before_any_switch(d, target, host, failure):
+    h, r = host
+    original = "# exact operator compose\n" + (h.root / "compose.yaml").read_text()
+    (h.root / "compose.yaml").write_text(original)
+    r.fail = "compose-" + failure
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 13)
+    assert h.activate(release)["outcome"] == "FAILED_BEFORE_SWITCH"
+    assert (h.root / "compose.yaml").read_text() == original
+    assert not any(event.startswith("switch:") for event in r.events)
+    assert "snapshot" not in r.events
+
+
+def test_actual_healthy_compose_is_proved_before_migration_and_original_is_private(
+    d, target, host
+):
+    h, r = host
+    original = (h.root / "compose.yaml").read_text()
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 13)
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert r.events.index("validate:healthy") < r.events.index("switch:" + OLD_IMAGE)
+    assert r.events.index("validate:candidate") < r.events.index("switch:" + OLD_IMAGE)
+    assert r.events.index("switch:" + OLD_IMAGE) < r.events.index("smoke:" + OLD)
+    assert r.events.index("smoke:" + OLD) < r.events.index("snapshot")
+    backup = h.root / "compose.original.yaml"
+    assert backup.read_text() == original
+    assert backup.stat().st_mode & 0o777 == 0o600
+    newer = d.Release("c" * 40, target.registry + "@sha256:" + "3" * 64, 14)
+    assert h.activate(newer)["outcome"] == "DEPLOYED"
+    assert backup.read_text() == original
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"network_mode": "bridge"},
+        {"networks": {"default": None}},
+        {"ports": ["8877:8877"]},
+        {"environment": {"MEL_DATABASE_HOST": "postgres"}},
+    ],
+)
+def test_incompatible_host_layout_fails_before_image_probe(d, target, tmp_path, monkeypatch, change):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target = tmp_path, target
+    runtime.current = {
+        "services": {
+            "postgres": {"image": "postgres:16"},
+            "explorer": {"image": OLD_IMAGE, "network_mode": "host", **change},
+        }
+    }
+    (tmp_path / "explorer.env").write_text("MEL_DATABASE_HOST=127.0.0.1\n")
+    (tmp_path / "database.env").touch()
+    monkeypatch.setattr(runtime, "worker_present", lambda: False)
+    monkeypatch.setattr(runtime, "run_image", lambda *a: pytest.fail("host not validated"))
+    monkeypatch.setattr(runtime, "inspect", lambda *a: {"Config": {"Labels": {
+        "org.opencontainers.image.revision": SHA}}})
+    monkeypatch.setattr(runtime, "compose_command", lambda *a, **k: json.dumps({
+        "services": {"explorer": {"environment": {"MEL_DATABASE_HOST": "127.0.0.1"}}}}))
+    with pytest.raises(ValueError):
+        runtime.preflight({"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 1})
+
+
+def test_compose_validation_runs_installed_parser_on_both_saved_files(
+    d, target, tmp_path, monkeypatch
+):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target = tmp_path, target
+    calls = []
+    monkeypatch.setattr(runtime, "compose_command", lambda *a, **k: calls.append((a, k)))
+    for name, image in (("healthy", OLD_IMAGE), ("candidate", target.registry + "@" + DIGEST)):
+        rendered = json.dumps({"services": {"explorer": {"image": image}}})
+        runtime.validate_compose(rendered, name)
+        filename = "compose." + name + ".json"
+        assert (tmp_path / filename).read_text() == rendered
+        assert calls[-1] == (("config", "--quiet"), {"file": filename})
+
+
+def test_timeout_after_stop_recovers_prior_release_without_another_admission(
+    d, target, host, monkeypatch
+):
+    h, r = host
+    clock = [100.0]
+    monkeypatch.setattr(d.time, "monotonic", lambda: clock[0])
+    budget = d.ActivationDeadline(110.0, 130.0)
+    monkeypatch.setattr(d, "HOST_DEADLINE", budget)
+
+    def timeout_after_stop(*args):
+        r.running = None
+        clock[0] = 111.0
+        d.command(["docker", "compose", "exec", "postgres"])
+
+    r.rehearse_and_migrate = timeout_after_stop
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 15)
+    assert h.activate(release)["outcome"] == "FAILED_BEFORE_SWITCH"
+    assert r.running == OLD_IMAGE
+    assert h.read().highest_sequence == 15
+    assert h.read().transition is None
+    assert json.loads((h.root / "compose.yaml").read_text())["services"]["explorer"]["image"] == OLD_IMAGE
+
+
+def test_failed_timeout_recovery_keeps_intent_and_fence(d, target, host, monkeypatch):
+    h, r = host
+    monkeypatch.setattr(d, "HOST_DEADLINE", d.ActivationDeadline(0, 0))
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 15)
+
+    def timeout_after_stop(*args):
+        r.running = None
+        raise d.ActivationInterrupted("deadline")
+
+    def no_recovery(*args):
+        raise d.ActivationInterrupted("recovery deadline")
+
+    r.rehearse_and_migrate = timeout_after_stop
+    r.recover_cleanup = no_recovery
+    with pytest.raises(d.ActivationInterrupted):
+        h.activate(release)
+    assert h.read().transition is not None
+    assert h.read().highest_sequence == 15
+    assert h.read().highest_release == vars(release)
+
+
+def test_subprocess_timeout_uses_remaining_overall_budget(d, monkeypatch):
+    import subprocess
+
+    monkeypatch.setattr(d.time, "monotonic", lambda: 100.0)
+    budget = d.ActivationDeadline(110.0, 130.0)
+    monkeypatch.setattr(d, "HOST_DEADLINE", budget)
+    timeouts = []
+
+    def run(*a, **kw):
+        timeouts.append(kw["timeout"])
+        return subprocess.CompletedProcess(a, 0, "ok", "")
+
+    monkeypatch.setattr(d.subprocess, "run", run)
+    assert d.command(["docker", "inspect"]) == "ok"
+    budget.recover()
+    assert d.command(["docker", "inspect"]) == "ok"
+    assert timeouts == [10.0, 30.0]
+
+
+def test_deadline_accounts_for_document_startup_time(d, monkeypatch):
+    monkeypatch.setattr(d.time, "time", lambda: 1000.0)
+    monkeypatch.setattr(d.time, "monotonic", lambda: 100.0)
+    monkeypatch.setenv("FIELDECHO_ACTIVATE_BY", "1100")
+    monkeypatch.setenv("FIELDECHO_RECOVER_BY", "1460")
+    budget = d.ActivationDeadline.from_environment()
+    assert budget.remaining() == 100.0
+    budget.recover()
+    assert budget.remaining() == 460.0
+
+
+def test_termination_signal_is_a_recoverable_exception(d):
+    with pytest.raises(d.ActivationInterrupted):
+        d.interrupt_activation(15, None)
+
+
+def test_rejected_and_failed_artifacts_cannot_change_status_handler(d, target, host):
+    h, r = host
+    directory = h.root / "delivery"
+    directory.mkdir()
+    (directory / "current").symlink_to("releases/" + OLD)
+    r.fail = "preflight"
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 16)
+    assert h.activate(release)["outcome"] == "FAILED_BEFORE_SWITCH"
+    assert (directory / "current").readlink() == Path("releases/" + OLD)
+    assert h.activate(d.Release(SHA, release.image, 15))["outcome"] == "REFUSED_STALE"
+    assert (directory / "current").readlink() == Path("releases/" + OLD)
+    r.fail = None
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert (directory / "current").readlink() == Path("releases/" + SHA)
