@@ -1,0 +1,4 @@
+boto3
+jsonschema
+strands-agents
+mcp-proxy-for-aws

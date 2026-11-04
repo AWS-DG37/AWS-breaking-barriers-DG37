@@ -1,0 +1,57 @@
+{
+  "survey_id": "S-21102",
+  "farmer_id": "F-000311",
+  "source_insight_ids": [
+    "I-004990"
+  ],
+  "language": "en-IN",
+  "send_window": {
+    "not_before": "2026-12-16T07:00:00+05:30",
+    "not_after": "2026-12-18T19:00:00+05:30"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-confirm",
+      "prompt": "Did a vet see your cow?",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No",
+          "follow_up": "could_not_reach_expert"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "How is your cow now?",
+      "options": [
+        {
+          "value": "better",
+          "label": "Better"
+        },
+        {
+          "value": "same",
+          "label": "Same as before",
+          "follow_up": "advice_did_not_work"
+        },
+        {
+          "value": "worse",
+          "label": "Worse",
+          "follow_up": "crop_or_animal_damaged"
+        }
+      ]
+    }
+  ],
+  "rationale": "Animal emergency sent to a vet. Ask the next morning whether the vet came and how the cow is; a bad answer goes straight to follow-up.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}

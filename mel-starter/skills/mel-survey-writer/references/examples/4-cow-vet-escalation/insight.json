@@ -1,0 +1,31 @@
+{
+  "insight_id": "I-004990",
+  "farmer_id": "F-000311",
+  "conversation_id": "C-88655",
+  "created_at": "2026-12-15T07:30:00+05:30",
+  "conversation_language": "hi-IN",
+  "location": {
+    "country": "IN",
+    "state": "Bihar",
+    "district": "Vaishali"
+  },
+  "asset": {
+    "name": "cow",
+    "category": "livestock",
+    "growth_stage": null
+  },
+  "concern": "livestock_health",
+  "behavioral_intent": "emergency",
+  "decision_episode_type": "problem_resolution",
+  "severity": "high",
+  "query_summary": "Cow has not eaten for two days, has a fever and is breathing fast.",
+  "advice_summary": "This needs a vet today. Call the nearest government veterinary hospital or the animal ambulance. Keep the cow in shade with clean water until the vet comes.",
+  "resolution_type": "escalate_to_expert",
+  "action_window_days": 1,
+  "verification": {
+    "needed": true,
+    "timing": "next_day",
+    "method": "ivr_callback"
+  },
+  "preferred_channel": "voice"
+}

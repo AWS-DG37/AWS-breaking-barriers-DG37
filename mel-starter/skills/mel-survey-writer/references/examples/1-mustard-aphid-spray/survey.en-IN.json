@@ -1,0 +1,80 @@
+{
+  "survey_id": "S-20931",
+  "farmer_id": "F-000123",
+  "source_insight_ids": [
+    "I-004512"
+  ],
+  "language": "en-IN",
+  "send_window": {
+    "not_before": "2026-12-06T07:00:00+05:30",
+    "not_after": "2026-12-09T19:00:00+05:30"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-confirm",
+      "prompt": "Did you spray your mustard for the aphids (small green insects)?",
+      "options": [
+        {
+          "value": "yes",
+          "label": "Yes"
+        },
+        {
+          "value": "no",
+          "label": "No"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "Was it easy to get the spray?",
+      "options": [
+        {
+          "value": "easy",
+          "label": "Yes, easily"
+        },
+        {
+          "value": "hard",
+          "label": "Yes, with difficulty"
+        },
+        {
+          "value": "not_found",
+          "label": "Could not get it",
+          "follow_up": "could_not_get_input"
+        }
+      ]
+    },
+    {
+      "item_id": "q3",
+      "type": "survey-single-select",
+      "prompt": "How many of these insects are on the plants now?",
+      "options": [
+        {
+          "value": "almost_none",
+          "label": "Almost none"
+        },
+        {
+          "value": "fewer",
+          "label": "Fewer than before"
+        },
+        {
+          "value": "same",
+          "label": "Same as before",
+          "follow_up": "advice_did_not_work"
+        },
+        {
+          "value": "more",
+          "label": "More than before",
+          "follow_up": "advice_did_not_work"
+        }
+      ]
+    }
+  ],
+  "rationale": "Direct-action pest advice with a 2-day window. Ask from day 2, when the spray is done and the aphid count has had time to change.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}
