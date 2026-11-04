@@ -1,4 +1,4 @@
-import {budgetInput, costSummary, money} from './costs.mjs';
+import {budgetInput, capPanel, costSummary, money} from './costs.mjs';
 // Generate: pick insights, see what the rules will do, run the agent, inspect results.
 // Routes: #generate, #generate/job/<job id>, #generate/run/<run id>[/<insight id>].
 import {el} from './dom.mjs';
