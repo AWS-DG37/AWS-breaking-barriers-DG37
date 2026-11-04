@@ -8,6 +8,16 @@ from uuid import NAMESPACE_URL, uuid5
 
 from mel.clock import IST
 
+# Assumption, pending Digital Green: the pack calls `farmerchat_flow` what FarmerChat
+# "needs to register" a survey flow, so the sender computes these IDs. Its sample IDs
+# are UUID v5 (name-based), but the pack does not say which name and namespace it
+# used, so ours differ from the samples. Both are deterministic: re-sending a survey
+# yields the same flow_id. To adopt Digital Green's recipe, change these three lines;
+# tests/test_handoff.py's two expectedFailure ID tests then turn green.
+ID_NAMESPACE = NAMESPACE_URL
+CAMPAIGN_ID_NAME = "{campaign_name}"
+FLOW_ID_NAME = "{org_id}/{survey_id}"
+
 
 def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
     p = rules["priority"]
@@ -63,7 +73,14 @@ def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
                 survey_id_lower=survey["survey_id"].lower().replace("-", "_")
             ),
             "version": flow["version"],
-            "campaign_id": str(uuid5(NAMESPACE_URL, flow["campaign_name"])),
-            "flow_id": str(uuid5(NAMESPACE_URL, f"{flow['org_id']}/{survey['survey_id']}")),
+            "campaign_id": str(
+                uuid5(ID_NAMESPACE, CAMPAIGN_ID_NAME.format(campaign_name=flow["campaign_name"]))
+            ),
+            "flow_id": str(
+                uuid5(
+                    ID_NAMESPACE,
+                    FLOW_ID_NAME.format(org_id=flow["org_id"], survey_id=survey["survey_id"]),
+                )
+            ),
         },
     }
