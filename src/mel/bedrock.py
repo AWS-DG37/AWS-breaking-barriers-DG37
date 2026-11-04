@@ -53,10 +53,15 @@ class MantleSigV4Auth(httpx.Auth):
 
 
 def create_mantle_client(
-    region: str, project_id: str = "default", *, transport=None, max_retries: int = 4
+    region: str,
+    project_id: str = "default",
+    *,
+    transport=None,
+    max_retries: int = 4,
+    base_path: str = "/openai/v1",
 ) -> AsyncOpenAI:
     return AsyncOpenAI(
-        base_url=f"https://bedrock-mantle.{region}.api.aws/openai/v1",
+        base_url=f"https://bedrock-mantle.{region}.api.aws{base_path}",
         api_key="aws-sigv4-placeholder",
         project=project_id,
         max_retries=max_retries,

@@ -103,7 +103,7 @@ async def discover_models(
             errors.append(f"Bedrock catalog: {type(exc).__name__}: {exc}")
         try:
             if owned_mantle:
-                mantle_client = create_mantle_client(region)
+                mantle_client = create_mantle_client(region, base_path="/v1")
             page = await mantle_client.models.list()
             while True:
                 for model in getattr(page, "data", page):

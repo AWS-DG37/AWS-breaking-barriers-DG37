@@ -10,6 +10,7 @@ from botocore.credentials import Credentials
 
 from mel.agents import build_agents
 from mel.bedrock import MantleSigV4Auth, create_mantle_client
+from mel.bedrock_models import discover_models
 from mel.bundle import Bundle
 from mel.config import Settings
 from mel.graph import State, check_usage
@@ -23,6 +24,43 @@ class BedrockTests(unittest.IsolatedAsyncioTestCase):
             "TESTACCESS", "test-secret", "test-token"
         )
         return session
+
+    async def test_owned_catalog_uses_shared_discovery_route_and_closes_client(self):
+        requests = []
+        bedrock = Mock()
+        bedrock.list_foundation_models.return_value = {"modelSummaries": []}
+        bedrock.list_inference_profiles.return_value = {"inferenceProfileSummaries": []}
+
+        def handle(request):
+            requests.append(request)
+            return httpx.Response(
+                200,
+                json={
+                    "object": "list",
+                    "data": [{"id": "openai.gpt-6-luna", "object": "model"}],
+                },
+            )
+
+        clients = []
+
+        def factory(*args, **kwargs):
+            client = create_mantle_client(*args, transport=httpx.MockTransport(handle), **kwargs)
+            clients.append(client)
+            return client
+
+        with (
+            patch("mel.bedrock.boto3.Session", return_value=self.session()),
+            patch("mel.bedrock_models.create_mantle_client", wraps=factory),
+        ):
+            models = await discover_models("us-east-1", bedrock_client=bedrock)
+        self.assertTrue(clients[0].is_closed())
+        self.assertEqual([model.model_id for model in models], ["openai.gpt-6-luna"])
+        self.assertEqual(len(requests), 1)
+        request = requests[0]
+        self.assertEqual(request.method, "GET")
+        self.assertEqual(str(request.url), "https://bedrock-mantle.us-east-1.api.aws/v1/models")
+        self.assertIn("/us-east-1/bedrock-mantle/aws4_request", request.headers["Authorization"])
+        self.assertEqual(request.headers["X-Amz-Security-Token"], "test-token")
 
     async def test_agents_use_model_name_and_signed_responses_on_default_project(self):
         await self.run_signed_agents(usage_reported=True)
