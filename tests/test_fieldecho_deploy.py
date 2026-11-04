@@ -1,7 +1,10 @@
 import copy
 import importlib
 import json
+import os
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -446,10 +449,15 @@ def test_compose_preserves_database_env_volumes_and_explicit_no_live(d):
 def test_main_trigger_and_iam_are_scoped_to_admitted_release():
     workflow = yaml.safe_load(Path(".github/workflows/main.yml").read_text())
     triggers = workflow.get("on", workflow.get(True))
-    assert triggers == {"pull_request": None, "push": {"branches": ["main"]}}
+    assert triggers == {
+        "pull_request": None,
+        "push": {"branches": ["main"]},
+        "workflow_dispatch": None,
+    }
     assert workflow["concurrency"]["cancel-in-progress"] is False
     release = workflow["jobs"]["release"]
-    assert release["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert release["permissions"]["id-token"] == "write"
+    assert "id-token" not in workflow.get("permissions", {})
     assert "id-token" not in workflow["jobs"]["check"].get("permissions", {})
     template = yaml.load(Path("deploy/bootstrap.yaml").read_text(), Loader=yaml.BaseLoader)
     role = template["Resources"]["DeployRole"]["Properties"]
@@ -467,6 +475,138 @@ def test_main_trigger_and_iam_are_scoped_to_admitted_release():
     send = next(x for x in statements if x["Action"] == "ssm:SendCommand")
     assert len(send["Resource"]) == 2
     assert all("*" not in json.dumps(resource) for resource in send["Resource"])
+
+
+def workflow_expression(expression, event, ref):
+    expression = expression.removeprefix("${{").removesuffix("}}")
+    expression = expression.replace("&&", "and").replace("||", "or").strip()
+    return eval(
+        expression,
+        {"__builtins__": {}},
+        {"github": SimpleNamespace(event_name=event, ref=ref), "format": str.format},
+    )
+
+
+@pytest.mark.parametrize(
+    "event,ref,admitted",
+    [
+        ("push", "refs/heads/main", True),
+        ("workflow_dispatch", "refs/heads/main", True),
+        ("workflow_dispatch", "refs/heads/feature", False),
+        ("workflow_dispatch", "refs/tags/main", False),
+        ("push", "refs/heads/feature", False),
+        ("pull_request", "refs/pull/12/merge", False),
+        ("pull_request", "refs/heads/main", False),
+    ],
+)
+def test_main_release_artifacts_and_serialization_share_admission(event, ref, admitted):
+    workflow = yaml.safe_load(Path(".github/workflows/main.yml").read_text())
+    save, upload = workflow["jobs"]["check"]["steps"][-2:]
+    assert "docker save" in save["run"]
+    assert upload["uses"].startswith("actions/upload-artifact@")
+    for gate in (workflow["jobs"]["release"]["if"], save["if"], upload["if"]):
+        assert workflow_expression(gate, event, ref) is admitted
+    group = workflow_expression(workflow["concurrency"]["group"], event, ref)
+    assert (group == "fieldecho-main") is admitted
+
+
+@pytest.fixture
+def voice_workflow():
+    workflow = yaml.safe_load(Path(".github/workflows/voice-audio.yml").read_text())
+    record = workflow["jobs"]["record"]
+    assert record["if"] == "github.ref == 'refs/heads/main'"
+    assert record["steps"][0]["with"]["ref"] == "main"
+    return workflow
+
+
+def test_voice_dispatch_has_only_the_required_token_permissions(voice_workflow):
+    assert voice_workflow["permissions"] == {
+        "contents": "write",
+        "pages": "write",
+        "actions": "write",
+    }
+    steps = voice_workflow["jobs"]["record"]["steps"]
+    dispatch = next(step for step in steps if step.get("name") == "Request main delivery")
+    assert "if" not in dispatch
+    assert dispatch["env"] == {"GH_TOKEN": "${{ github.token }}"}
+    assert steps.index(dispatch) > next(
+        i for i, step in enumerate(steps) if step.get("name") == "Commit the clips"
+    )
+
+
+@pytest.mark.parametrize("scenario", ["publish", "retry", "unchanged", "push-failure"])
+def test_voice_clip_tasks_reconcile_main_delivery(voice_workflow, tmp_path, scenario):
+    def git(*args, cwd=tmp_path):
+        return subprocess.run(
+            ["git", *args], cwd=cwd, check=True, text=True, capture_output=True, timeout=10
+        ).stdout.strip()
+
+    origin, checkout = tmp_path / "origin.git", tmp_path / "checkout"
+    git("init", "--bare", "--initial-branch=main", str(origin))
+    git("clone", str(origin), str(checkout))
+    git("config", "user.name", "Workflow test", cwd=checkout)
+    git("config", "user.email", "workflow@example.invalid", cwd=checkout)
+    clips = checkout / "docs/voice/audio"
+    clips.mkdir(parents=True)
+    (clips / "original.mp3").write_bytes(b"original")
+    git("add", ".", cwd=checkout)
+    git("commit", "-m", "Initial main", cwd=checkout)
+    git("push", "origin", "main", cwd=checkout)
+    initial = git("rev-parse", "HEAD", cwd=checkout)
+    if scenario != "unchanged":
+        (clips / "missing.mp3").write_bytes(b"new clip")
+    if scenario == "push-failure":
+        hook = origin / "hooks/pre-receive"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        hook.chmod(0o700)
+    fake_bin, calls = tmp_path / "bin", tmp_path / "gh-calls"
+    fake_bin.mkdir()
+    gh = fake_bin / "gh"
+    gh.write_text('#!/bin/sh\nprintf "%s\\n" "$*" >> "$GH_CALLS"\nexit "${GH_EXIT_CODE:-0}"\n')
+    gh.chmod(0o700)
+    env = {
+        **os.environ,
+        "PATH": str(fake_bin) + os.pathsep + os.environ["PATH"],
+        "GH_CALLS": str(calls),
+        "GITHUB_SHA": initial,
+        "GH_TOKEN": "local-fake-token",
+    }
+    steps = voice_workflow["jobs"]["record"]["steps"]
+    commit = next(i for i, step in enumerate(steps) if step.get("name") == "Commit the clips")
+    dispatch = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Request main delivery"
+    )
+
+    def run_tasks(exit_code="0"):
+        for step in steps[commit : dispatch + 1]:
+            result = subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", step["run"]],
+                cwd=checkout,
+                env={**env, "GH_EXIT_CODE": exit_code},
+                text=True,
+                capture_output=True,
+                timeout=10,
+            )
+            if result.returncode:
+                break
+        return result
+
+    result = run_tasks("1" if scenario == "retry" else "0")
+    published = git("rev-parse", "refs/heads/main", cwd=origin)
+    if scenario in {"unchanged", "push-failure"}:
+        assert published == initial
+        assert not calls.exists()
+        assert (result.returncode == 0) is (scenario == "unchanged")
+        return
+    assert published != initial
+    assert (result.returncode == 0) is (scenario == "publish")
+    assert calls.read_text().splitlines() == ["workflow run main.yml --ref main"]
+    if scenario == "retry":
+        checkout = tmp_path / "rerun"
+        git("clone", "--branch", "main", str(origin), str(checkout))
+        assert run_tasks().returncode == 0
+        assert git("rev-parse", "refs/heads/main", cwd=origin) == published
+        assert calls.read_text().splitlines() == ["workflow run main.yml --ref main"] * 2
 
 
 def test_wrong_artifact_revision_fails_before_any_container_run(d, target, tmp_path, monkeypatch):
