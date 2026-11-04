@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import date, datetime, time, timedelta
 from typing import Protocol
 
-from mel.clock import IST
+from mel.clock import IST, parse_ist
 from mel.config import GoldenWindowConfig
 from mel.decision.model import SendWindow
 
@@ -31,7 +31,7 @@ class PackWindowPolicy:
 
     def window_for(self, insight: Mapping) -> SendWindow | None:
         rules = self._rules
-        origin = datetime.fromisoformat(insight["created_at"]).astimezone(IST).date()
+        origin = parse_ist(insight["created_at"]).date()
         action_days = insight["action_window_days"]
         if action_days is None:
             action_days = rules["action_window_days_if_null"]
@@ -75,7 +75,7 @@ class GoldenWindowPolicy:
         self._season_close = datetime.combine(season_end, self._closes, IST)
 
     def window_for(self, insight: Mapping) -> SendWindow | None:
-        advised = datetime.fromisoformat(insight["created_at"]).astimezone(IST)
+        advised = parse_ist(insight["created_at"])
         timing = insight["verification"]["timing"]
         if timing == "same_day":
             start = self._next_opening(advised + self._delay)

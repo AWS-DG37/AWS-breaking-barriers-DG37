@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {questionAssessments, displayValue, eventsForStage, journeyVisits, lineDiff, changedPaths, read, write} from './domain.mjs';
+import {questionAssessments, displayValue, eventsForStage, journeyVisits, lineDiff, changedPaths, read, write, summarizeCounts} from './domain.mjs';
+
+test('a run summary says what happened in one plain sentence per outcome', () => {
+  assert.equal(summarizeCounts({accepted:5,skipped:4,rejected:1,failed:0}),
+    '5 surveys are ready to send. The rules skipped 4 insights. The reviewer rejected 1 draft.');
+  assert.equal(summarizeCounts({accepted:1,skipped:1,rejected:2,failed:1}),
+    '1 survey is ready to send. The rules skipped 1 insight. The reviewer rejected 2 drafts. 1 insight failed.');
+  assert.equal(summarizeCounts({failed:3}), '3 insights failed.');
+  assert.equal(summarizeCounts({accepted:0,skipped:0,rejected:0,failed:0}), 'No results yet.');
+  assert.equal(summarizeCounts({}), 'No results yet.');
+  assert.equal(summarizeCounts(undefined), 'No results yet.');
+});
 
 test('missing scores remain unknown while zero is a measured value', () => {
   assert.equal(displayValue(null), 'Not recorded');

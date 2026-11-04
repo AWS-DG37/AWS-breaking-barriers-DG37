@@ -136,6 +136,27 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
         self.insight["created_at"] = "2027-03-31T09:12:00+05:30"
         self.assertEqual((await self.execute()).reason, "window_after_season")
 
+    async def test_inconsistent_verification_skips_without_calling_model(self):
+        # needed=true but timing=none: contradictory metadata. The graph must route
+        # this to a terminal skip at R5b, never reaching the generator or reviewer.
+        self.insight["verification"] = {
+            **self.insight["verification"],
+            "needed": True,
+            "timing": "none",
+        }
+        result = await self.execute()
+        self.assertEqual((result.status, result.rule), ("skipped", "R5b"))
+        self.assertEqual(result.reason, "invalid_verification_timing")
+        self.assertEqual(result.attempts, 0)
+        self.assertIsNone(result.no_survey)
+
+    async def test_needed_false_skips_cleanly_without_calling_model(self):
+        self.insight["verification"] = {**self.insight["verification"], "needed": False}
+        result = await self.execute()
+        self.assertEqual((result.status, result.rule), ("skipped", "R5"))
+        self.assertEqual(result.reason, "no_check_needed")
+        self.assertEqual(result.attempts, 0)
+
     async def test_accepted_survey_uses_the_decided_window(self):
         result = await self.execute()
         self.assertEqual(result.rule, "R8")
