@@ -75,7 +75,8 @@ On `main`, a GitHub Actions workflow
 ([`.github/workflows/voice-audio.yml`](../.github/workflows/voice-audio.yml)) does step 2 by
 itself. It runs when a push to `main` changes a demo survey or the wording. It records
 the missing clips, commits them to `docs/voice/audio`, and rebuilds GitHub Pages. To run
-it by hand, open **Actions > Record voice clips > Run workflow**.
+it by hand, open **Actions > Record voice clips > Run workflow** and keep the branch
+`main`. On any other branch the job does not run.
 
 The workflow reads the key from the repository secret `ELEVENLABS_API_KEY`. The
 hackathon key expires on 2026-11-11. After that the workflow fails until you replace

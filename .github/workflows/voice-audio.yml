@@ -25,6 +25,9 @@ concurrency:
 
 jobs:
   record:
+    # A manual run can pick any branch. Only main may be recorded and pushed, or the
+    # push below would also publish that branch's unmerged commits.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -42,12 +45,13 @@ jobs:
           git add -A docs/voice/audio
           if git diff --cached --quiet; then
             echo "Every clip is already recorded."
-            exit 0
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Record voice clips for the demo surveys"
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Record voice clips for the demo surveys"
-          git pull --rebase origin main
-          git push origin HEAD:main
-          # A push made with the workflow token does not always start a Pages build.
+          # A push made with the workflow token does not start a Pages build. Ask for one
+          # on every run, so a rerun also repairs a build request that failed.
           gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent
