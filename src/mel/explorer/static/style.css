@@ -224,6 +224,37 @@ details[open] summary {
   align-items:center;
   gap:16px;
 }
+/* The detail dial: a segmented pill; the effective level is filled. */
+.detail-dial {
+  display:inline-flex;
+  gap:2px;
+  padding:2px;
+  border:1px solid var(--control);
+  border-radius:999px;
+  background:white;
+}
+.detail-dial button {
+  border:0;
+  padding:8px 14px;
+  background:transparent;
+  color:var(--muted);
+}
+.detail-dial button:hover {
+  background:var(--surface);
+}
+.detail-dial button[aria-pressed=true] {
+  background:var(--deep);
+  color:white;
+}
+/* With every nav link and the dial, one row needs about 1150 px. */
+@media(max-width:1180px) {
+  .masthead { height:auto; flex-wrap:wrap; }
+  .masthead-status { flex-wrap:wrap; gap:8px 16px; }
+}
+/* Hide elements above the effective level; the current section's nav link stays. */
+html[data-detail="1"] [data-level="2"]:not([aria-current="true"]),
+html[data-detail="1"] [data-level="3"]:not([aria-current="true"]),
+html[data-detail="2"] [data-level="3"]:not([aria-current="true"]) { display:none; }
 .health {
   font-size:12px;
   color:var(--muted);
