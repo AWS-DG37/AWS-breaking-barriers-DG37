@@ -77,7 +77,10 @@ class QuestionEvidence(StrictModel):
 
 
 class SurveyDraft(StrictModel):
-    question_evidence: list[QuestionEvidence] = Field(default_factory=list)
+    question_evidence: list[QuestionEvidence] = Field(
+        default_factory=list,
+        description="Model-supplied diagnostic grounding. Not verified quality.",
+    )
     items: list[Item] = Field(min_length=1, max_length=3)
     rationale: str = Field(min_length=1, max_length=400)
 
@@ -85,6 +88,9 @@ class SurveyDraft(StrictModel):
     def unique_ids(self):
         if len({i.item_id for i in self.items}) != len(self.items):
             raise ValueError("item IDs must be unique")
+        ids = {item.item_id for item in self.items}
+        if any(e.item_id not in ids for e in self.question_evidence):
+            raise ValueError("question evidence must refer to a draft item")
         return self
 
 

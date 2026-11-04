@@ -176,3 +176,20 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelClientCleanupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_closes_distinct_native_clients_once_and_awaits_async_clients(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, Mock
+
+        from mel.worker import close_model_clients
+
+        first, second = SimpleNamespace(close=AsyncMock()), SimpleNamespace(close=Mock())
+        agents = [
+            SimpleNamespace(model=SimpleNamespace(client=client))
+            for client in (first, first, second)
+        ]
+        await close_model_clients(*agents)
+        first.close.assert_awaited_once()
+        second.close.assert_called_once()

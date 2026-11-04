@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -21,6 +22,21 @@ from mel.policy import IST
 from mel.store import Store
 
 logger = logging.getLogger("mel")
+
+
+async def close_model_clients(*agents) -> None:
+    """Each native client is owned once, including distinct generator/reviewer clients."""
+    seen = set()
+    for agent in agents:
+        client = getattr(getattr(agent, "model", None), "client", None)
+        if client is None or id(client) in seen:
+            continue
+        seen.add(id(client))
+        close = getattr(client, "aclose", None) or getattr(client, "close", None)
+        if close:
+            result = close()
+            if inspect.isawaitable(result):
+                await result
 
 
 async def process_insight(
@@ -192,9 +208,7 @@ async def run_batch(args: argparse.Namespace, settings: Settings) -> int:
     finally:
         if store is not None:
             store.close()
-        client = getattr(getattr(generator, "model", None), "client", None)
-        if client is not None:
-            await client.close()
+        await close_model_clients(generator, reviewer)
 
 
 async def preview(args: argparse.Namespace, settings: Settings) -> int:
@@ -229,7 +243,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(json.dumps(manifest), flush=True)
     outcomes = []
-    generator = None
+    generator = reviewer = None
     started = time.monotonic()
     try:
         generator, reviewer = build_agents(
@@ -295,9 +309,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
         raise
     finally:
         manifest_path.write_text(json.dumps(manifest, indent=2))
-        client = getattr(getattr(generator, "model", None), "client", None)
-        if client is not None:
-            await client.close()
+        await close_model_clients(generator, reviewer)
 
 
 def main() -> None:
