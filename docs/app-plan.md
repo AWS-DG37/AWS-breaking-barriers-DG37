@@ -1,7 +1,11 @@
 # MEL Console: whole-app plan
 
-Status: draft for team review, 4 November 2026. Supersedes nothing yet; `architecture.md`
-describes what exists today.
+Status: historical roadmap draft for team review, 4 November 2026. The “Today”
+column, architecture gaps and phases below describe the planning snapshot, not
+current implementation status. Generate, Runs, Compare, Configure, persistent jobs,
+request costs and the AWS console are now implemented; Schedule/delivery, response
+write-back, feedback editing and optimization remain planned. See [README](../README.md)
+and [console usage](explorer.md) for the current feature inventory and setup.
 
 The MEL Console is the demo app: one web app on top of the existing pipeline. Through it,
 Digital Green can:

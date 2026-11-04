@@ -1,8 +1,12 @@
 """Cost calculations and request-wrapper behavior, without AWS or PostgreSQL."""
 
 import asyncio
+import json
+from contextlib import nullcontext
 from datetime import date
 from decimal import Decimal
+from threading import RLock
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -12,7 +16,7 @@ from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.usage import RequestUsage
 
 from mel.config import ModelConfig
-from mel.costs import CostedModel, CostRefused, Price, request_scope
+from mel.costs import CostedModel, CostRefused, Price, RunCosts, request_scope
 
 
 def price(**changes):
@@ -58,6 +62,53 @@ def test_costs_count_cached_input_once_and_use_the_full_request_context_tier():
 def test_invalid_prices_cannot_enter_the_catalog(changes):
     with pytest.raises(ValidationError):
         price(**changes)
+
+
+@pytest.mark.parametrize("inputs,outputs", [(1000, 100), (0, 0)])
+def test_settlement_serializes_native_usage_and_preserves_unknown_counts(inputs, outputs):
+    # Exercise real settlement with the installed SDK type. Wrapper-only ledger
+    # doubles cannot catch serialization failures at this persistence boundary.
+    class Connection:
+        def transaction(self):
+            return nullcontext()
+
+        def execute(self, query, params):
+            if query.startswith("SELECT budget_usd"):
+                return SimpleNamespace(fetchone=lambda: (Decimal("5"),))
+            if query.startswith("SELECT c.state"):
+                return SimpleNamespace(
+                    fetchone=lambda: (
+                        "pending", Decimal("0.0105"), 100, price().model_dump(mode="json")
+                    )
+                )
+            if query.startswith("UPDATE model_calls"):
+                self.saved = params
+            elif query.startswith("UPDATE run_costs"):
+                self.stopped = params[0]
+            else:
+                pytest.fail(f"Unexpected settlement query: {query}")
+
+    connection = Connection()
+    costs = RunCosts(SimpleNamespace(connection=connection, lock=RLock()), "run")
+    usage = RequestUsage(
+        input_tokens=inputs, output_tokens=outputs, details={"reasoning_tokens": 2}
+    )
+    response = ModelResponse([TextPart("ok")], usage=usage, provider_response_id="provider-request")
+    expected = "complete" if inputs else "unknown"
+    assert costs.settle("call", response) == expected
+    (state, saved_inputs, saved_outputs, estimate,
+     saved_usage, request_id, error, key) = connection.saved
+    assert state == expected
+    assert (saved_inputs, saved_outputs) == ((inputs, outputs) if inputs else (None, None))
+    assert estimate == (Decimal("0.0015") if inputs else None)
+    # Validate the JSON payload supplied to psycopg, including provider details.
+    payload = json.loads(json.dumps(saved_usage.obj))
+    assert payload["input_tokens"] == inputs
+    assert payload["output_tokens"] == outputs
+    assert payload["details"] == {"reasoning_tokens": 2}
+    assert (request_id, error, key) == ("provider-request", None, "call")
+    if not inputs:
+        assert connection.stopped == "Unresolved request costs; this run cannot send more requests"
 
 
 class Ledger:

@@ -1,7 +1,8 @@
 # Golden prompt examples and held-out cases
 
-The v3 generator and reviewer prompts embed seven compact examples from Digital
-Green's supplied golden set. Five positive examples cover direct action (potato),
+The current baseline (`luna-golden-patterns-v7`) retains seven compact examples
+from Digital Green’s supplied golden set, introduced in the v3 generator and
+reviewer prompts. Five positive examples cover direct action (potato),
 monitoring (lentil), a plan (gram), holding off (cabbage), and expert escalation
 (buffalo). Two negative examples cover general information (onion) and an
 unfinished conversation (lentil). No mustard example is included in either prompt.
@@ -36,6 +37,22 @@ labels, and agreement with human reviewers.
 Do not score the prompt examples as independent evaluation cases. The golden
 questions are reference evidence rather than an infallible rubric, and these
 English examples do not replace Hindi-speaking review.
+
+## Timing sources and console checks
+
+The golden examples and participant pack’s explicit `rules.json` disagree on
+send-window timing. Configure labels these choices **Timing inferred from golden
+examples** (`golden_v1`) and **Timing from participant pack’s written rules**
+(`pack`). The former is our inferred policy, not an additional supplied requirement.
+Source precedence remains unconfirmed by Digital Green. Changing this setting
+changes runtime windows; it does not select the input dataset or scoring reference.
+
+The console's **Agreement with golden examples** check runs this configuration's
+deterministic decision engine on the 138 holdout cases, without model calls. It
+uses `score_decisions`, rather than the CLI's provenance-rich `score_policy` report.
+A lower exact-window score under `pack` can reflect compliance with the written
+rules. Neither score is an independent generalization estimate: the rules were
+developed using all 150 source cases, as described below.
 
 ## Run the offline policy comparison
 
