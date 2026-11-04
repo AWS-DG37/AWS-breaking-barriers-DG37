@@ -71,7 +71,10 @@ def test_the_estimate_counts_rule_decisions_and_model_calls_without_any_model():
     assert plan["surveys"] == 6
     assert plan["skipped"] == {"R2": 1, "R3": 1, "R5": 1, "R7": 1}
     revisions = bundle.config.graph.max_revisions
-    assert plan["model_calls"] == {"min": 12, "max": 12 * (1 + revisions)}
+    assert plan["model_calls"] == {
+        "min": 12,
+        "max": 12 * (1 + revisions) * bundle.config.graph.max_requests_per_call,
+    }
     assert plan["cost_usd"] is None
 
 

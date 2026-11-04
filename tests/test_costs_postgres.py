@@ -116,3 +116,82 @@ def test_unpriced_models_remain_unknown_and_cannot_start_budgeted_calls(database
     result = report(database, costs.run_id)
     assert result["estimated_usd"] is None
     assert result["complete_calls"] == 0
+
+
+def test_persisted_batch_captures_generation_and_review_and_retains_results(database):
+    import asyncio
+
+    from test_jobs_postgres import active, agents, smoke_dataset
+
+    from mel.bundle import Bundle
+    from mel.config import Settings
+    from mel.datasets import InsightFilter
+    from mel.jobs import BatchJobSpec, run_queue
+
+    config_id = active(database)
+    dataset = smoke_dataset(database)
+    bundle = Bundle.load(Settings(bedrock_model_id="test"))
+    for model in (bundle.config.generation, bundle.config.review):
+        save_price(
+            database,
+            NewPrice(
+                model_id=model.model_id,
+                api=model.api,
+                region="us-east-1",
+                pricing=price(max_input_tokens=1_000_000),
+            ),
+        )
+    spec = BatchJobSpec(
+        dataset_id=dataset["dataset_id"],
+        config_id=config_id,
+        selection=InsightFilter(limit=4),
+        budget_usd="20",
+    )
+    job = database.create_job(str(uuid4()), "batch", spec.model_dump(mode="json"))
+    asyncio.run(run_queue(database, settings=Settings(), once=True, agent_factory=agents))
+    saved = database.job(job["job_id"])
+    assert saved["status"] == "completed"
+    result = report(database, saved["runs"][0]["run_id"], limit=200)
+    assert result["complete"] and result["call_count"] > 0
+    assert {r["role"] for r in result["calls"]} == {"generate", "review"}
+    assert all(r["insight_id"] != "unknown" and r["attempt"] > 0 for r in result["calls"])
+    assert database.results(saved["runs"][0]["run_id"])
+
+
+def test_independent_connections_cannot_reserve_more_than_the_run_budget():
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+
+    from mel.config import Settings
+    from mel.store import Store
+
+    settings = Settings(
+        database_host="localhost",
+        database_port=int(os.environ["MEL_TEST_DB_PORT"]),
+        database_sslmode="disable",
+    )
+    first, second = Store(settings), Store(settings)
+    schema = "test_costs_" + uuid4().hex
+    try:
+        first.connection.execute(f'CREATE SCHEMA "{schema}"')
+        for store in (first, second):
+            store.connection.execute(f'SET search_path TO "{schema}"')
+        first.initialize()
+        costs, model, _ = setup_run(first)
+        other = RunCosts(second, costs.run_id)
+
+        def attempt(ledger):
+            try:
+                return reserve(ledger, model)
+            except CostRefused:
+                return None
+
+        with ThreadPoolExecutor(2) as pool:
+            results = list(pool.map(attempt, (costs, other)))
+        assert sum(value is not None for value in results) == 1
+        assert Decimal(report(first, costs.run_id)["committed_usd"]) == Decimal("0.0105")
+    finally:
+        second.close()
+        first.connection.execute("SET search_path TO public")
+        first.connection.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE')
+        first.close()

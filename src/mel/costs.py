@@ -351,6 +351,18 @@ class CostedModel(WrapperModel):
         super().__init__(wrapped)
         self.costs, self.config, self.region, self.role = costs, config, region, role
 
+    async def settle(self, key, response=None, error=None):
+        try:
+            return await asyncio.shield(asyncio.to_thread(self.costs.settle, key, response, error))
+        except asyncio.CancelledError:
+            raise
+        except Exception as failure:
+            try:
+                await asyncio.to_thread(self.costs.stop, "Request accounting failed")
+            except Exception:
+                pass  # The pending reservation remains held if storage is unavailable.
+            raise CostRefused("Request accounting failed") from failure
+
     async def request(self, messages, model_settings, model_request_parameters):
         insight_id, attempt = identity.get() or ("unknown", 1)
         try:
@@ -372,15 +384,9 @@ class CostedModel(WrapperModel):
                 model_request_parameters,
             )
         except BaseException as error:
-            await asyncio.shield(
-                asyncio.to_thread(self.costs.settle, key, error=type(error).__name__)
-            )
+            await self.settle(key, error=type(error).__name__)
             raise
-        try:
-            state = await asyncio.shield(asyncio.to_thread(self.costs.settle, key, response))
-        except Exception as error:
-            await asyncio.to_thread(self.costs.stop, "Request accounting failed")
-            raise CostRefused("Request accounting failed") from error
+        state = await self.settle(key, response)
         if state in ("unknown", "overrun"):
             # Unbudgeted runs still retain unknown records; budgeted runs stop here.
             with self.costs.store.lock:
@@ -431,6 +437,9 @@ def estimate_run(store, config, region, surveys):
                     request_reservation_usd=str(price.reservation(model.max_tokens))
                     if price
                     else None,
+                    maximum_requests=surveys
+                    * (config.graph.max_revisions + 1)
+                    * config.graph.max_requests_per_call,
                 )
             )
     return dict(

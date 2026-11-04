@@ -132,7 +132,7 @@ are shown greyed out until they exist. Hosted, `deploy.sh` copies the pack to th
 bucket, from which the API imports it (`MEL_PACK_URI`).
 
 The worker's IAM policy authorizes Mantle inference for `BedrockAllowedModelIds` and
-Converse inference for Bedrock models and inference profiles; the console limits which. 
+Converse inference for Bedrock models and inference profiles; the console limits which.
 ## Change a team-owned component
 
 | Concern | Owner |
@@ -198,3 +198,64 @@ server, or point it at an existing hosted viewer:
 python scripts/verify_architecture_viewer.py
 python scripts/verify_architecture_viewer.py --url http://127.0.0.1:8766
 ```
+
+
+## Run costs and budgets
+
+Persisted runs record each generation and review request in PostgreSQL, including
+output retries and graph revisions. The ledger keeps the model, native API, AWS
+region, insight, role, graph attempt, reported token usage, provider request ID and
+the exact price version used. Prices are append-only; later changes do not reprice
+old requests. Preview and model smoke checks have no persisted run ledger.
+
+Generate offers a USD limit for the run. Compare and Configure tests offer a limit
+**per candidate run**: two candidates with $5 each have a combined $10 limit. The UI
+starts at $5. The API accepts `budget_usd` on batch and comparison submissions; an
+omitted or null budget leaves the run unbounded for existing clients. CLI persisted
+runs also accept `mel-worker run ... --budget-usd 5`.
+
+Before each native request, a transaction locks that run's accounting row and
+reserves the model's full documented input context bound, at the highest configured
+input/cache rate, plus its enforced output-token limit. Reported usage settles the
+reservation once, including cache reads/writes when separately priced. The output
+count includes reasoning; it is not added again. SDK retries are disabled for agent
+calls; Pydantic output retries are individually metered. The rough pre-run estimate
+assumes 3,300 input and 200 output tokens per role per survey, before revisions.
+It is separate from the conservative reservation used for admission.
+
+A run stops when its next request cannot be covered. Completed checkpoints remain
+available. In-flight requests may finish; cancellations, missing usage, unsupported
+billing dimensions and overruns retain their exposure and block a budgeted run.
+Resuming keeps the original limit, stop reason, spend and reservations. Nothing
+expires automatically. Pending reservations from an interrupted process are retained.
+These are configured-price estimates, not an AWS invoice or account-wide spending
+cap; their accuracy depends on the stored rates and documented context bounds.
+
+Migration `005_run_costs.sql` seeds verified Standard text rates for
+`openai.gpt-6-luna` / Responses / `us-east-1` from the
+[AWS Luna model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-openai-gpt-6-luna.html),
+including Mantle's regional premium, cached input and the long-context tier.
+It also seeds `deepseek.v3.2` / Converse / `us-east-1` from
+[AWS Bedrock pricing](https://aws.amazon.com/bedrock/pricing/), using the context bound
+in its [model card](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-deepseek-deepseek-v3-2.html).
+Both were checked on November 4, 2026. This is a dated snapshot, not automatic price
+refresh. Other model/API/region combinations remain unpriced until verified; no
+regional or model-name aliases are guessed. Budgeted launches require matching prices.
+
+`GET /api/prices` lists current price versions. `POST /api/prices` appends a version
+with `model_id`, `api`, `region`, and `pricing`: input/output USD per million tokens,
+`max_input_tokens`, `source`, `checked_on`, optional cache rates and optional
+long-context threshold/rates. Use provider documentation for the selected native
+API, routing and region. Cache writes with ambiguous duration must remain unpriced.
+The existing console sign-in also protects these routes.
+
+`POST /api/jobs/batch/estimate` and `POST /api/experiments/estimate` calculate without
+inference. Run pages and comparisons show spend, committed exposure and budget.
+`GET /api/runs/{run_id}/costs?limit=100&offset=0` returns a page of requests with price
+sources and full-run aggregates. Unknown totals stay unknown; known token and cost
+subtotals remain visible. Recorded history is not retroactively priced.
+
+Run `pytest` for offline checks. With a dedicated test PostgreSQL server, set
+`MEL_TEST_DB_PORT` and run `pytest tests/test_costs_postgres.py` to verify settlement,
+resumption, rate snapshots, request capture and concurrent connections. The concurrency
+test creates and removes its own temporary schema on that test server.

@@ -102,7 +102,13 @@ def estimate_batch(bundle: Bundle, insights: list[dict]) -> dict:
         "selected": len(insights),
         "surveys": surveys,
         "skipped": dict(sorted(rules.items())),
-        "model_calls": {"min": 2 * surveys, "max": 2 * surveys * (1 + config.graph.max_revisions)},
+        "model_calls": {
+            "min": 2 * surveys,
+            "max": 2
+            * surveys
+            * (1 + config.graph.max_revisions)
+            * config.graph.max_requests_per_call,
+        },
         "minutes": round(surveys * ESTIMATE_SECONDS_PER_SURVEY / config.batch.concurrency / 60, 1),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,

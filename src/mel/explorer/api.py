@@ -492,8 +492,7 @@ def create_app(
         summary = database_call(lambda db: db.run_summary(str(run_id)))
         if summary is None:
             raise HTTPException(404, "Run not found")
-        if hasattr(summary, "get"):
-            summary["costs"] = database_call(lambda db: report(db, str(run_id)))
+        summary["costs"] = database_call(lambda db: report(db, str(run_id)))
         return summary
 
     @app.get("/api/runs/{run_id}/results")
@@ -533,7 +532,9 @@ def create_app(
             spec = batch_spec(db, value)
             if hasattr(db, "connection") and spec.budget_usd is not None:
                 bundle = config_bundle(db, str(spec.config_id))
-                check_budget_prices(db, bundle.config, settings.aws_region, spec.budget_usd)
+                insights = db.insights(str(spec.dataset_id), spec.selection)
+                if estimate_batch(bundle, insights)["surveys"]:
+                    check_budget_prices(db, bundle.config, settings.aws_region, spec.budget_usd)
             return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)
@@ -614,12 +615,16 @@ def create_app(
                 if record is None:
                     raise HTTPException(422, f"Unknown configuration version for {candidate.label}")
                 runnable(record["definition"])
-                if hasattr(db, "connection"):
-                    bundle = config_bundle(db, str(candidate.config_id))
-                    check_budget_prices(db, bundle.config, settings.aws_region, value.budget_usd)
             insights = db.insights(str(value.dataset_id), value.selection)
             if not insights:
                 raise HTTPException(422, "No insights match this selection")
+            if hasattr(db, "connection") and value.budget_usd is not None:
+                for candidate in value.candidates:
+                    bundle = config_bundle(db, str(candidate.config_id))
+                    if estimate_batch(bundle, insights)["surveys"]:
+                        check_budget_prices(
+                            db, bundle.config, settings.aws_region, value.budget_usd
+                        )
             try:
                 spec = ExperimentSpec(
                     name=value.name,

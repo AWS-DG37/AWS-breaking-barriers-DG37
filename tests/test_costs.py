@@ -162,3 +162,52 @@ def test_request_identity_is_isolated_across_concurrent_insights():
 
     asyncio.run(run())
     assert {e[3] for e in ledger.events if e[0] == "reserve"} == {"first", "second"}
+
+
+def test_cache_write_rates_are_separate_and_reservations_cover_the_highest_input_rate():
+    rates = price(cache_write_per_million="2")
+    assert rates.estimate(1000, 100, cached=100, writes=200) == Decimal("0.00161")
+    assert rates.reservation(100) == Decimal("0.0205")
+    with pytest.raises(ValueError, match="Cache writes"):
+        price().estimate(1000, 100, writes=1)
+
+
+def test_api_budget_validation_and_queue_persistence():
+    from fastapi.testclient import TestClient
+    from test_explorer_api import DATASET
+    from test_explorer_api import Store as MemoryStore
+
+    from mel.explorer.api import create_app
+
+    store = MemoryStore()
+    with TestClient(create_app(store_factory=lambda _: store)) as client:
+        # Establish a runnable version using the normal API path.
+        client.get("/api/config")
+        for budget in (0, -1, "NaN", "Infinity"):
+            response = client.post(
+                "/api/jobs/batch", json={"dataset_id": DATASET, "budget_usd": budget}
+            )
+            assert response.status_code == 422
+        response = client.post(
+            "/api/jobs/batch", json={"dataset_id": DATASET, "budget_usd": "2.50"}
+        )
+        assert response.status_code == 202
+        assert Decimal(store.jobs[-1][1]["budget_usd"]) == Decimal("2.50")
+
+
+def test_settlement_storage_failure_stops_execution_even_when_stop_cannot_be_saved():
+    ledger = Ledger()
+
+    def failed_storage(*args, **kwargs):
+        raise RuntimeError("Database unavailable")
+
+    ledger.settle = ledger.stop = failed_storage
+
+    def respond(*args):
+        return ModelResponse([TextPart("ok")], usage=RequestUsage(input_tokens=10, output_tokens=2))
+
+    async def run():
+        await model(ledger, respond).request([], {}, ModelRequestParameters())
+
+    with pytest.raises(CostRefused, match="accounting failed"):
+        asyncio.run(run())

@@ -9,6 +9,7 @@ import logging
 import time
 from collections import Counter
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -248,6 +249,7 @@ async def run_batch(args: argparse.Namespace, settings: Settings) -> int:
             settings=settings,
             config_id=store.save_config(bundle.definition, note="Saved by mel-worker run"),
             retry_failed=args.retry_failed,
+            budget_usd=getattr(args, "budget_usd", None),
             agent_factory=build_agents,
         )
         output = "\n".join(json.dumps(r, ensure_ascii=False) for r in results) + "\n"
@@ -456,6 +458,9 @@ def main() -> None:
     run.add_argument("--output", required=True, help="Local JSONL path or s3://bucket/outputs/key")
     run.add_argument("--run-id", help="UUID; reuse to resume the same input/config")
     run.add_argument("--bundle-uri", help="Optional local/S3 config snapshot from bundle-config")
+    run.add_argument(
+        "--budget-usd", type=Decimal, help="Maximum estimated model spend for this run"
+    )
     run.add_argument("--retry-failed", action="store_true")
     run.add_argument(
         "--full",
@@ -524,6 +529,9 @@ def main() -> None:
     policy.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
     policy.add_argument("--output", type=Path, help="New report path; existing files are preserved")
     args = parser.parse_args()
+    budget = getattr(args, "budget_usd", None)
+    if budget is not None and (not budget.is_finite() or budget <= 0):
+        parser.error("--budget-usd must be a positive finite amount")
     if args.command == "jobs" and args.resume and args.job_id is None:
         parser.error("--resume requires --job-id")
     if args.command == "config" and args.config_command == "save" and args.activate:
