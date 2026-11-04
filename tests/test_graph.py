@@ -12,9 +12,9 @@ from pydantic_ai.models.test import TestModel
 from mel.bundle import Bundle
 from mel.clock import IST
 from mel.config import Settings
+from mel.datasets import parse_insights
 from mel.graph import Dependencies, Select, State, survey_graph
 from mel.models import Review, SurveyDraft
-from mel.worker import parse_insights
 
 PACK = Path("docs/participant-pack")
 

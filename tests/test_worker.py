@@ -8,16 +8,19 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+from memory_configs import MemoryConfigs
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
 from mel.config import Settings
+from mel.datasets import parse_insights
 from mel.models import Review, SurveyDraft
-from mel.worker import DEFAULT_ROW_LIMIT, parse_insights, run_batch
+from mel.worker import DEFAULT_ROW_LIMIT, run_batch
 
 
-class MemoryStore:
+class MemoryStore(MemoryConfigs):
     def __init__(self):
+        super().__init__()
         self.records = {}
         self.number = 0
         self.saved = 0
@@ -26,8 +29,8 @@ class MemoryStore:
     def initialize(self):
         pass
 
-    def start_run(self, run_id, fingerprint, manifest):
-        pass
+    def start_run(self, run_id, fingerprint, manifest, **binding):
+        self.binding = binding
 
     def completed(self, run_id, retry_failed):
         return {
@@ -63,8 +66,11 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "item_id": "q1",
                     "type": "survey-confirm",
-                    "prompt": "Did you do it?",
-                    "options": [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}],
+                    "prompt": "क्या आपने सलाह मानी?",
+                    "options": [
+                        {"value": "yes", "label": "हाँ"},
+                        {"value": "no", "label": "नहीं", "follow_up": "advice_did_not_work"},
+                    ],
                 }
             ],
         }
@@ -181,3 +187,20 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ModelClientCleanupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_closes_distinct_native_clients_once_and_awaits_async_clients(self):
+        from types import SimpleNamespace
+        from unittest.mock import AsyncMock, Mock
+
+        from mel.worker import close_model_clients
+
+        first, second = SimpleNamespace(close=AsyncMock()), SimpleNamespace(close=Mock())
+        agents = [
+            SimpleNamespace(model=SimpleNamespace(client=client))
+            for client in (first, first, second)
+        ]
+        await close_model_clients(*agents)
+        first.close.assert_awaited_once()
+        second.close.assert_called_once()

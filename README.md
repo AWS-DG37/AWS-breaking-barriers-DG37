@@ -2,23 +2,37 @@
 
 Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 
+The [MEL Console](docs/explorer.md) generates surveys, browses saved runs, compares
+configuration versions and inspects recorded decisions and question evidence. Run it
+locally with Docker or deploy the authenticated console to AWS.
+The [interactive architecture walkthrough](docs/architecture-walkthrough.html)
+maps these extensions to the team documents and module boundaries.
+
 - System diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/system-diagram.html
   (source: [docs/system-diagram.html](docs/system-diagram.html), published by GitHub Pages from `main` `/docs`)
-- System diagram: [docs/system-diagram.html](docs/system-diagram.html). Open the file in a browser.
 
-## What this scaffold runs
+## What runs today
 
-A standalone **ECS Fargate batch worker** reads local or S3 JSONL insights, runs a
-**Pydantic Graph** using **Pydantic AI / Bedrock Mantle Responses**, checkpoints each result
-in **RDS PostgreSQL**, and exports JSONL results to S3. Accepted surveys are written
-to a transactional PostgreSQL outbox for the scheduler team.
+The console has **Generate, Runs, Compare and Configure** sections. Its FastAPI API
+uses **RDS PostgreSQL** for datasets, immutable configuration versions, jobs, results
+and request costs. On AWS, **CloudFront/S3** serves the UI, **API Gateway/Lambda**
+serves the API, **Cognito** handles sign-in, and each job starts an **ECS Fargate** task.
+Locally, the API and a polling job runner use the same graph and database.
+
+The worker uses **Pydantic Graph / Pydantic AI** with either **Bedrock Responses
+(Mantle)** or **Bedrock Converse**, selected per agent. The CLI also reads local/S3
+JSONL and exports results. Accepted production surveys are written to a transactional
+PostgreSQL outbox; comparisons and previews never enqueue handoffs.
 
 ```mermaid
 flowchart LR
     S3[S3 insights] --> Select
     Select -->|eligible| Generate
     Select -->|junk / invalid / no action| Skip[Record decision]
-    Generate --> Review
+    Generate --> Schema[Validate survey schema]
+    Schema -->|valid| Review
+    Schema -->|invalid; revisions remain| Generate
+    Schema -->|invalid; revisions exhausted| Reject
     Review -->|revise within limit| Generate
     Review -->|fails gate| Reject[Record rejection]
     Review -->|passes gate| Accept[Survey + schedule handoff]
@@ -42,15 +56,19 @@ The worker never sends a real message or calls production FarmerChat.
 | Revision limit, relevance threshold, output retries, timeouts | `config/agent.yaml`: `graph` |
 | Worker concurrency and optional token pricing | `config/agent.yaml`: `batch` |
 | Survey-writing instructions | `prompts/generate.txt` |
-| Independent review instructions | `prompts/review.txt` |
+| Model review instructions | `prompts/review.txt` |
 | Golden example provenance and held-out cases | `eval/prompt_example_split.json`, `eval/golden_holdout.jsonl` |
 | Survey-or-not rules R1–R8 and their order | `src/mel/decision/__init__.py` (`build_engine`) |
 | Human-call severities (R2), window policy | `config/agent.yaml`: `decision` |
 | Windows, channels, caps, priority | Participant pack `json/rules/rules.json` |
 | Crop-calendar evidence passed to the generator | Participant pack `data/crop_calendar_bihar_rabi.csv` |
 | Actual graph topology / node routing | `src/mel/graph.py` |
-| PostgreSQL layout and scheduler outbox | `migrations/001_initial.sql` |
+| PostgreSQL layout and scheduler outbox | `migrations/` (numbered migrations) |
 | AWS resources | `template.yaml` and `infra/bootstrap.yaml` |
+
+Hosted runs use saved database configuration versions; edit, test, save and activate
+them in **Configure**. YAML supplies the initial Baseline and CLI imports. Changing
+YAML after a version is active does not change that active version.
 
 All YAML paths resolve relative to that YAML file. Prefer copying the baseline
 rules to a versioned config file and changing `rules_path` over editing the pack.
@@ -60,9 +78,12 @@ Environment variables use the `MEL_` prefix; see `.env.example`. There is no aut
 `.env` loading. `MEL_CONFIG_PATH` selects a config file. `MEL_BEDROCK_MODEL_ID` is
 the fallback for model IDs left null in YAML, including uploaded config bundles.
 Explicit generation/review YAML IDs take precedence. The SAM stack supplies the
-fallback from its `BedrockModelId` parameter. For separate cloud models, set the
-IDs in your uploaded config and set `BEDROCK_ALLOWED_MODEL_IDS` to both IDs before
-deploying. The default model is `openai.gpt-6-luna` in `us-east-1` for both agents.
+fallback from its `BedrockModelId` parameter. For separate cloud models, set each
+agent’s `model_id` and `api` (`responses` or `converse`). `BEDROCK_ALLOWED_MODEL_IDS` controls Mantle model names;
+`ConverseModelIds` is the SAM parameter for Converse model/profile IDs. The console's
+allowed-model list is generated from both; see
+[Configure](docs/explorer.md#edit-test-and-save-a-configuration). The default model
+is `openai.gpt-6-luna` in `us-east-1` for both agents.
 Deployed workers use the account's `default` project; the stack creates no Bedrock
 project. Local development also defaults to `default`; `MEL_BEDROCK_PROJECT_ID`
 is available as an optional local override. No model ARN or project ID is needed
@@ -75,7 +96,8 @@ the YAML, prompt texts, rules, calendar, and JSON Schemas into one JSON document
 uv run mel-worker bundle-config --config config/agent.yaml --output outputs/bundle.json
 ```
 
-The launch script does this automatically and uploads the bundle under `config/`.
+The CLI launch script (`scripts/start_run.py`) does this automatically and uploads
+the bundle under `config/`.
 The worker reads it with `--bundle-uri s3://.../config/.../bundle.json`. A config
 bundle is data, not executable graph code. Topology changes require a new image.
 Config snapshots include no database credentials.
@@ -90,8 +112,9 @@ the context named in its question.
 
 The [evaluation split](eval/README.md) reserves these examples and related cases
 from scoring, leaving 138 candidate held-out golden records. The original source
-dataset is unchanged. Prompt and version edits are uploaded by each launcher run
-and do not require rebuilding the worker image. Use a fresh run UUID to test them.
+dataset is unchanged. Prompt and version edits are uploaded by each CLI launcher run
+and do not require rebuilding the worker image. Console runs use their saved database
+version. Use a fresh run UUID to test changed inputs or CLI configuration.
 
 ## Survey decisions and golden-set scoring
 
@@ -111,9 +134,11 @@ order and the first one that declines wins:
 | R8 | (survey) | none of the above |
 
 Send windows come from a `WindowPolicy`, chosen by `decision.window_policy` in
-`config/agent.yaml`. Pack v1 contradicts itself here, so both are implemented:
+`config/agent.yaml`. The supplied golden examples and explicit pack rules disagree
+on timing, so both interpretations are implemented. Digital Green has not confirmed which takes precedence:
 
-- `golden_v1` (default, `GoldenWindowPolicy`): the windows golden set v1 expects.
+- `golden_v1` (default, `GoldenWindowPolicy`): our timing policy inferred from the
+  golden examples, not a separate policy document supplied by Digital Green.
   Day timings open at 09:00 on the first offset day and close at 19:00 on the last,
   ignoring the action window and minimum width, clipped to 31 March. `same_day`
   opens four hours after the advice for four hours, moving to 09:00 next morning
@@ -131,7 +156,10 @@ uv run mel-worker eval-rules --output outputs/eval/rules.json
 With `golden_v1`: 150/150 decisions and rules, and 95/95 windows exact to the
 minute. With `pack`: 149/150 decisions, and most window dates differ.
 `tests/test_decision.py` pins the `golden_v1` result. Ask Digital Green which rule
-is intended; switching is one config line.
+is intended; switch in Configure or YAML. These are regression results: the rules
+were developed using all 150 golden cases, including the holdout. Agreement with
+the examples does not establish compliance with the pack’s written timing rules or
+performance on unseen cases.
 
 To run the real agents on held-out golden insights, extract the insights first.
 Expected answers are never written to the agent input:
@@ -209,8 +237,7 @@ Deploy the image for cloud integration tests after local quality checks pass.
 Requires Python 3.12 or 3.13, uv, Docker, and AWS credentials with access to your
 selected Bedrock model. Verify GPT-6 Luna access in the workshop account before a
 live test. Dependencies pin Pydantic AI and Graph to 1.84.1 because their
-APIs evolve; upgrade both deliberately. No lockfile is included yet: generate and
-commit `uv.lock` with `uv lock` when package-registry access is available.
+APIs evolve; upgrade both deliberately. The branch includes `uv.lock`; use `uv sync --locked` for the pinned environment.
 
 ```bash
 uv sync
@@ -231,7 +258,8 @@ uv run mel-worker run --input tests/fixtures/smoke_insights.jsonl \
 Generation uses real Bedrock calls and incurs model usage. Offline tests do not:
 
 ```bash
-uv run python -m unittest discover -s tests -v
+uv run --locked pytest -q
+node --test src/mel/explorer/static/*.test.mjs
 uv run ruff check src tests scripts
 uv run cfn-lint template.yaml infra/bootstrap.yaml
 sam validate --lint --template-file template.yaml
@@ -245,12 +273,14 @@ and a hold-off survey. Automated worker tests use fake LLM
 responses and an in-memory store; they verify contracts and workflow, not actual
 question quality or Bedrock/PostgreSQL access.
 
-Every run processes only the first **10 nonblank input records** by default, including
+CLI `preview` and `run` process only the first **10 nonblank input records** by default, including
 skipped/rejected records. Add `--full` to process the entire input. This applies to
 both the local worker and the Fargate launcher; there is no `--limit` CLI option.
 Resume selects the same rows and never advances to the next 10. Switching to
 `--full` requires a new run UUID. Revision/output retries still apply, so one
-selected insight can make multiple model calls.
+selected insight can make multiple model calls. Console jobs use their explicit
+dataset selection instead: Generate initially selects 25 insights and comparisons
+are limited to 50 per candidate.
 
 ```bash
 # All rows, explicitly requested:
@@ -261,8 +291,45 @@ uv run mel-worker run --input docs/participant-pack/data/insights.jsonl \
 For only the small offline worker tests:
 
 ```bash
-uv run python -m unittest discover -s tests -p test_worker.py -v
+uv run --locked pytest tests/test_worker.py -q
 ```
+
+### Configuration versions, datasets and jobs
+
+Runs are tied to saved **configuration versions**: the resolved config, prompts, rules,
+crop calendar and schemas, stored immutably in `agent_configs`. Saving an unchanged
+definition returns the existing version. One version is active; Generate uses it
+by default, while comparisons require explicit version selections. Until a version
+is activated, the first request activates `config/agent.yaml` (reusing its version if one was already saved).
+`mel-worker run` also
+saves its configuration as a version, so every run records a `config_id`.
+
+```bash
+uv run mel-worker config save --name "Shorter outcomes" --note "Three options max" --activate
+uv run mel-worker config list
+uv run mel-worker config activate <config_id>
+```
+
+Insight files are imported once into `datasets`/`insights` and queried by farmer,
+crop, concern, resolution type, quality flag and India Standard Time day:
+
+```bash
+uv run mel-worker dataset import --input docs/participant-pack/data/insights.jsonl
+uv run mel-worker dataset list
+```
+
+Long work is a row in `jobs`: `batch` (a dataset selection with one configuration
+version) or `experiment` (the explorer's model comparison). The API only queues jobs;
+a runner executes them, and several runners can share the queue:
+
+```bash
+uv run mel-worker jobs                      # Poll and run jobs until stopped
+uv run mel-worker jobs --once               # Run what is queued, then exit
+uv run mel-worker jobs --job-id <id> --resume  # Reclaim a stopped job; runs resume
+```
+
+A batch job's run ID is derived from its job ID, so a resumed job continues from the
+same checkpoints. Jobs record progress, final status and the error of a failed job.
 
 The worker bootstraps the SQL under a PostgreSQL migration lock. This MVP uses the
 RDS-managed master secret to initialize and access the schema; split migration and
@@ -281,12 +348,11 @@ Two stacks avoid the bootstrap dependency:
 2. The script builds/pushes the Linux AMD64 image, then uses `sam deploy --s3-bucket`
    to deploy `template.yaml`. No `sam build` is needed for ordinary ECS resources.
 
-The main stack creates a VPC, worker subnet with outbound internet access, two
-isolated database subnets, single-AZ encrypted PostgreSQL, a private versioned
-data bucket, an ECS cluster/task definition, IAM roles, and CloudWatch logs.
-Fargate gets a public IP for outbound AWS HTTPS calls; it has **no inbound security
-group rules**. PostgreSQL has no public endpoint and accepts traffic only from
-the worker security group. This avoids NAT gateway costs for the workshop.
+The main stack creates the worker, database, console UI/API and Cognito resources.
+Fargate uses a public IP for outbound AWS HTTPS calls and has no inbound security
+group rules. PostgreSQL is private and accepts traffic from the worker and console
+API security groups. The Lambda API uses a private app subnet with a NAT gateway
+for outbound access. The deployed console therefore includes NAT gateway costs.
 
 GPT-6 Luna uses the Mantle Responses endpoint in `us-east-1`. The deployment
 defaults to that region and model. Set the model by name, such as
@@ -298,12 +364,47 @@ The task signs requests using its AWS role credentials; no OpenAI API key or
 Bedrock bearer API key is required. The pinned Pydantic AI version uses a small
 botocore/HTTPX SigV4 transport in `src/mel/bedrock.py` to call the compatible API.
 
+Requires AWS CLI, SAM CLI and a running Docker engine. From the repository root,
+use credentials for the intended AWS account. For a named profile:
+
+```bash
+export AWS_PROFILE=workshop
+```
+
+If you exported `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` and
+`AWS_SESSION_TOKEN` instead, keep those values exported and clear profile selection:
+
+```bash
+unset AWS_PROFILE AWS_DEFAULT_PROFILE
+```
+
+Then deploy:
+
 ```bash
 export AWS_REGION=us-east-1
 export STACK_NAME=farmerchat-mel
 export BEDROCK_MODEL_ID=openai.gpt-6-luna
+aws sts get-caller-identity
 bash scripts/deploy.sh
 ```
+
+Using the same account, region and stack name updates the existing app. A different
+stack name creates a separate deployment. The script builds/pushes the image,
+deploys the stack, uploads the UI and participant dataset, invalidates CloudFront,
+and prints `ConsoleUrl`. Python/uv are needed for local development and the optional
+CLI checks below, not for `deploy.sh` itself.
+
+Invite a user with the same credentials, region and stack environment:
+
+```bash
+bash scripts/add_console_user.sh teammate@example.org
+```
+
+Cognito emails a temporary password; the user chooses a new password at first sign-in.
+There is no self sign-up. In **Generate**, click **Load participant pack** on a fresh
+database to import the S3 dataset. The Baseline configuration is seeded automatically.
+Custom JSONL ingestion currently uses the API or CLI; there is no file-upload button.
+See [datasets and imports](docs/explorer.md#datasets-and-imports) for the API shape.
 
 The existing `farmerchat-mel-assets` stack is reused. The main `farmerchat-mel`
 stack creates the application infrastructure. SAM configures access
@@ -331,8 +432,10 @@ The model-access check is a live, billable inference request. The automated test
 use an HTTPX mock transport to verify signed request headers, project routing,
 model IDs, reasoning settings, and structured responses without calling AWS.
 With multiple agent models, set `BEDROCK_ALLOWED_MODEL_IDS` to their comma-separated
-IDs. YAML IDs must be Mantle models served under `/openai/v1`; other endpoint
-families need a separate adapter.
+IDs for agents with `api: responses`. Converse is already supported with
+`api: converse`; its allowed model/profile IDs come from the SAM `ConverseModelIds`
+parameter. The UI displays these connections as Mantle and Converse. Both use AWS
+credentials; the app applies its reasoning-effort setting only to Responses agents.
 
 The deployment principal needs permissions to create the stack resources and pass
 the ECS roles. A workshop account may impose restrictions; the templates do not
@@ -395,8 +498,11 @@ Known pack differences are handled explicitly:
 
 The review score is an LLM quality gate, not proof of quality against a validated
 rubric. Use the golden set to evaluate survey/no-survey decisions and MEL reviewers
-to assess question quality. Batch prices are optional blended estimates for both
-agents; use model-specific accounting before comparing costs across different models.
+to assess question quality. Persisted runs have a model-specific request ledger and
+versioned prices. Console runs default to a $5 limit per run (per candidate in a
+comparison); unpriced model/API/region combinations cannot launch with a budget.
+Optional blended YAML token prices remain a legacy estimate, separate from that
+ledger. See [run costs and budgets](docs/explorer.md#run-costs-and-budgets).
 
 Review `issues` are blocking defects. Optional improvements go in `suggestions`
 and do not veto an otherwise usable survey. The 0.8 relevance threshold and all
@@ -427,7 +533,7 @@ Stop running tasks before deleting the main stack. Database deletion takes a fin
 snapshot; data and template buckets and the ECR repository are retained. Delete
 retained objects/images, database snapshots, and retained resources explicitly when
 the workshop is finished. RDS storage/compute, S3 versions, ECR, logs, Fargate,
-public IPv4 addresses, and model calls can incur charges.
+public IPv4 addresses, NAT gateway, CloudFront/API/Lambda, and model calls can incur charges.
 
 References: [OpenAI on Amazon Bedrock](https://developers.openai.com/api/docs/guides/amazon-bedrock),
 [Bedrock projects in CloudFormation](https://docs.aws.amazon.com/bedrock/latest/userguide/cloudformation-projects.html),
@@ -436,3 +542,41 @@ References: [OpenAI on Amazon Bedrock](https://developers.openai.com/api/docs/gu
 [SAM deployment](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html).
 - Survey question patterns: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/survey-question-patterns.html
   (built from the golden set by `python3 scripts/build_question_patterns.py`; rerun it when Digital Green updates the pack)
+
+## Branch-local evaluation reference
+
+This branch retains `dg_agent/models.py`, `dg_agent/checks.py` and the original
+pack/schema/golden tests from the standalone `bb-digital-green` reference.
+`decide()` and `check_survey()` are kept as an independent regression comparator;
+production decisions come from `mel.decision`. The legacy 145/150 golden score
+measures eligibility only, not question quality.
+
+```bash
+uv run --locked pytest -q
+uv run --locked mel-worker eval policy
+```
+
+The retained reference tests and worker both use `docs/participant-pack/`, so a
+fresh checkout needs no extra ignored copy of the schemas. The original
+`data/pack/` directory remains untouched. `eval policy` scores the decision engine on the
+138-case holdout (prompt examples excluded, hashes recorded) alongside the
+independent all-150 reference baseline; `eval-rules` scores it on all 150. It writes a new JSON report under `outputs/eval/`, without model or
+database calls. See the [evaluation guide](eval/README.md) for provenance,
+denominators and timing-policy notes; generated-question quality
+is explicitly unassessed in this first slice.
+
+## Simple Bedrock chat smoke test
+
+The earlier Streamlit app remains available for a direct Nova Lite chat test:
+
+```bash
+uv sync --locked
+uv run streamlit run bedrock_app.py
+```
+
+Open <http://localhost:8501>. This older app hardcodes local AWS profile `digital-green` in
+`us-west-2`, with conversation history, retry and New chat. Each response is capped
+at 512 output tokens. It is independent of the `mel-worker` survey graph and is
+not an HTTP frontend for the Fargate worker. Temporary AWS credentials stay outside
+the repository. Its transport tests are named `tests/test_chat_transport.py` to
+keep them distinct from the worker's `tests/test_bedrock.py`.

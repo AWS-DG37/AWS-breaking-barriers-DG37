@@ -6,6 +6,7 @@ Prompts live in prompts/. Domain timing/channel rules live in rules.json.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,9 +19,11 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from mel.bundle import Bundle
 from mel.config import AgentConfig
 from mel.contracts import Contracts
+from mel.costs import request_scope
 from mel.decision import CropCalendar, Decision, DecisionEngine
 from mel.handoff import handoff
-from mel.models import Outcome, Review
+from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
+from mel.survey_checks import survey_issues
 
 
 @dataclass
@@ -36,6 +39,20 @@ class State:
     review: Review | None = None
     usage: RunUsage = field(default_factory=RunUsage)
     usage_complete: bool = True
+    context: dict | None = None
+    events: list[TraceEvent] = field(default_factory=list)
+    question_evidence: list[QuestionEvidence] = field(default_factory=list)
+
+    def record(self, stage: str, source: str, **data) -> None:
+        self.events.append(
+            TraceEvent(
+                sequence=len(self.events) + 1,
+                stage=stage,
+                source=source,
+                attempt=self.attempts,
+                data=copy.deepcopy(data),
+            )
+        )
 
 
 @dataclass
@@ -62,8 +79,11 @@ class Dependencies:
 
 
 def finish(state: State, status: str, **kwargs) -> End[Outcome]:
+    state.record("decision", "rule", status=status, reason=kwargs.get("reason"))
     return End(
         Outcome(
+            events=state.events,
+            question_evidence=state.question_evidence,
             insight_id=state.insight["insight_id"],
             status=status,
             rule=state.decision.rule if state.decision else None,
@@ -103,7 +123,19 @@ def no_survey(insight: dict, decision: Decision) -> dict | None:
 class Select(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
+        s.record("select", "runtime", insight=s.insight)
+        if s.context is not None:
+            s.record("context", "runtime", context=s.context)
         decision = s.decision = d.decisions.decide(s.insight)
+        s.record(
+            "select",
+            "rule",
+            rule=decision.rule,
+            eligible=decision.survey,
+            reason=decision.reason_code,
+            explanation=decision.explanation,
+            send_window=decision.window.to_contract() if decision.window else None,
+        )
         if not decision.survey:
             contract = no_survey(s.insight, decision)
             if contract is not None:
@@ -125,32 +157,41 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
         s, d = ctx.state, ctx.deps
         s.attempts += 1
         calendar = d.calendar.rows_for(s.insight["asset"]["name"])
-        result = await d.generator.run(
-            json.dumps(
-                {
-                    "insight": s.insight,
-                    "language": s.insight["conversation_language"],
-                    "send_window": s.window,
-                    "crop_calendar": calendar,
-                    "previous_draft": s.survey,
-                    "reviewer_feedback": s.feedback,
-                },
-                ensure_ascii=False,
-            ),
-            usage=s.usage,
-            usage_limits=UsageLimits(
-                request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-            ),
-        )
+        payload = {
+            "insight": s.insight,
+            "language": s.insight["conversation_language"],
+            "send_window": s.window,
+            "crop_calendar": calendar,
+            "previous_draft": s.survey,
+            "reviewer_feedback": s.feedback,
+            "context": s.context,
+        }
+        s.record("generate", "runtime", kind="request", payload=payload)
+        with request_scope(s.insight["insight_id"], s.attempts):
+            result = await d.generator.run(
+                json.dumps(payload, ensure_ascii=False),
+                usage=s.usage,
+                usage_limits=UsageLimits(
+                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                ),
+            )
         check_usage(s, result)
+        s.question_evidence = list(result.output.question_evidence)
         s.survey = {
             "survey_id": s.survey_id,
             "farmer_id": s.insight["farmer_id"],
             "source_insight_ids": [s.insight["insight_id"]],
             "language": s.insight["conversation_language"],
             "send_window": s.window,
-            **result.output.model_dump(exclude_none=True),
+            **result.output.model_dump(exclude_none=True, exclude={"question_evidence"}),
         }
+        s.record(
+            "generate",
+            "model",
+            kind="response",
+            survey=s.survey,
+            question_evidence=[q.model_dump() for q in s.question_evidence],
+        )
         return ReviewSurvey()
 
 
@@ -158,24 +199,32 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
 class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
-        s.feedback = d.contracts.errors("survey", s.survey)
+        # Free code checks first; the paid reviewer only sees drafts that pass them.
+        s.feedback = d.contracts.errors("survey", s.survey) + survey_issues(s.survey)
+        s.record("schema", "schema", target="survey", valid=not s.feedback, errors=s.feedback)
         if not s.feedback:
-            result = await d.reviewer.run(
-                json.dumps(
-                    {
-                        "insight": s.insight,
-                        "survey": s.survey,
-                        "constraints": {"max_questions": 3, "conditional_display_supported": False},
-                    },
-                    ensure_ascii=False,
-                ),
-                usage=s.usage,
-                usage_limits=UsageLimits(
-                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-                ),
-            )
+            s.record("review", "runtime", kind="request", survey=s.survey)
+            with request_scope(s.insight["insight_id"], s.attempts):
+                result = await d.reviewer.run(
+                    json.dumps(
+                        {
+                            "insight": s.insight,
+                            "survey": s.survey,
+                            "constraints": {
+                                "max_questions": 3,
+                                "conditional_display_supported": False,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    usage=s.usage,
+                    usage_limits=UsageLimits(
+                        request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                    ),
+                )
             check_usage(s, result)
             s.review = result.output
+            s.record("review", "model", kind="response", review=s.review.model_dump())
             r = s.review
             if (
                 r.relevance_score >= d.config.graph.relevance_threshold

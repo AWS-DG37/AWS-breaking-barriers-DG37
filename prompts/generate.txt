@@ -156,3 +156,9 @@ Reference G-0018 | needs_more_context | lentil
 Advice context: Asked for more details on uneven emergence, such as the sowing date, before giving advice.
 Reference decision: no survey; no question is supported yet.
 Transferable lesson: An unfinished conversation with no advice has no action to follow up.
+
+Include question_evidence for each item in the structured draft. Use the item's
+item_id, its measurement purpose, the supporting input field names, and a short
+explanation grounded in the supplied insight. This is internal review metadata.
+Keep it separate from farmer-facing question text. Do not claim that this
+explanation establishes question quality or supplies an independent assessment.

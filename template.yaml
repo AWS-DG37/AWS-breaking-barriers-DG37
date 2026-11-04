@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: FarmerChat MEL - standalone Fargate worker, private PostgreSQL, S3 data.
+Description: FarmerChat MEL - Fargate worker, private PostgreSQL, S3 data, and the MEL console (CloudFront UI, Cognito sign-in, Lambda API).
 
 Parameters:
   ContainerImage:
@@ -14,6 +14,12 @@ Parameters:
     Type: CommaDelimitedList
     Default: openai.gpt-6-luna
     Description: Model names allowed for inference; include generation and review IDs.
+  ConverseModelIds:
+    Type: CommaDelimitedList
+    # Each passed a Converse tool-call check in this account (4 Nov 2026). Llama 4 is
+    # left out: it does not support tools, which structured survey output needs.
+    Default: us.anthropic.claude-haiku-5-5,us.anthropic.claude-sonnet-5-5,us.anthropic.claude-opus-5-5,us.amazon.nova-pro-v1:0,us.amazon.nova-2-lite-v1:0,mistral.mistral-large-3-675b-instruct,deepseek.v3.2,global.openai.gpt-5.5
+    Description: Bedrock Converse model or inference-profile IDs saved versions may use.
   DatabaseInstanceClass:
     Type: String
     Default: db.t4g.micro
@@ -198,6 +204,13 @@ Resources:
                 Condition:
                   StringEquals:
                     bedrock-mantle:Model: !Ref BedrockAllowedModelIds
+              # Converse candidates. The console allows only ConverseModelIds; inference
+              # profiles route across regions, so both resource kinds span regions.
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !GetAtt Database.MasterUserSecret.SecretArn
@@ -250,6 +263,277 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-stream-prefix: worker
 
+  # MEL console. The API Lambda runs in a private subnet whose NAT gateway reaches
+  # AWS APIs (Secrets Manager, ECS, the Bedrock catalog); the database stays isolated.
+  AppSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.42.20.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+  AppRoutes:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+  AppRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref AppSubnet
+      RouteTableId: !Ref AppRoutes
+  NatAddress:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties:
+      Domain: vpc
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatAddress.AllocationId
+      SubnetId: !Ref WorkerSubnet
+  AppNatRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRoutes
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  ConsoleApiSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Console API Lambda - no inbound connections.
+      VpcId: !Ref Vpc
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp: 10.42.0.0/16
+  DatabaseFromConsoleApi:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: tcp
+      FromPort: 5432
+      ToPort: 5432
+      SourceSecurityGroupId: !Ref ConsoleApiSecurityGroup
+
+  # Sign-in: administrators create users; there is no self sign-up.
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      AdminCreateUserConfig:
+        AllowAdminCreateUserOnly: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Sub '${AWS::StackName}-${AWS::AccountId}'
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email]
+      SupportedIdentityProviders: [COGNITO]
+      CallbackURLs: [!Sub 'https://${UiDistribution.DomainName}/api/auth/callback']
+      LogoutURLs: [!Sub 'https://${UiDistribution.DomainName}/']
+      AccessTokenValidity: 8
+      IdTokenValidity: 8
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+      PreventUserExistenceErrors: ENABLED
+
+  # The API has no CORS and no gateway authorizer: CloudFront serves it on the console's
+  # own origin, and the application checks the session cookie (src/mel/explorer/auth.py).
+  # Routes are separate resources so the API itself does not depend on the function,
+  # which needs the CloudFront domain for its sign-in redirects.
+  ConsoleApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-console'
+      ProtocolType: HTTP
+  ConsoleApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ConsoleApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ConsoleApiFunction.Arn
+      PayloadFormatVersion: '2.0'
+  ConsoleApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ConsoleApi
+      RouteKey: ANY /api/{proxy+}
+      Target: !Sub 'integrations/${ConsoleApiIntegration}'
+  ConsoleApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ConsoleApi
+      StageName: $default
+      AutoDeploy: true
+  ConsoleApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ConsoleApiFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${ConsoleApi}/*'
+  ConsoleApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      PackageType: Image
+      ImageUri: !Ref ContainerImage
+      ImageConfig:
+        EntryPoint: [mel-explorer]
+        Command: [--host, 0.0.0.0, --port, '8080']
+      Architectures: [x86_64]
+      MemorySize: 1024
+      Timeout: 29
+      VpcConfig:
+        SubnetIds: [!Ref AppSubnet]
+        SecurityGroupIds: [!Ref ConsoleApiSecurityGroup]
+      Environment:
+        Variables:
+          AWS_LWA_PORT: '8080'
+          AWS_LWA_READINESS_CHECK_PATH: /
+          AWS_LWA_ASYNC_INIT: 'true'
+          PYTHONDONTWRITEBYTECODE: '1'
+          MEL_AWS_REGION: !Ref AWS::Region
+          MEL_BEDROCK_MODEL_ID: !Ref BedrockModelId
+          MEL_DATABASE_HOST: !GetAtt Database.Endpoint.Address
+          MEL_DATABASE_NAME: !Ref DatabaseName
+          MEL_DATABASE_SECRET_ARN: !GetAtt Database.MasterUserSecret.SecretArn
+          MEL_DATABASE_SSLMODE: verify-full
+          MEL_DATABASE_SSLROOTCERT: /app/certs/global-bundle.pem
+          MEL_JOB_CLUSTER: !Ref Cluster
+          MEL_JOB_TASK_DEFINITION: !Ref WorkerTask
+          MEL_JOB_SUBNETS: !Sub '["${WorkerSubnet}"]'
+          MEL_JOB_SECURITY_GROUPS: !Sub '["${WorkerSecurityGroup}"]'
+          MEL_AUTH_DOMAIN: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
+          MEL_AUTH_CLIENT_ID: !Ref UserPoolClient
+          MEL_AUTH_ISSUER: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
+          MEL_CONSOLE_URL: !Sub 'https://${UiDistribution.DomainName}'
+          MEL_PACK_URI: !Sub 's3://${DataBucket}/datasets/participant-pack/insights.jsonl'
+          # Saved versions may only use the models the worker's IAM policy allows.
+          MEL_ALLOWED_MODELS: !Sub
+            - '[{"api":"responses","model_id":"${Mantle}"},{"api":"converse","model_id":"${Converse}"}]'
+            - Mantle: !Join ['"},{"api":"responses","model_id":"', !Ref BedrockAllowedModelIds]
+              Converse: !Join ['"},{"api":"converse","model_id":"', !Ref ConverseModelIds]
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action: secretsmanager:GetSecretValue
+              Resource: !GetAtt Database.MasterUserSecret.SecretArn
+            - Effect: Allow
+              Action: ecs:RunTask
+              Resource: !Ref WorkerTask
+              Condition:
+                ArnEquals:
+                  ecs:cluster: !GetAtt Cluster.Arn
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: [!GetAtt ExecutionRole.Arn, !GetAtt WorkerRole.Arn]
+            - Effect: Allow
+              Action: [bedrock:ListFoundationModels, bedrock:ListInferenceProfiles]
+              Resource: '*'
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub '${DataBucket.Arn}/datasets/*'
+
+  # Console origin: the UI from a private bucket, and /api/* from the console API, so
+  # the browser sees one origin (no CORS) and session cookies stay first-party.
+  UiBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  UiOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-ui'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+  UiDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub '${AWS::StackName} MEL console'
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: ui
+            DomainName: !GetAtt UiBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt UiOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+          - Id: api
+            DomainName: !Sub '${ConsoleApi}.execute-api.${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        CacheBehaviors:
+          - PathPattern: /api/*
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            # Managed CachingDisabled and AllViewerExceptHostHeader: nothing is cached,
+            # and cookies, query strings and headers reach the API.
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+        DefaultCacheBehavior:
+          TargetOriginId: ui
+          ViewerProtocolPolicy: redirect-to-https
+          # Managed CachingOptimized; deploy.sh invalidates after each upload.
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+  UiBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref UiBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${UiBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${UiDistribution}'
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource: [!GetAtt UiBucket.Arn, !Sub '${UiBucket.Arn}/*']
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+
 Outputs:
   BedrockModelId:
     Value: !Ref BedrockModelId
@@ -269,3 +553,18 @@ Outputs:
     Value: !GetAtt Database.MasterUserSecret.SecretArn
   WorkerLogGroup:
     Value: !Ref WorkerLogs
+  ConsoleUrl:
+    Value: !Sub 'https://${UiDistribution.DomainName}/'
+  ConsoleApiUrl:
+    Description: Direct API Gateway address; the console uses CloudFront's /api/* instead.
+    Value: !Sub 'https://${ConsoleApi}.execute-api.${AWS::Region}.amazonaws.com'
+  UiBucketName:
+    Value: !Ref UiBucket
+  UiDistributionId:
+    Value: !Ref UiDistribution
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  UserPoolDomainUrl:
+    Value: !Sub 'https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com'
