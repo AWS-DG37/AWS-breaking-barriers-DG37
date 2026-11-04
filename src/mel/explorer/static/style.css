@@ -884,3 +884,22 @@ a.button.primary { background:var(--green); border-color:var(--green); color:whi
 .skeleton-line:last-child { width:75%; }
 @keyframes skeleton-pulse { to { background-position:-200% 0; } }
 @media (prefers-reduced-motion:reduce) { .skeleton-line { animation:none; } }
+
+/* Review lists and improvement loops. */
+.rv-new { margin-top:20px; display:flex; flex-direction:column; gap:8px; }
+.rv-insight { border-top:1px solid var(--line); padding:14px 0; }
+.rv-insight h3 { margin:0 0 4px; font-size:15px; color:var(--purple-ink); }
+.rv-item { border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:10px; }
+.rv-item p { margin:6px 0; }
+.rv-item .cfg-actions { margin:6px 0 0; }
+.rv-survey { margin:0 0 8px; padding-left:20px; }
+.rv-survey li { margin:2px 0; }
+.rv-flag { background:var(--gold-soft); color:var(--gold-ink); border-radius:4px; padding:0 4px; font-weight:600; }
+.rv-meta a { color:inherit; }
+.rv-eval { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:6px 0; }
+.rv-verdict-actions { margin:12px 0 0; }
+.rv-add { margin-top:16px; border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
+.rv-add summary { cursor:pointer; font-weight:600; }
+.rv-add form { display:flex; flex-direction:column; gap:8px; margin-top:10px; }
+.gen-run-actions { display:flex; align-items:center; gap:10px; }
+button.danger { color:var(--error); }

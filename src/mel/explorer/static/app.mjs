@@ -4,6 +4,7 @@ import {signedIn, signOut} from './auth.mjs';
 import {api as globalApi, requestScope} from './api.mjs';
 import {showGenerate, showRuns, leaveGenerate} from './generate.mjs';
 import {showConfigure, leaveConfigure} from './configure.mjs';
+import {showReview, leaveReview, addToReviewList} from './review.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 import {insightJourney} from './journey.mjs';
@@ -145,6 +146,7 @@ function renderSurvey(outcome) {
   survey.items.forEach((q,i)=>tabs.append(el('button',{type:'button',onClick:()=>player.showQuestion(i)},`Question ${i+1}`)));
   panel.append(tabs,el('figure',{class:'phone-stage'},host,el('figcaption',{},'Survey preview · answers are not submitted',el('span',{},'Illustrative field photo, unrelated to the selected case. ',el('a',{href:'https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4',target:'_blank',rel:'noreferrer'},'Abhi Verma / Unsplash')))),analysis);
   updateAnalysis(rehearsalSession.question);
+  if(chosenRun.run_id) panel.append(addToReviewList(chosenRun.run_id,chosenResult.insight_id,survey));
   return panel;
 }
 function renderQuestionAnalysis(outcome,item) {
@@ -258,18 +260,19 @@ let compareLoaded=false;
 let activeTab=null;
 function route() {
   const hash=location.hash || '#generate';
-  const tab=['runs','compare','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
+  const tab=['runs','compare','review','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
   if (tab!==activeTab) {
-    leaveGenerate(); leaveConfigure();
+    leaveGenerate(); leaveConfigure(); leaveReview();
     clearTimeout(poll); ++state.request; requests.renew();
     activeTab=tab;
   }
-  for (const name of ['generate','runs','compare','configure']) $(`${name}-view`).hidden=name!==tab;
+  for (const name of ['generate','runs','compare','review','configure']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
   if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
   if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),hash); return; }
   leaveGenerate();
   if (tab==='configure') { clearTimeout(poll); showConfigure($('configure-view'),hash); return; }
+  if (tab==='review') { clearTimeout(poll); showReview($('review-view'),hash); return; }
   const id=hash.split('/')[1];
   if (!compareLoaded) { compareLoaded=true; bootCompare(id); }
   else if (id) openExperiment(id,id===state.detail?.experiment_id);
@@ -298,7 +301,7 @@ async function bootCompare(id) {
   else $('content').replaceChildren(el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or create a new comparison.'));
 }
 boot();
-window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();});
+window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();});
 $('sign-out').addEventListener('click',signOut);
 // The skip link focuses the visible section; a hash link would switch tabs.
-document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','review-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});

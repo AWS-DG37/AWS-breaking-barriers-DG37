@@ -133,6 +133,11 @@ def resolve_context(insight: dict, profiles: list[dict], calendar: list[dict]) -
     }
 
 
+def candidate_run_id(experiment_id: str, index: int) -> str:
+    """The run that holds one candidate's results in an experiment."""
+    return str(uuid5(NAMESPACE_URL, f"{experiment_id}/{index}"))
+
+
 async def execute_experiment(
     spec: ExperimentSpec,
     *,
@@ -162,7 +167,7 @@ async def execute_experiment(
 
         for index, candidate in enumerate(spec.candidates):
             run_had_errors = False
-            run_id = str(uuid5(NAMESPACE_URL, f"{key}/{index}"))
+            run_id = candidate_run_id(key, index)
             config_id = str(candidate.config_id)
             bundle = await asyncio.to_thread(config_bundle, store, config_id)
             config = bundle.config

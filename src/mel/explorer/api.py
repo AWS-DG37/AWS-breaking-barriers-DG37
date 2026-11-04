@@ -20,7 +20,7 @@ from pydantic import Field, ValidationError, model_validator
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
 from mel.bundle import Bundle, read_bytes
-from mel.config import Settings, StrictModel
+from mel.config import ModelConfig, Settings, StrictModel
 from mel.configs import active_config, config_bundle, validate_definition
 from mel.costs import (
     CapUpdate,
@@ -28,6 +28,7 @@ from mel.costs import (
     NewPrice,
     cap_view,
     check_budget_prices,
+    check_model_prices,
     estimate_run,
     prices,
     report,
@@ -44,6 +45,7 @@ from mel.experiments import (
     validate_assessment,
 )
 from mel.explorer import auth
+from mel.improvement import ImprovementSpec, ReviewComment, review_target
 from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
 from mel.store import Store
@@ -98,6 +100,32 @@ class NewBatchJob(StrictModel):
     dataset_id: UUID
     config_id: UUID | None = None  # Unset uses the active version.
     selection: InsightFilter = InsightFilter()
+
+
+class NewReviewList(StrictModel):
+    name: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class CommentText(StrictModel):
+    comment: str = Field(min_length=1, max_length=4000, pattern=r"\S")
+    should_be: str | None = Field(default=None, max_length=4000)
+
+
+class NewReviewItem(CommentText):
+    """A comment on one generated survey (question_id unset) or one of its questions."""
+
+    run_id: UUID
+    insight_id: str = Field(min_length=1)
+    question_id: str | None = None
+
+
+class NewImprovement(StrictModel):
+    base_config_id: UUID
+    compare_config_id: UUID
+    improver: ModelConfig
+    rounds: int = Field(ge=1, le=5)
+    budget_usd: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 FLOW = {
@@ -275,10 +303,10 @@ def create_app(
                 db.close()
             raise HTTPException(503, f"Database unavailable ({type(error).__name__})") from None
 
-    def queue(db, kind: str, spec: dict) -> dict:
+    def queue(db, kind: str, spec: dict, job_id: str | None = None) -> dict:
         """Create a job and start its runner. A runner that cannot start fails the job,
         so nothing waits in the queue for a task that will never come."""
-        job = db.create_job(str(uuid4()), kind, spec)
+        job = db.create_job(job_id or str(uuid4()), kind, spec)
         try:
             dispatcher(settings, job["job_id"])
         except Exception as error:
@@ -519,6 +547,19 @@ def create_app(
         summary["costs"] = database_call(lambda db: report(db, str(run_id)))
         return summary
 
+    @app.delete("/api/runs/{run_id}")
+    def delete_run(run_id: UUID):
+        def delete(db):
+            try:
+                deleted = db.delete_run(str(run_id))
+            except ValueError as error:
+                raise HTTPException(409, str(error).capitalize()) from None
+            if deleted is None:
+                raise HTTPException(404, "Run not found")
+            return deleted
+
+        return database_call(delete)
+
     @app.get("/api/runs/{run_id}/results")
     def run_results(
         run_id: UUID,
@@ -564,6 +605,131 @@ def create_app(
             return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)
+
+    @app.get("/api/review-lists")
+    def review_lists():
+        return {"lists": database_call(lambda db: db.list_review_lists())}
+
+    @app.post("/api/review-lists", status_code=201)
+    def create_review_list(value: NewReviewList):
+        return database_call(
+            lambda db: db.create_review_list(value.name.strip(), value.description)
+        )
+
+    @app.get("/api/review-lists/{list_id}")
+    def review_list(list_id: UUID):
+        def read(db):
+            record = db.review_list(str(list_id))
+            if record is None:
+                raise HTTPException(404, "Review list not found")
+            return {
+                **record,
+                "items": db.review_items(str(list_id)),
+                "improvements": db.list_improvements(str(list_id)),
+            }
+
+        return database_call(read)
+
+    @app.post("/api/review-lists/{list_id}/items", status_code=201)
+    def add_review_item(list_id: UUID, value: NewReviewItem):
+        """Snapshot the result's insight and survey with the comment. Commenting on the
+        same question again replaces the earlier comment."""
+
+        def add(db):
+            if db.review_list(str(list_id)) is None:
+                raise HTTPException(404, "Review list not found")
+            result = db.run_result(str(value.run_id), value.insight_id)
+            if result is None:
+                raise HTTPException(404, "Result not found")
+            try:
+                survey = review_target(result["outcome"], value.question_id)
+            except ValueError as error:
+                raise HTTPException(422, str(error).capitalize()) from None
+            return db.save_review_item(
+                str(list_id),
+                run_id=str(value.run_id),
+                insight_id=value.insight_id,
+                question_id=value.question_id,
+                comment=value.comment.strip(),
+                should_be=(value.should_be or "").strip() or None,
+                config_id=db.run_summary(str(value.run_id))["config_id"],
+                insight=result["insight"],
+                survey=survey,
+                status=result["status"],
+            )
+
+        return database_call(add)
+
+    @app.put("/api/review-items/{item_id}")
+    def update_review_item(item_id: UUID, value: CommentText):
+        record = database_call(
+            lambda db: db.update_review_item(
+                str(item_id), value.comment.strip(), (value.should_be or "").strip() or None
+            )
+        )
+        if record is None:
+            raise HTTPException(404, "Review item not found")
+        return record
+
+    @app.delete("/api/review-items/{item_id}", status_code=204)
+    def delete_review_item(item_id: UUID):
+        if not database_call(lambda db: db.delete_review_item(str(item_id))):
+            raise HTTPException(404, "Review item not found")
+
+    @app.post("/api/review-lists/{list_id}/improvements", status_code=202)
+    def start_improvement(list_id: UUID, value: NewImprovement):
+        """Queue the improvement loop. The list's comments are frozen into its spec, so
+        later edits to the list do not change a running or finished loop."""
+        if not live_enabled:
+            raise HTTPException(403, "Live execution is disabled")
+        allowed = {(m.model_id, m.api) for m in settings.allowed_models}
+        if allowed and (value.improver.model_id, value.improver.api) not in allowed:
+            raise HTTPException(422, "The improver model is not enabled for this deployment")
+
+        def enqueue(db):
+            if db.review_list(str(list_id)) is None:
+                raise HTTPException(404, "Review list not found")
+            bundles = []
+            for key in (value.base_config_id, value.compare_config_id):
+                record = db.config(str(key))
+                if record is None:
+                    raise HTTPException(422, "Unknown configuration version")
+                bundles.append(runnable(record["definition"]))
+            try:
+                spec = ImprovementSpec(
+                    list_id=list_id,
+                    items=[
+                        {field: item[field] for field in ReviewComment.model_fields}
+                        for item in db.review_items(str(list_id))
+                    ],
+                    **value.model_dump(),
+                )
+            except ValidationError as error:
+                raise HTTPException(422, error.errors()[0]["msg"]) from None
+            if hasattr(db, "connection"):
+                for bundle in bundles:
+                    check_budget_prices(
+                        db, bundle.config, settings.aws_region, value.budget_usd, capped=True
+                    )
+                check_model_prices(
+                    db, (value.improver,), settings.aws_region, value.budget_usd, capped=True
+                )
+            key, job_id = str(uuid4()), str(uuid4())
+            db.create_improvement(key, str(list_id), spec.model_dump(mode="json"), job_id)
+            queue(db, "improve", {"improvement_id": key}, job_id)
+            return {"improvement_id": key, "job_id": job_id, "status": "queued"}
+
+        return database_call(enqueue)
+
+    @app.get("/api/improvements/{improvement_id}")
+    def improvement(improvement_id: UUID):
+        def read(db):
+            record = db.improvement(str(improvement_id))
+            if record is None:
+                raise HTTPException(404, "Improvement not found")
+            return {**record, "job": db.job(record["job_id"])}
+
+        return database_call(read)
 
     @app.get("/api/models")
     async def models():

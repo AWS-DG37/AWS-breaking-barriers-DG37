@@ -3,6 +3,7 @@ from dataclasses import replace
 import boto3
 from botocore.config import Config
 from pydantic_ai import Agent
+from pydantic_ai.models import Model
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
@@ -15,25 +16,27 @@ from mel.config import AgentConfig, ModelConfig
 from mel.models import Review, SurveyDraft
 
 
-def build_agents(
-    config: AgentConfig, region: str, prompts: dict[str, str], project_id: str = "default"
-) -> tuple[Agent, Agent]:
-    responses_provider = None
-    converse_provider = None
+class Providers:
+    """Bedrock clients shared by every agent built from them, created on first use."""
 
-    def agent(model: ModelConfig, output: type, prompt: str) -> Agent:
-        nonlocal responses_provider, converse_provider
+    def __init__(self, region: str, project_id: str = "default"):
+        self.region, self.project_id = region, project_id
+        self.responses = None
+        self.converse = None
+
+    def model(self, model: ModelConfig) -> tuple[Model, dict]:
+        """The native model and its request settings."""
         if not model.model_id:
             raise ValueError("Resolve a Bedrock model ID before constructing an agent")
         settings = {"max_tokens": model.max_tokens}
         if model.temperature is not None:
             settings["temperature"] = model.temperature
         if model.api == "converse":
-            if converse_provider is None:
-                converse_provider = BedrockProvider(
+            if self.converse is None:
+                self.converse = BedrockProvider(
                     bedrock_client=boto3.client(
                         "bedrock-runtime",
-                        region_name=region,
+                        region_name=self.region,
                         config=Config(
                             read_timeout=300,
                             connect_timeout=60,
@@ -41,38 +44,45 @@ def build_agents(
                         ),
                     )
                 )
-            native_model = BedrockConverseModel(
-                model.model_id, provider=converse_provider, profile=converse_profile(model.model_id)
+            return BedrockConverseModel(
+                model.model_id, provider=self.converse, profile=converse_profile(model.model_id)
+            ), settings
+        if self.responses is None:
+            self.responses = OpenAIProvider(
+                openai_client=create_mantle_client(self.region, self.project_id, max_retries=0)
             )
-        else:
-            if responses_provider is None:
-                responses_provider = OpenAIProvider(
-                    openai_client=create_mantle_client(region, project_id, max_retries=0)
-                )
-            settings.update(
-                openai_store=False,
-                openai_reasoning_effort=model.reasoning_effort,
-                openai_send_reasoning_ids=False,
-            )
-            native_model = OpenAIResponsesModel(
-                model.model_id,
-                provider=responses_provider,
-                profile=OpenAIModelProfile(
-                    openai_supports_reasoning=True,
-                    openai_supports_encrypted_reasoning_content=True,
-                ),
-            )
-        return Agent(
-            native_model,
-            output_type=output,
-            instructions=prompt,
-            model_settings=settings,
-            retries=config.graph.agent_output_retries,
+        settings.update(
+            openai_store=False,
+            openai_reasoning_effort=model.reasoning_effort,
+            openai_send_reasoning_ids=False,
         )
+        return OpenAIResponsesModel(
+            model.model_id,
+            provider=self.responses,
+            profile=OpenAIModelProfile(
+                openai_supports_reasoning=True,
+                openai_supports_encrypted_reasoning_content=True,
+            ),
+        ), settings
 
+
+def build_agent(
+    providers: Providers, model: ModelConfig, output: type, prompt: str, retries: int
+) -> Agent:
+    native, settings = providers.model(model)
+    return Agent(
+        native, output_type=output, instructions=prompt, model_settings=settings, retries=retries
+    )
+
+
+def build_agents(
+    config: AgentConfig, region: str, prompts: dict[str, str], project_id: str = "default"
+) -> tuple[Agent, Agent]:
+    providers = Providers(region, project_id)
+    retries = config.graph.agent_output_retries
     return (
-        agent(config.generation, SurveyDraft, prompts["generate"]),
-        agent(config.review, Review, prompts["review"]),
+        build_agent(providers, config.generation, SurveyDraft, prompts["generate"], retries),
+        build_agent(providers, config.review, Review, prompts["review"], retries),
     )
 
 

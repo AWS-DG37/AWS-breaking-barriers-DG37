@@ -19,7 +19,8 @@ from mel.datasets import InsightFilter, index_columns
 from mel.models import Outcome
 
 RunPurpose = Literal["handoff", "experiment"]
-JobKind = Literal["batch", "experiment"]
+JobKind = Literal["batch", "experiment", "improve"]
+ImprovementStatus = Literal["completed", "failed"]
 JobStatus = Literal["queued", "running", "completed", "completed_with_errors", "failed"]
 
 
@@ -661,6 +662,232 @@ class Store:
             ).fetchall()
         return [_job_summary(row) for row in rows]
 
+    def delete_run(self, run_id: str) -> dict | None:
+        """Delete a finished Runs-tab run with its results, request records, pending
+        handoffs and, when nothing else uses it, its batch job. The run's capped spend
+        moves to spend_cap.deleted_usd; review comments keep their snapshot."""
+        from mel.costs import CALL_EXPOSURE
+
+        with self.lock, self.connection.transaction():
+            row = self.connection.execute(
+                "SELECT r.purpose,r.status,r.job_id,j.status FROM generation_runs r "
+                "LEFT JOIN jobs j ON j.job_id=r.job_id WHERE r.run_id=%s FOR UPDATE OF r",
+                (run_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            purpose, status, job_id, job_status = row
+            if purpose != "handoff":
+                raise ValueError("this run belongs to a comparison; it cannot be deleted alone")
+            if job_status in ("queued", "running") or (job_id is None and status == "running"):
+                raise ValueError("the run is still running; wait for it to finish")
+            claimed = self.connection.execute(
+                "SELECT count(*) FROM survey_handoffs WHERE run_id=%s AND status<>'pending'",
+                (run_id,),
+            ).fetchone()[0]
+            if claimed:
+                raise ValueError(
+                    f"{claimed} of its surveys were already taken by the scheduler; "
+                    "the run cannot be deleted"
+                )
+            # Lock order is spend_cap, then run_costs, as in request reservations.
+            self.connection.execute("SELECT 1 FROM spend_cap FOR UPDATE")
+            self.connection.execute(
+                "UPDATE spend_cap SET deleted_usd=deleted_usd+("
+                f"SELECT {CALL_EXPOSURE} FROM model_calls c JOIN run_costs r USING(run_id) "
+                "WHERE r.capped AND c.run_id=%s)",
+                (run_id,),
+            )
+            counts = {
+                table: self.connection.execute(
+                    f"DELETE FROM {table} WHERE run_id=%s", (run_id,)
+                ).rowcount
+                for table in ("model_calls", "run_costs", "survey_handoffs", "insight_results")
+            }
+            detached = self.connection.execute(
+                "SELECT count(*) FROM review_items WHERE run_id=%s", (run_id,)
+            ).fetchone()[0]
+            self.connection.execute("DELETE FROM generation_runs WHERE run_id=%s", (run_id,))
+            job_deleted = job_id is not None and bool(
+                self.connection.execute(
+                    "DELETE FROM jobs WHERE job_id=%s AND kind='batch' AND NOT EXISTS "
+                    "(SELECT 1 FROM generation_runs WHERE job_id=%s)",
+                    (job_id, job_id),
+                ).rowcount
+            )
+        return {
+            "run_id": run_id,
+            "results": counts["insight_results"],
+            "handoffs": counts["survey_handoffs"],
+            "model_calls": counts["model_calls"],
+            "review_comments_kept": detached,
+            "job_deleted": job_deleted,
+        }
+
+    # Review lists. Items snapshot the insight and survey they comment on.
+
+    def create_review_list(self, name: str, description: str | None = None) -> dict:
+        key = str(uuid4())
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO review_lists(list_id,name,description) VALUES (%s,%s,%s)",
+                (key, name, description),
+            )
+        return self.review_list(key)
+
+    def list_review_lists(self) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"{_REVIEW_LIST} GROUP BY l.list_id ORDER BY l.created_at DESC"
+            ).fetchall()
+        return [_review_list_summary(row) for row in rows]
+
+    def review_list(self, list_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                f"{_REVIEW_LIST} WHERE l.list_id=%s GROUP BY l.list_id", (list_id,)
+            ).fetchone()
+        return _review_list_summary(row) if row else None
+
+    def review_items(self, list_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"SELECT {_REVIEW_ITEM_COLUMNS} FROM review_items "
+                "WHERE list_id=%s ORDER BY created_at,item_id",
+                (list_id,),
+            ).fetchall()
+        return [_review_item(row) for row in rows]
+
+    def save_review_item(
+        self,
+        list_id: str,
+        *,
+        run_id: str,
+        insight_id: str,
+        question_id: str | None,
+        comment: str,
+        should_be: str | None,
+        config_id: str | None,
+        insight: dict,
+        survey: dict,
+        status: str,
+    ) -> dict:
+        """Add a comment, or replace the comment already on the same question."""
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            row = self.connection.execute(
+                "INSERT INTO review_items(item_id,list_id,run_id,insight_id,question_id,comment,"
+                "should_be,config_id,insight,survey,status) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (list_id,run_id,insight_id,coalesce(question_id,'')) DO UPDATE "
+                "SET comment=EXCLUDED.comment,should_be=EXCLUDED.should_be,updated_at=now() "
+                f"RETURNING {_REVIEW_ITEM_COLUMNS}",
+                (
+                    str(uuid4()),
+                    list_id,
+                    run_id,
+                    insight_id,
+                    question_id,
+                    comment,
+                    should_be,
+                    config_id,
+                    Jsonb(insight),
+                    Jsonb(survey),
+                    status,
+                ),
+            ).fetchone()
+        return _review_item(row)
+
+    def update_review_item(self, item_id: str, comment: str, should_be: str | None) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "UPDATE review_items SET comment=%s,should_be=%s,updated_at=now() "
+                f"WHERE item_id=%s RETURNING {_REVIEW_ITEM_COLUMNS}",
+                (comment, should_be, item_id),
+            ).fetchone()
+        return _review_item(row) if row else None
+
+    def delete_review_item(self, item_id: str) -> bool:
+        with self.lock:
+            row = self.connection.execute(
+                "DELETE FROM review_items WHERE item_id=%s RETURNING item_id", (item_id,)
+            ).fetchone()
+        return row is not None
+
+    # Improvement loops. Rounds are appended as each finishes, so a page can follow one.
+
+    def create_improvement(
+        self, improvement_id: str, list_id: str, spec: dict, job_id: str
+    ) -> None:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO improvements(improvement_id,list_id,spec,job_id) VALUES (%s,%s,%s,%s)",
+                (improvement_id, list_id, Jsonb(spec), job_id),
+            )
+
+    def start_improvement(self, improvement_id: str) -> None:
+        """Mark it running and clear rounds a stopped attempt left, so a rerun starts over."""
+        with self.lock:
+            self.connection.execute(
+                "UPDATE improvements SET status='running',rounds='[]',verdict=NULL,"
+                "best_config_id=NULL,error=NULL,finished_at=NULL WHERE improvement_id=%s",
+                (improvement_id,),
+            )
+
+    def add_improvement_round(self, improvement_id: str, round_: dict) -> None:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "UPDATE improvements SET rounds=rounds||jsonb_build_array(%s::jsonb) "
+                "WHERE improvement_id=%s",
+                (Jsonb(round_), improvement_id),
+            )
+
+    def finish_improvement(
+        self,
+        improvement_id: str,
+        status: ImprovementStatus,
+        *,
+        verdict: dict | None = None,
+        best_config_id: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "UPDATE improvements SET status=%s,verdict=%s,best_config_id=%s,error=%s,"
+                "finished_at=now() WHERE improvement_id=%s",
+                (
+                    status,
+                    Jsonb(verdict) if verdict is not None else None,
+                    best_config_id,
+                    error,
+                    improvement_id,
+                ),
+            )
+
+    def improvement(self, improvement_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                f"SELECT {_IMPROVEMENT_COLUMNS} FROM improvements WHERE improvement_id=%s",
+                (improvement_id,),
+            ).fetchone()
+        return _improvement(row) if row else None
+
+    def list_improvements(self, list_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"SELECT {_IMPROVEMENT_COLUMNS} FROM improvements "
+                "WHERE list_id=%s ORDER BY created_at DESC",
+                (list_id,),
+            ).fetchall()
+        return [_improvement(row) for row in rows]
+
     def close(self) -> None:
         self.connection.close()
 
@@ -763,5 +990,86 @@ def _job_summary(row) -> dict:
         "error": error,
         "created_at": _iso(created),
         "started_at": _iso(started),
+        "finished_at": _iso(finished),
+    }
+
+
+_REVIEW_LIST = (
+    "SELECT l.list_id,l.name,l.description,l.created_at,count(i.item_id),"
+    "count(DISTINCT (i.run_id,i.insight_id)) FROM review_lists l "
+    "LEFT JOIN review_items i ON i.list_id=l.list_id"
+)
+
+
+def _review_list_summary(row) -> dict:
+    list_id, name, description, created, items, insights = row
+    return {
+        "list_id": str(list_id),
+        "name": name,
+        "description": description,
+        "created_at": _iso(created),
+        "item_count": items,
+        "insight_count": insights,
+    }
+
+
+_REVIEW_ITEM_COLUMNS = (
+    "item_id,list_id,run_id,insight_id,question_id,comment,should_be,config_id,"
+    "insight,survey,status,created_at,updated_at"
+)
+
+
+def _review_item(row) -> dict:
+    (
+        item_id,
+        list_id,
+        run_id,
+        insight_id,
+        question_id,
+        comment,
+        should_be,
+        config_id,
+        insight,
+        survey,
+        status,
+        created,
+        updated,
+    ) = row
+    return {
+        "item_id": str(item_id),
+        "list_id": str(list_id),
+        "run_id": str(run_id) if run_id else None,
+        "insight_id": insight_id,
+        "question_id": question_id,
+        "comment": comment,
+        "should_be": should_be,
+        "config_id": str(config_id) if config_id else None,
+        "insight": insight,
+        "survey": survey,
+        "status": status,
+        "created_at": _iso(created),
+        "updated_at": _iso(updated),
+    }
+
+
+_IMPROVEMENT_COLUMNS = (
+    "improvement_id,list_id,job_id,spec,status,rounds,verdict,best_config_id,error,"
+    "created_at,finished_at"
+)
+
+
+def _improvement(row) -> dict:
+    key, list_id, job_id, spec, status, rounds, verdict, best, error, created, finished = row
+    return {
+        "improvement_id": str(key),
+        "list_id": str(list_id),
+        "job_id": str(job_id),
+        "spec": spec,
+        "status": status,
+        "rounds": rounds,
+        "verdict": verdict,
+        "best_config_id": str(best) if best else None,
+        "error": error,
+        "created_at": _iso(created),
         "finished_at": _iso(finished),
     }

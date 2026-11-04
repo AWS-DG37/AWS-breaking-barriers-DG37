@@ -138,6 +138,41 @@ handoff queue.
 
 A local API defaults to loopback and has no sign-in. Keep it local.
 
+## Review lists and self-improvement
+
+**Review** collects generated surveys people want improved, like a playlist with
+notes. Open any result in Runs, Generate or Compare and use **Add to review list**:
+pick a list (or create one), choose the whole survey or one question, say what is
+wrong and, optionally, what it should have been. The comment stores a snapshot of
+the insight and survey, so the list stays readable after runs change. Commenting on
+the same question of the same result again replaces the earlier comment.
+
+On a list, **Improve a configuration** queues an `improve` job:
+
+1. The **Start from** version (and the **Compare against** version, if different)
+   runs on the list's insights as ordinary experiments. A judge model scores each
+   new survey from 0 to 1 against each comment; only accepted surveys can score.
+2. The improver model reads the incumbent's prompts and settings, every comment
+   with its current result and score, and earlier rounds. It proposes exact-passage
+   prompt edits and changes to model settings, revisions or the relevance threshold.
+   An edit whose text does not occur exactly once, or a change that fails
+   validation, is sent back to the model to fix. Models can change only to entries
+   in `MEL_ALLOWED_MODELS`; with that list empty, models stay as they are.
+3. The proposal becomes a **draft** version (parent: the incumbent), runs on the
+   same insights and is judged. It replaces the incumbent only if it scores higher.
+4. After the requested rounds (1–5), the verdict compares the best version with the
+   comparison version.
+
+Nothing is saved as runnable or activated automatically: open the best draft in
+Configure, inspect its changes, and **Save as version**. The comments are frozen
+into the job when it starts. The score covers only the commented insights and is a
+model's judgement, so the improver can overfit them; run **Compare** on a wider
+selection before activating. The improver and judge share one model, which should
+be at least as capable as the generator. Their calls are charged to the run they
+read (`improve`, `judge` roles), under that run's budget and the console spend cap;
+each evaluation run has the budget entered on the form. Every evaluation opens in
+Compare, and each round's prompt edits are shown as diffs on the improvement page.
+
 ## The hosted console
 
 `scripts/deploy.sh` also deploys the console: one CloudFront distribution serves the
@@ -166,7 +201,11 @@ preview. Runs and Compare share the journey view: it preserves event order,
 revision attempts and early exits. Select a step for saved evidence; missing
 history is never reconstructed. **How the process works** explains the possible
 branches separately. Acceptance includes a handoff payload, not delivery.
-**Compare** is the model comparison described above. **Runs** browses saved production runs without configuring a new run. **Configure**
+**Compare** is the model comparison described above. **Runs** browses saved production runs without configuring a new run. A finished run's
+**Delete run** removes its results, request cost records, pending scheduler handoffs
+and its batch job. Its spend still counts toward the console cap, and review
+comments made from it keep their copy of the survey. Running runs, comparison runs
+and runs whose surveys the scheduler already took cannot be deleted. **Configure**
 edits, tests, saves and activates versions. Schedule and Feedback are not available
 as console sections yet. Hosted, `deploy.sh` copies the pack to the data
 bucket, from which the API imports it (`MEL_PACK_URI`).

@@ -17,7 +17,7 @@ from mel.decision import CropCalendar, DecisionEngine, build_engine
 
 # Subpackages that read or present runs but never change generation. Editing them
 # must not invalidate a resumable run's fingerprint.
-OUTSIDE_GENERATION = frozenset({"evaluation", "experiments", "explorer"})
+OUTSIDE_GENERATION = frozenset({"evaluation", "experiments", "explorer", "improvement"})
 
 # The snapshot keys that define an agent configuration version. Anything else in a
 # snapshot (labels, contexts, selections) describes one run, not the agent.

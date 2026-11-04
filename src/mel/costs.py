@@ -102,9 +102,13 @@ class CapUpdate(StrictModel):
 
 CAP_REFUSED = "Set a console spend cap before running models"
 # Unsettled and unknown calls hold their full reservation, so the cap never under-counts.
+# Deleted runs keep counting through spend_cap.deleted_usd.
+CALL_EXPOSURE = (
+    "coalesce(sum(CASE WHEN c.state='complete' THEN c.estimated_usd "
+    "ELSE greatest(c.reserved_usd,coalesce(c.estimated_usd,0)) END),0)"
+)
 CAP_EXPOSURE = (
-    "SELECT coalesce(sum(CASE WHEN c.state='complete' THEN c.estimated_usd "
-    "ELSE greatest(c.reserved_usd,coalesce(c.estimated_usd,0)) END),0) "
+    f"SELECT (SELECT deleted_usd FROM spend_cap)+{CALL_EXPOSURE} "
     "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped"
 )
 
@@ -524,6 +528,12 @@ def estimate_run(store, config, region, surveys):
 
 
 def check_budget_prices(store, config, region, budget, capped=False):
+    check_model_prices(store, (config.generation, config.review), region, budget, capped)
+
+
+def check_model_prices(store, models, region, budget, capped=False):
+    """Refuse before queuing when a model has no verified price or a single request
+    reservation already exceeds the run budget or the remaining console cap."""
     if budget is None and not capped:
         return
     remaining = None
@@ -533,7 +543,7 @@ def check_budget_prices(store, config, region, budget, capped=False):
             raise CostRefused(CAP_REFUSED)
         remaining = Decimal(cap["remaining_usd"])
     with store.lock:
-        for model in (config.generation, config.review):
+        for model in models:
             _, price = lookup(store, model, region)
             if price is None:
                 raise CostRefused(

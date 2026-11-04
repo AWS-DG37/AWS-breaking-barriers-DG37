@@ -3,6 +3,7 @@ import {el, skeleton} from './dom.mjs';
 import {requestScope} from './api.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {insightJourney} from './journey.mjs';
+import {addToReviewList} from './review.mjs';
 // Generate: pick insights, see what the rules will do, run the agent, inspect results.
 // Generate and the viewing-only Runs section share job, run and result screens.
 // Routes: #<generate|runs>[/job/<id>|/run/<id>[/<insight id>]].
@@ -297,7 +298,8 @@ function runHeader(summary) {
     el('div',{class:'heading'},el('div',{},
       el('h1',{},describeSelection(summary.selection?.selection || {limit:summary.selection?.limit})),
       el('p',{class:'muted small'},`Started ${when(summary.created_at)} · configuration ${summary.config_id?.slice(0,8) || 'not recorded'} · ${number(summary.input_tokens+summary.output_tokens)} tokens`)),
-      el('span',{class:`badge status-${summary.status}`},words(summary.status))),
+      el('div',{class:'gen-run-actions'},el('span',{class:`badge status-${summary.status}`},words(summary.status)),
+        ['running','queued'].includes(summary.status)?null:el('button',{type:'button',class:'quiet danger',onClick:()=>deleteRun(summary)},'Delete run'))),
   ];
   head.push(costSummary(summary.costs,summary.run_id));
   if (summary.status==='running' && total) {
@@ -308,6 +310,22 @@ function runHeader(summary) {
     onClick:()=>{view.run.filter=view.run.filter===key?null:key;view.run.rows=[];renderRun(view.run.id,view.run.insight);}},
     el('span',{},STATUS[key]),el('strong',{},number(counts[key] || 0))))));
   return head;
+}
+
+// Removes the run, its results, request records and pending scheduler handoffs.
+// Its spend still counts against the console cap; review comments keep their copy.
+async function deleteRun(summary) {
+  const counts=summary.counts || {};
+  const results=Object.values(counts).reduce((a,b)=>a+b,0);
+  const accepted=counts.accepted || 0;
+  if (!confirm(`Delete this run? This removes ${number(results)} result${results===1?'':'s'}${accepted?`, including ${number(accepted)} accepted survey${accepted===1?'':'s'} waiting in the scheduler outbox`:''}, and its request cost records. Its spend still counts toward the console cap, and review comments made from it keep their copy. This cannot be undone.`)) return;
+  try {
+    await api(`/runs/${summary.run_id}`,{method:'DELETE'});
+    view.run.id=null;
+    location.hash=`#${view.section}`;
+  } catch(error) {
+    if (error.name!=='AbortError') view.root.querySelector('.gen-run-head')?.prepend(message(`Cannot delete this run. ${error.message}`,true));
+  }
 }
 
 function outcomeText(row) {
@@ -356,18 +374,20 @@ async function showDetail(panel,runId,insightId) {
     if (signal.aborted || view.run.id!==runId || view.run.insight!==insightId) return;
     const {insight,outcome}=record;
     const survey=outcome.survey || outcome.candidate_survey;
+    // The survey comes first; the insight and agent steps explain it below.
     const sections=[
       el('div',{class:'gen-detail-head'},el('h2',{},insightId),statusBadge(record.status)),
       el('p',{class:'small muted'},[insight.asset?.name,words(insight.concern),insight.conversation_language,when(insight.created_at)].filter(Boolean).join(' · ')),
-      el('h3',{},'Farmer asked'),el('p',{},insight.query_summary || 'Not recorded'),
-      el('h3',{},'Advice given'),el('p',{},insight.advice_summary || 'Not recorded'),
-      insightJourney(outcome),
     ];
     if (survey?.items?.length) {
       const host=el('div',{class:'survey-player'});
       mountSurveyPlayer(host,{survey,session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
-      sections.push(el('h3',{},outcome.survey?'Survey preview':'Rejected draft'),el('figure',{class:'phone-stage'},host,el('figcaption',{},'Preview only · answers are not sent')));
+      sections.push(el('h3',{},outcome.survey?'Survey preview':'Rejected draft'),el('figure',{class:'phone-stage'},host,el('figcaption',{},'Preview only · answers are not sent')),addToReviewList(runId,insightId,survey));
     }
+    sections.push(
+      el('h3',{},'Farmer asked'),el('p',{},insight.query_summary || 'Not recorded'),
+      el('h3',{},'Advice given'),el('p',{},insight.advice_summary || 'Not recorded'),
+      insightJourney(outcome));
     sections.push(disclosure('Full insight',insight),disclosure('Full outcome',outcome));
     panel.replaceChildren(...sections);
   } catch(error) {
