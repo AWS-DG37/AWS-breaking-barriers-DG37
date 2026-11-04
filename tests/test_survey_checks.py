@@ -44,6 +44,47 @@ def test_dont_know_answers_are_not_personal_information():
     assert survey_issues(survey) == []
 
 
+def hindi_strings(value):
+    if isinstance(value, str):
+        return [value] if any("ऀ" <= c <= "ॿ" for c in value) else []
+    if isinstance(value, dict):
+        return [s for v in value.values() for s in hindi_strings(v)]
+    if isinstance(value, list):
+        return [s for v in value for s in hindi_strings(v)]
+    return []
+
+
+def test_hindi_terms_match_whole_words_only():
+    survey = load(next(p for p in SCENARIOS if p.name == "survey.hi-IN.json"))
+    survey["items"][0]["prompt"] = "क्या आपने तेल-आधारित कीटनाशक का छिड़काव किया?"
+    assert survey_issues(survey) == []
+    survey["items"][0]["prompt"] = "अपना आधार नंबर बताएं?"
+    assert any("personal" in issue for issue in survey_issues(survey))
+
+
+def test_recorded_demo_hindi_text_raises_no_personal_flags():
+    recorded = json.loads(
+        Path("src/mel/explorer/demo/recorded-run.json").read_text(encoding="utf-8")
+    )
+    texts = hindi_strings(recorded)
+    flagged = [
+        t
+        for t in texts
+        if survey_issues(
+            {
+                "items": [
+                    {
+                        "item_id": "q1",
+                        "prompt": t,
+                        "options": [{"label": "x", "follow_up": "advice_did_not_work"}],
+                    }
+                ]
+            }
+        )
+    ]
+    assert texts and flagged == []
+
+
 def drop_follow_ups(survey):
     for item in survey["items"]:
         item.pop("follow_up_reason", None)

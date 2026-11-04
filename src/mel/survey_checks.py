@@ -20,12 +20,17 @@ DATE = re.compile(
 )
 # ponytail: a keyword list, not a classifier. The model reviewer still judges meaning;
 # upgrade to a reviewed term list per language if false positives appear.
-PERSONAL = re.compile(
-    r"\b(name|phone|mobile|address|aadhaa?r|income|salary|bank|account number)\b"
-    # पता (address) is left out: पता नहीं is the everyday "don't know" answer.
-    r"|नाम|फोन|मोबाइल|आधार|आमदनी|कमाई|बैंक",
-    re.I,
+PERSONAL_EN = re.compile(
+    r"\b(name|phone|mobile|address|aadhaa?r|income|salary|bank|account number)\b", re.I
 )
+# Hindi terms match whole words only: as substrings, आधार (Aadhaar) hits आधारित ("based
+# on"). पता (address) is left out: पता नहीं is the everyday "don't know" answer.
+PERSONAL_HI = frozenset({"नाम", "फोन", "मोबाइल", "आधार", "आमदनी", "कमाई", "बैंक"})
+HINDI_WORD = re.compile(r"[ऀ-ॣ०-ॿ]+")  # Excludes the danda punctuation.
+
+
+def _personal(text: str) -> bool:
+    return bool(PERSONAL_EN.search(text)) or not PERSONAL_HI.isdisjoint(HINDI_WORD.findall(text))
 
 
 def survey_issues(survey: dict) -> list[str]:
@@ -43,7 +48,7 @@ def survey_issues(survey: dict) -> list[str]:
                 issues.append(f"{key}: remove the emoji from the {kind}")
             if DATE.search(text):
                 issues.append(f"{key}: the {kind} names an exact date; use relative timing")
-            if PERSONAL.search(text):
+            if _personal(text):
                 issues.append(f"{key}: the {kind} may ask for personal information: {text[:40]}")
             if language == "en-IN" and DEVANAGARI.search(text):
                 issues.append(f"{key}: the {kind} uses Devanagari in an English survey")
