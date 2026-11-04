@@ -23,7 +23,10 @@ class Element {
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
 }
 globalThis.Node=Element;
-globalThis.document={createElement:tag=>new Element(tag),createTextNode:text=>{const node=new Element('#text');node.textContent=text;return node;}};
+globalThis.document={documentElement:new Element('html'),createElement:tag=>new Element(tag),createTextNode:text=>{const node=new Element('#text');node.textContent=text;return node;}};
+const stored=new Map();
+globalThis.localStorage={getItem:key=>stored.get(key) ?? null,setItem:(key,value)=>stored.set(key,String(value))};
+const handlers={};
 globalThis.location={hash:'',replace(hash){this.hash=hash;}};
 globalThis.window={addEventListener(){}};
 const {showGenerate,leaveGenerate}=await import('./generate.mjs');
@@ -97,7 +100,7 @@ test('selecting insights loads only detail and ignores an older detail response'
 });
 
 test('leaving Compare during a delayed response cannot restart polling or change the route',async()=>{
-  const pending=deferred(), nodes=new Map(), handlers={};
+  const pending=deferred(), nodes=new Map();
   const get=id=>{if(!nodes.has(id)) nodes.set(id,new Element('div'));return nodes.get(id);};
   globalThis.document.getElementById=get;
   globalThis.document.querySelectorAll=()=>[];
@@ -121,6 +124,16 @@ test('leaving Compare during a delayed response cannot restart polling or change
   assert.doesNotMatch(get('content').textContent,/Old comparison/);
   assert.equal(get('notice').textContent,'');
   // No active poll timer remains to keep this test process alive.
+});
+
+test('route applies the section floor to the detail level and drops it on the way back',async()=>{
+  stored.set('mel.detail','1');
+  globalThis.fetch=async url=>response({'/api/configs':{configs:[]},'/api/runs':{runs:[]},'/api/jobs':{jobs:[]}}[url] ?? {});
+  location.hash='#configure';handlers.hashchange();await tick();
+  assert.equal(document.documentElement.dataset.detail,'3');
+  location.hash='#runs';handlers.hashchange();await tick();
+  assert.equal(document.documentElement.dataset.detail,'1');
+  assert.equal(stored.get('mel.detail'),'1');
 });
 
 test('Generate renders while estimates load and a changed selection invalidates the old estimate',async()=>{

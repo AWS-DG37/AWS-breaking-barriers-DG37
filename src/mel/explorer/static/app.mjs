@@ -8,6 +8,7 @@ import {showReview, leaveReview, addToReviewList} from './review.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 import {insightJourney} from './journey.mjs';
+import {apply as applyDetail, mountDial} from './detail.mjs';
 const requests=requestScope();
 const api=(path,options)=>requests.api(path,options);
 
@@ -266,6 +267,7 @@ function route() {
     clearTimeout(poll); ++state.request; requests.renew();
     activeTab=tab;
   }
+  applyDetail(tab);
   for (const name of ['generate','runs','compare','review','configure']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
   if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
@@ -300,6 +302,7 @@ async function bootCompare(id) {
   else if(state.experiments.length) await openExperiment(state.experiments[0].experiment_id);
   else $('content').replaceChildren(el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or create a new comparison.'));
 }
+mountDial($('detail-dial'));
 boot();
 window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();});
 $('sign-out').addEventListener('click',signOut);
