@@ -82,6 +82,7 @@ test('selecting insights loads only detail and ignores an older detail response'
   globalThis.fetch=async url=>{
     requests.push(url);
     if(url==='/api/runs/r') return response({run_id:'r',status:'completed',counts:{skipped:2}});
+    if(url==='/api/runs/r/facets') return response({crops:{},concerns:{},rules:{R1:2}});
     if(url.startsWith('/api/runs/r/results?')) return response({results:['a','b'].map(insight_id=>({insight_id,status:'skipped',insight:{},rule:'R1'}))});
     if(url.endsWith('/a')) return response(await first.promise);
     if(url.endsWith('/b')) return response({insight:{query_summary:'Latest insight'},status:'skipped',outcome:{events:[]}});
@@ -96,6 +97,7 @@ test('selecting insights loads only detail and ignores an older detail response'
   assert.doesNotMatch(root.querySelector('.gen-detail').textContent,/Old insight/);
   assert.equal(requests.filter(url=>url==='/api/runs/r').length,1);
   assert.equal(requests.filter(url=>url.includes('results?')).length,1);
+  assert.equal(requests.filter(url=>url.endsWith('/facets')).length,1);
   leaveGenerate();
 });
 

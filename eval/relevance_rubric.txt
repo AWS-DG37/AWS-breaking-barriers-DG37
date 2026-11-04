@@ -22,6 +22,9 @@ rationale that names the question or option you relied on.
 advice_grounding
   met: every question is about THIS advice: its action, its crop or animal, and its
   problem. A question about an outcome of the problem the advice addressed counts.
+  A short question that asks whether the farmer needs more help ("Do you need more
+  help?" in any language) also counts: the golden references use it, and it offers
+  follow-up on this problem.
   not_met: any question is about a different action, crop, animal or problem, or is
   a generic app or satisfaction question unrelated to the advice.
 

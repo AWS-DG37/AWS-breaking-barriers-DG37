@@ -111,8 +111,8 @@ facts. No mustard example is included. The reviewer must quote the question and
 explain its meaning before declaring a blocking defect; a Yes answer inherits
 the context named in its question.
 
-The [evaluation split](eval/README.md) divides the golden set into a 74-row dev
-half, which holds these examples, and a 76-row test half. No advice text, farmer
+The [evaluation split](eval/README.md) divides the golden set into a 75-row dev
+half, which holds these examples, and a 75-row test half. No advice text, farmer
 or conversation appears in both halves. The original source
 dataset is unchanged. Prompt and version edits are uploaded by each CLI launcher run
 and do not require rebuilding the worker image. Console runs use their saved database
@@ -190,7 +190,7 @@ Prompt history on held-out golden insights (all decisions correct in every run):
 | v6, on Fargate | all 138 | 2.9 (max 4) | 2.0 | 7.0; 8 of 88 rejected |
 | v7: fixed hold-off shape, no step lists, no "X or Y" | all 138, on Fargate | 2.9 (max 3) | 2.0 | 7.7; 5 of 88 rejected |
 
-The v6 and v7 rows used the earlier 138-row holdout. From v9 the test half has 76
+The v6 and v7 rows used the earlier 138-row holdout. From v9 the test half has 75
 rows; compare later runs only with runs on the same split version.
 
 Golden direct-action surveys often add "If not, what stopped you?" shown only after
@@ -564,7 +564,7 @@ uv run --locked mel-worker eval policy
 The retained reference tests and worker both use `docs/participant-pack/`, so a
 fresh checkout needs no extra ignored copy of the schemas. The original
 `data/pack/` directory remains untouched. `eval policy` scores the decision engine on the
-76-case test half (a regression baseline, hashes recorded) alongside the
+75-case test half (a regression baseline, hashes recorded) alongside the
 independent all-150 reference baseline; `eval-rules` scores it on all 150. It writes a new JSON report under `outputs/eval/`, without model or
 database calls. See the [evaluation guide](eval/README.md) for provenance,
 denominators and timing-policy notes; generated-question quality

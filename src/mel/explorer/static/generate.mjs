@@ -20,12 +20,23 @@ export const RULES = {
 const STATUS = {accepted:'Accepted', skipped:'Skipped by rules', rejected:'Rejected by reviewer', failed:'Failed'};
 const FILTERS = [['crop','Crop'],['concern','Concern'],['resolution_type','Resolution'],['quality_flag','Quality']];
 const PAGE = 50;
+// Results table columns; a key makes the heading a sort control. Unsorted is the
+// order results were saved. A third entry is the detail level; none shows always.
+const COLUMNS = [['insight','Insight'],['insight_date','Date'],['outcome','Outcome'],[null,'What happened',2],['relevance','Relevance'],['time','Time',3]];
+const UNSORTED = {sort:'processed',direction:'asc'};
+const RUN_SORTS = [['newest','Newest first'],['oldest','Oldest first'],['most_accepted','Most accepted surveys'],['most_results','Most results']];
+const RUN_STATUSES = ['completed','completed_with_errors','running','failed'];
+// Query string for the set values only; the server rejects unknown parameters.
+const query = values => new URLSearchParams(Object.entries(values).filter(([,v])=>v!==null && v!==undefined && v!=='')).toString();
+const choice = (label,name,value,options,change) => el('label',{},label,el('select',{name,onChange:event=>change(event.target.value)},
+  options.map(([key,text])=>el('option',{value:key,selected:key===value},text))));
 const facetCache=new Map();
 
 const view = {
   root:null, section:'generate', request:0, poll:null, datasets:[], configs:[], activeConfig:null, facets:null,
   form:{dataset:null, config:'', selection:{limit:25}},
-  run:{id:null, filter:null, rows:[], insight:null, hasMore:false},
+  run:{id:null, filter:null, query:{}, facets:null, rows:[], insight:null, hasMore:false},
+  runs:{status:'', config_id:'', sort:'newest'},
 };
 
 const words = value => String(value ?? '').replaceAll('_',' ');
@@ -68,14 +79,22 @@ async function renderRuns() {
   const ticket=++view.request;
   view.root.replaceChildren(skeleton('Loading runs…'));
   try {
-    const [runs,jobs]=await Promise.all([api('/runs'),api('/jobs')]);
+    const [runs,jobs,configs]=await Promise.all([api(`/runs?${query(view.runs)}`),api('/jobs'),api('/configs')]);
     if (ticket!==view.request) return;
     const waiting=jobs.jobs.filter(job=>job.kind==='batch' && job.status==='queued');
+    const set=(key,value)=>{ view.runs[key]=value; renderRuns(); };
+    const filtered=view.runs.status || view.runs.config_id;
+    const tools=el('div',{class:'gen-tools',role:'group','aria-label':'Filter and sort runs'},
+      choice('Status','status',view.runs.status,[['','Any status'],...RUN_STATUSES.map(s=>[s,words(s)])],value=>set('status',value)),
+      choice('Configuration','config_id',view.runs.config_id,[['','Any version'],...configs.configs.map(c=>[c.config_id,configLabel(c)])],value=>set('config_id',value)),
+      choice('Sort','sort',view.runs.sort,RUN_SORTS,value=>set('sort',value)),
+      filtered?el('button',{type:'button',class:'quiet',onClick:()=>{ Object.assign(view.runs,{status:'',config_id:''}); renderRuns(); }},'Clear filters'):null);
     view.root.replaceChildren(
       el('div',{class:'heading'},el('div',{},el('h1',{},'Runs'),
         el('p',{class:'muted'},'Browse saved runs, inspect outcomes and preview surveys.')),
         el('button',{type:'button',class:'secondary',onClick:()=>showRuns(view.root,'#runs')},'Refresh runs')),
-      recent(runs.runs,waiting,'runs'));
+      tools,
+      filtered && !runs.runs.length?el('p',{class:'empty-note'},'No runs match these filters.'):recent(runs.runs,filtered?[]:waiting,'runs'));
   } catch(error) {
     if (ticket===view.request) view.root.replaceChildren(message(`Cannot load runs. ${error.message}`,true),
       el('button',{type:'button',class:'secondary',onClick:()=>showRuns(view.root,'#runs')},'Retry'));
@@ -265,22 +284,23 @@ async function renderRun(runId,insightId) {
   clearTimeout(view.poll);
   const fresh=view.run.id!==runId;
   if (fresh || !view.root.querySelector('.gen-run')) view.root.replaceChildren(skeleton('Loading run and results…'));
-  if (fresh) Object.assign(view.run,{id:runId,filter:null,rows:[],insight:null});
+  if (fresh) Object.assign(view.run,{id:runId,filter:null,query:{...UNSORTED},facets:null,rows:[],insight:null});
   const previousInsight=view.run.insight;
   view.run.insight=insightId;
   try {
-    const status=view.run.filter?`&status=${view.run.filter}`:'';
-    const [summary,page]=await Promise.all([
+    const [summary,page,facets]=await Promise.all([
       api(`/runs/${runId}`),
-      api(`/runs/${runId}/results?limit=${Math.max(PAGE,view.run.rows.length)}${status}`),
+      api(`/runs/${runId}/results?${resultQuery({limit:Math.max(PAGE,view.run.rows.length)})}`),
+      view.run.facets || api(`/runs/${runId}/facets`),
     ]);
+    view.run.facets=facets;
     if (ticket!==view.request) return;
     view.run.hasMore=page.results.length>=Math.max(PAGE,view.run.rows.length);
     view.run.rows=page.results;
     const shell=view.root.querySelector('.gen-run')?.dataset.run===runId?view.root.querySelector('.gen-run'):null;
     const layout=shell || el('div',{class:'gen-run','data-run':runId},
       el('a',{href:`#${view.section}`,class:'back'},'← All runs'),el('div',{class:'gen-run-head'}),
-      el('div',{class:'gen-run-body'},el('div',{class:'gen-results'}),el('aside',{class:'gen-detail'})));
+      el('div',{class:'gen-run-body'},el('div',{class:'gen-results-col'},resultTools(facets),el('div',{class:'gen-results'})),el('aside',{class:'gen-detail'})));
     if (!shell) view.root.replaceChildren(layout);
     layout.querySelector('.gen-run-head').replaceChildren(...runHeader(summary));
     layout.querySelector('.gen-results').replaceChildren(resultsTable(summary,page.results));
@@ -332,30 +352,64 @@ async function deleteRun(summary) {
 }
 
 function outcomeText(row) {
-  if (row.status==='accepted') return `“${row.first_question || 'Survey'}” · ${row.questions} question${row.questions===1?'':'s'}${row.relevance!==null?` · relevance ${row.relevance}`:''}`;
+  if (row.status==='accepted') return `“${row.first_question || 'Survey'}” · ${row.questions} question${row.questions===1?'':'s'}`;
   if (row.status==='skipped') return `${row.rule || ''} ${RULES[row.rule] || words(row.reason)}${row.detail?` · ${row.detail}`:''}`;
   if (row.status==='rejected') return `Reviewer: ${(row.reason || 'did not accept the draft').slice(0,160)}`;
   return `Failed: ${row.reason || 'unknown error'}`;
 }
 
+function resultQuery(page) {
+  return query({...view.run.query,status:view.run.filter,...page});
+}
+
+// Search and facet filters for one run's results. Built once per run so typing
+// keeps focus while the table below refreshes; the outcome tiles filter by status.
+function resultTools(facets) {
+  const refresh=()=>{ view.run.rows=[]; renderRun(view.run.id,view.run.insight); };
+  const set=(key,value)=>{ view.run.query[key]=value || null; refresh(); };
+  const facet=(label,key,counts,describe=words)=>Object.keys(counts).length>1?
+    choice(label,key,view.run.query[key] || '',[['',`Any ${label.toLowerCase()}`],...Object.entries(counts).map(([value,n])=>[value,`${describe(value)} (${number(n)})`])],value=>set(key,value)):null;
+  const search=debounce(value=>set('search',value.trim()),300);
+  return el('div',{class:'gen-tools',role:'group','aria-label':'Filter and sort results'},
+    el('label',{class:'gen-search'},'Search',el('input',{type:'search',name:'search',maxlength:200,value:view.run.query.search || '',
+      placeholder:'Insight ID, farmer question, advice or survey question',onInput:event=>search(event.target.value)})),
+    facet('Crop','crop',facets.crops),
+    facet('Concern','concern',facets.concerns),
+    facet('Rule','rule',facets.rules,rule=>`${rule} · ${RULES[rule] || rule}`));
+}
+
+// A heading cycles its column ascending, descending, then back to unsorted.
+function sortHeading([key,label,level]) {
+  if (!key) return el('th',{scope:'col','data-level':level},label);
+  const q=view.run.query, active=q.sort===key;
+  const next=!active?{sort:key,direction:'asc'}:q.direction==='asc'?{sort:key,direction:'desc'}:UNSORTED;
+  const state=active?(q.direction==='asc'?'ascending':'descending'):'none';
+  return el('th',{scope:'col','aria-sort':state,'data-level':level},el('button',{type:'button',class:'gen-sort',
+    title:next===UNSORTED?'Back to processing order':`Sort by ${label.toLowerCase()}, ${next.direction==='asc'?'ascending':'descending'}`,
+    onClick:()=>{ Object.assign(q,next); view.run.rows=[]; renderRun(view.run.id,view.run.insight); }},
+    label,el('span',{class:'gen-sort-mark','aria-hidden':'true'},active?(q.direction==='asc'?'▲':'▼'):'↕')));
+}
+
 function resultsTable(summary,rows) {
   if (!rows.length) return el('p',{class:'empty-note'},['running','queued'].includes(summary.status)?'Results appear as each insight finishes.':'No results match this filter.');
   const table=el('table',{class:'gen-table'},
-    el('thead',{},el('tr',{},el('th',{},'Insight'),el('th',{},'Outcome'),el('th',{'data-level':2},'What happened'),el('th',{'data-level':3},'Time'))),
+    el('thead',{},el('tr',{},COLUMNS.map(sortHeading))),
     el('tbody',{},rows.map(row=>el('tr',{'aria-selected':String(row.insight_id===view.run.insight),'data-insight':row.insight_id,tabindex:0,
       onClick:()=>{location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;},
       onKeydown:event=>{if(event.key==='Enter') location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;}},
       el('td',{},el('strong',{},row.insight_id),el('span',{class:'small muted'},` ${row.insight.crop || ''}`)),
+      el('td',{class:'small muted'},row.insight.created_at?new Date(row.insight.created_at).toLocaleDateString(undefined,{dateStyle:'medium'}):''),
       el('td',{},statusBadge(row.status)),
       el('td',{class:'gen-what','data-level':2},outcomeText(row)),
+      el('td',{class:'small'},row.relevance ?? ''),
       el('td',{class:'small muted','data-level':3},row.elapsed_seconds?`${row.elapsed_seconds.toFixed(1)} s`:'')))));
   const more=view.run.hasMore?el('button',{type:'button',class:'secondary',onClick:async()=>{
     more.disabled=true;
     const ticket=view.request, runId=view.run.id, filter=view.run.filter;
     try {
-      const status=filter?`&status=${filter}`:'';
-      const next=await api(`/runs/${runId}/results?offset=${view.run.rows.length}&limit=${PAGE}${status}`);
-      if (ticket!==view.request || runId!==view.run.id || filter!==view.run.filter) return;
+      const asked=JSON.stringify(view.run.query);
+      const next=await api(`/runs/${runId}/results?${resultQuery({offset:view.run.rows.length,limit:PAGE})}`);
+      if (ticket!==view.request || runId!==view.run.id || filter!==view.run.filter || asked!==JSON.stringify(view.run.query)) return;
       view.run.hasMore=next.results.length===PAGE;
       view.run.rows=[...view.run.rows,...next.results];
       more.parentElement.replaceWith(resultsTable(summary,view.run.rows));
@@ -393,6 +447,7 @@ async function showDetail(panel,runId,insightId) {
       atLevel(insightJourney(outcome),2));
     sections.push(disclosure('Full insight',insight,{'data-level':3}),disclosure('Full outcome',outcome,{'data-level':3}));
     panel.replaceChildren(...sections);
+    panel.scrollTop=0;  // A newly selected insight opens at its survey preview.
   } catch(error) {
     if (signal.aborted) return;
     panel.replaceChildren(message(`Cannot load this result. ${error.message}`,true));

@@ -114,7 +114,7 @@ The **Send window timing source** choices have different meanings:
 
 The supplied sources disagree; Digital Green has not confirmed precedence. This
 selects runtime timing behavior, not the input dataset or evaluation reference.
-The agreement score compares against the 76 golden test-half cases. Written-rule
+The agreement score compares against the 75 golden test-half cases. Written-rule
 compliance can reduce that score. The rules were developed using all 150 source
 cases, so the score is a regression check, not independent unseen-case evidence.
 
@@ -201,7 +201,12 @@ preview. Runs and Compare share the journey view: it preserves event order,
 revision attempts and early exits. Select a step for saved evidence; missing
 history is never reconstructed. **How the process works** explains the possible
 branches separately. Acceptance includes a handoff payload, not delivery.
-**Compare** is the model comparison described above. **Runs** browses saved production runs without configuring a new run. A finished run's
+**Compare** is the model comparison described above. **Runs** browses saved production runs without configuring a new run. Filter
+the list by status or configuration version and sort it by date or by accepted
+surveys. On a run, search the insight ID, farmer question, advice and survey
+questions, filter by crop, concern or deciding rule (with the outcome tiles for
+status), and click a column heading (insight, date, outcome, relevance, time) to sort
+ascending, then descending, then back to processing order. A finished run's
 **Delete run** removes its results, request cost records, pending scheduler handoffs
 and its batch job. Its spend still counts toward the console cap, and review
 comments made from it keep their copy of the survey. Running runs, comparison runs

@@ -16,7 +16,7 @@ describe what to transfer. References are not complete production survey objects
 the target language, schema, applicability choices, and follow-up semantics still
 come from the current request and contract.
 
-## The split (`golden-dev-test-v1`)
+## The split (`golden-dev-test-v2`)
 
 The 150 golden rows hold only 86 distinct advice texts, and only 95 rows expect a
 survey. A random row split therefore puts copies of the same advice in both halves.
@@ -36,23 +36,23 @@ uneven. Read every rate with its count.
 
 | Count | Dev | Test |
 | --- | --- | --- |
-| Rows | 74 | 76 |
-| Expect a survey | 47 | 48 |
+| Rows | 75 | 75 |
+| Expect a survey | 48 | 47 |
 | R1 / R2 / R3 / R4 | 4 / 4 / 9 / 6 | 10 / 2 / 3 / 4 |
-| R5 / R6 / R7 / R8 | 2 / 1 / 1 / 47 | 8 / 1 / 0 / 48 |
+| R5 / R6 / R7 / R8 | 2 / 1 / 1 / 48 | 8 / 1 / 0 / 47 |
 | direct_action / plan_created | 27 / 9 | 27 / 15 |
-| do_not_act / wait_and_monitor | 6 / 9 | 6 / 3 |
+| do_not_act / wait_and_monitor | 6 / 10 | 6 / 2 |
 | escalate_to_expert / needs_more_context | 3 / 8 | 8 / 5 |
 | generic_information | 12 | 12 |
-| hi-IN / en-IN | 67 / 7 | 74 / 2 |
+| hi-IN / en-IN | 68 / 7 | 73 / 2 |
 
 The only R7 row is in dev, so the test half cannot score R7.
 
 Files:
 
 - `prompt_example_split.json` records the source SHA-256, the method and seed,
-  `dev_ids`, `holdout_ids` (the test half), the counts above, the prompt examples
-  and the prompt example swaps.
+  `dev_ids`, `holdout_ids` (the test half), the counts above, the prompt examples,
+  the prompt example swaps and the tuning exposures.
 - `golden_dev.jsonl` and `golden_holdout.jsonl` hold the dev and test rows in the
   original golden format, with nested `insight` and `expected`. They are
   evaluation data, not worker input. Extract `insight` records with
@@ -70,7 +70,15 @@ The replacements have the same reference questions, so only the advice context
 changed in both prompt files. The config version moved to `luna-golden-patterns-v9`.
 
 Use dev, and only dev, to tune prompts and calibrate judges. Score test, and do not
-tune on it. If a test row is used for tuning, rebuild the split and record why.
+tune on it. If a test row is used for tuning, add it to `TUNING_EXPOSURES` in
+`src/mel/evaluation/split.py` with the reason and rebuild. The builder moves that
+row's whole group to dev, records it under `tuning_exposures`, and the verifier
+refuses a manifest with an exposed row in test.
+
+Version history: `golden-dev-test-v1` had 74 dev and 76 test rows. In v2, test row
+G-0073 moved to dev, because its test judgment prompted relevance rubric v4. It is
+a group of one, so nothing else moved.
+
 Grouping catches exact normalized advice duplicates, not paraphrases.
 Do not use exact question-string matching as the quality metric. Assess advice
 grounding, correct survey decisions, outcome/adoption measurements, follow-up
@@ -90,7 +98,7 @@ Source precedence remains unconfirmed by Digital Green. Changing this setting
 changes runtime windows; it does not select the input dataset or scoring reference.
 
 The console's **Agreement with golden examples** check runs this configuration's
-deterministic decision engine on the 76 test-half cases, without model calls. It
+deterministic decision engine on the 75 test-half cases, without model calls. It
 uses `score_decisions`, rather than the CLI's provenance-rich `score_policy` report.
 A lower exact-window score under `pack` can reflect compliance with the written
 rules. Neither score is an independent generalization estimate: the rules were
@@ -149,10 +157,10 @@ With the checked-in rules, split and `decision.window_policy: golden_v1`:
 
 | Dimension | Test half | Dev half (`eval-rules --golden eval/golden_dev.jsonl`) |
 | --- | --- | --- |
-| Eligibility | 76/76 (48 true positives, 28 true negatives) | 74/74 |
-| Deciding rule | every test rule R1–R6, R8 correct (R7: 0 rows) | 74/74 |
+| Eligibility | 75/75 (47 true positives, 28 true negatives) | 75/75 |
+| Deciding rule | every test rule R1–R6, R8 correct (R7: 0 rows) | 75/75 |
 | Reason agreement | 28/28 | not reported by `eval-rules` |
-| Exact send-window agreement | 48/48 | 47/47 |
+| Exact send-window agreement | 47/47 | 48/48 |
 | Legacy eligibility, all 150 rows | 145/150 | (same source) |
 
 Before the grouped split, the same engine scored 138/138 on the earlier 138-row
@@ -202,6 +210,8 @@ Calibration builds known-answer controls from dev rows only:
 - a generic app question (not grounded, no adoption, no outcome);
 - the own reference plus an injected new-advice question, or plus an injected
   personal-information question;
+- the own reference plus the Hindi "Do you need more help?" question (grounded, no
+  new advice);
 - `crop_or_animal_damaged` on "Worse" and `could_not_reach_expert` on "Could not
   reach" (correct routing, as the generator prompt requires);
   `advice_did_not_work` on "Worse", or any code on "Better" or "All steps" (wrong
@@ -210,22 +220,25 @@ Calibration builds known-answer controls from dev rows only:
 The report gives agreement as counts per criterion and lists each disagreement
 with the judge's rationale. Calibration passes when every criterion reaches 90%
 agreement and no call fails. If it fails, edit the rubric and calibrate again on
-dev. Omit `--max-cases` to use all 47 dev survey rows (up to ten controls each).
+dev. Omit `--max-cases` to use all 48 dev survey rows (up to eleven controls each).
 
 ### Calibration result and improvement iteration, 4 November 2026
 
 Judge `openai.gpt-6-luna` (the config's review model) in `us-east-1`, dev half only.
 Each cell is agreement with the known-answer controls.
 
-| Criterion | v1, 10 rows | v2, 10 rows | v2, 47 rows | v3, 47 rows | v3 + scales, 47 rows |
-| --- | --- | --- | --- | --- | --- |
-| advice_grounding | 30/30 | 30/30 | 141/141 | 141/141 | 141/141 |
-| measures_adoption | **18/20** | 20/20 | 94/94 | 94/94 | 94/94 |
-| measures_outcome | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| follow_up_routing | 18/18 | 17/18 | **87/90** | 90/90 | 142/142 |
-| no_new_advice | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| no_personal_info | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| Calls (failed) | 68 (0) | 68 (0) | 325 (0) | 325 (0) | 377 (0) |
+Columns up to v3 + scales used split v1 (47 dev survey rows); the v4 column uses
+split v2 (48 dev survey rows, G-0073 included).
+
+| Criterion | v1, 10 rows | v2, 10 rows | v2, 47 rows | v3, 47 rows | v3 + scales, 47 rows | v4, 48 rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| advice_grounding | 30/30 | 30/30 | 141/141 | 141/141 | 141/141 | 192/192 |
+| measures_adoption | **18/20** | 20/20 | 94/94 | 94/94 | 94/94 | 96/96 |
+| measures_outcome | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 96/96 |
+| follow_up_routing | 18/18 | 17/18 | **87/90** | 90/90 | 142/142 | 141/142 |
+| no_new_advice | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 144/144 |
+| no_personal_info | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 96/96 |
+| Calls (failed) | 68 (0) | 68 (0) | 325 (0) | 325 (0) | 377 (0) | 430 (0) |
 
 - v1 to v2: the judge said that "Have you seen new drying patches? Yes / No / Did
   not check" does not show the farmer checked (G-0013, G-0015). The rubric now says
@@ -239,10 +252,65 @@ Each cell is agreement with the known-answer controls.
   carry its `follow_up_reason`. Two new controls turn each Better/Same/Worse
   question into a 1-5 scale: routed at 1-2 (correct) and at 1-5 (wrong). The rubric
   did not change.
+- v3 + scales to v4: on the first test-half score, the judge called the Hindi "Do you
+  need more help?" question generic (G-0073), although the golden wait-and-monitor
+  references ask it. Because a test row prompted the change, G-0073 moved to dev
+  (split v2), and the fix was reproduced and checked on dev surveys (see below). The
+  grounding criterion now says that this question counts, and a new control appends
+  it in Hindi. The one v4 miss is debatable: on G-0114 the judge said that step 2 of a
+  1-5 scale is not clearly worse.
 
 The controls are synthetic. Perfect agreement shows that the judge applies the
 rubric to clear cases, not that it agrees with human MEL reviewers on real surveys.
-`relevance_calibration_dev.json` is the v3 + scales report. It records the rubric,
+
+### Real dev surveys
+
+The synthetic controls are English references, so they missed a judgment that only
+real Hindi surveys showed. Real generated surveys for the dev rows (same config,
+same model) give a second dev check:
+
+| Dev surveys | v3 rubric, split v1 (47) | v4 rubric, split v1 (47) | v4 rubric, split v2 (48) |
+| --- | --- | --- | --- |
+| Core pass | 45/47 | 47/47 | 47/48 |
+| advice_grounding | 45/47 | 47/47 | 48/48 |
+| measures_adoption | 47/47 | 47/47 | 47/48 |
+
+In v3, 12 dev surveys asked "क्या आपको और मदद चाहिए?" and the judge marked 2 of
+them not grounded (G-0071, G-0124). In v4 all of them are grounded. The split v2
+miss (G-0066) is judge variance; see below.
+
+### Test-half result
+
+Config `luna-golden-patterns-v9`. The worker's decisions match the golden set on
+every test row: 47 surveys (38 accepted, 9 rejected by the reviewer) and 28 skips
+on the 75 split-v2 test rows.
+
+| Test surveys | v3 + scales, split v1 (48) | v4, split v1 (48) | **v4, split v2 (47)** |
+| --- | --- | --- | --- |
+| Status | held-out, first score | post-inspection | **held-out** |
+| Core pass | 47/48 | 48/48 | **46/47** |
+| advice_grounding | 47/48 | 48/48 | 47/47 |
+| measures_adoption | 48/48 | 48/48 | 46/47 |
+| measures_outcome | 48/48 | 48/48 | 47/47 |
+| follow_up_routing | 42/42 | 42/42 | 41/41 |
+| no_new_advice | 48/48 | 48/48 | 47/47 |
+| no_personal_info | 48/48 | 48/48 | 47/47 |
+
+The held-out number is the last column. The v4 split-v1 score included G-0073, the
+row that prompted v4, so it is a post-inspection result only.
+
+**Judge variance.** The judge does not return the same verdict on every run. G-0056
+(test) and G-0066 (dev) passed adoption in earlier runs and failed it in the split-v2
+runs, with the same survey and rubric. Both advise two actions and the survey asks
+about the main one, as the generator prompt requires. Expect about one flip per 47
+surveys between runs. These cases were not used for tuning. A dev-side fix is to
+run the judge several times per survey and take the majority verdict.
+
+The judge also passes all 9 drafts that the reviewer rejected, so the two models
+apply different bars. Human MEL review of those 9 and of a sample of the rest is
+the next check (issue #9).
+
+`relevance_calibration_dev.json` is the v4 report. It records the rubric,
 split and judge code hashes. A test fails if any of them changes without a new
 calibration, and `--part test` refuses a stale report.
 

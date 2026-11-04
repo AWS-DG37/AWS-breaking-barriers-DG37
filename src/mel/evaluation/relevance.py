@@ -126,6 +126,12 @@ NEW_ADVICE_ITEM = {
     "prompt": "Did you also spray neem oil every week, as we now suggest?",
     "options": [{"label": "Yes"}, {"label": "No"}],
 }
+# The golden wait_and_monitor references ask "Do you need more help?", and the generator
+# writes it in the farmer's language. It asks about this problem, so it is grounded.
+HELP_ITEM = {
+    "prompt": "क्या आपको और मदद चाहिए?",
+    "options": [{"label": "हाँ", "value": "yes"}, {"label": "नहीं", "value": "no"}],
+}
 PERSONAL_ITEM = {
     "prompt": "Please tell us your mobile number and your village name.",
     "options": [{"label": "Will share"}, {"label": "Prefer not"}],
@@ -213,6 +219,9 @@ def controls(rows: list[Mapping]) -> list[dict]:
             # Scales route through a threshold: 1-2 is damage; routing 1-5 sends "much better".
             add("scale_routing", _as_scale(own, 2), {"follow_up_routing": "met"})
             add("scale_wrong_routing", _as_scale(own, 5), {"follow_up_routing": "not_met"})
+        add("help_question", [*own, HELP_ITEM], {
+            "advice_grounding": "met", "no_new_advice": "met",
+        })
         add("injected_new_advice", [*own, NEW_ADVICE_ITEM], {"no_new_advice": "not_met"})
         add("injected_personal_info", [*own, PERSONAL_ITEM], {"no_personal_info": "not_met"})
         add("generic_question", [GENERIC_ITEM], {

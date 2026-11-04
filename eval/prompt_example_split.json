@@ -1,5 +1,5 @@
 {
-  "version": "golden-dev-test-v1",
+  "version": "golden-dev-test-v2",
   "source": "docs/participant-pack/data/golden_set.jsonl",
   "source_sha256": "2a3b29d92d966d72d1f01c357c23a5ed009d6b57a51d326400d4b58b9f6230d7",
   "method": {
@@ -52,6 +52,15 @@
       "reason": "original prompt example fell in the test half"
     }
   ],
+  "tuning_exposures": [
+    {
+      "golden_id": "G-0073",
+      "moved_to_dev": [
+        "G-0073"
+      ],
+      "reason": "its test-half judgment prompted relevance rubric v4 (the Hindi 'Do you need more help?' question)"
+    }
+  ],
   "dev_ids": [
     "G-0001",
     "G-0003",
@@ -85,6 +94,7 @@
     "G-0069",
     "G-0070",
     "G-0071",
+    "G-0073",
     "G-0076",
     "G-0078",
     "G-0080",
@@ -169,7 +179,6 @@
     "G-0065",
     "G-0068",
     "G-0072",
-    "G-0073",
     "G-0074",
     "G-0075",
     "G-0077",
@@ -208,8 +217,8 @@
   ],
   "counts": {
     "dev": {
-      "rows": 74,
-      "survey": 47,
+      "rows": 75,
+      "survey": 48,
       "rule": {
         "R1": 4,
         "R2": 4,
@@ -218,7 +227,7 @@
         "R5": 2,
         "R6": 1,
         "R7": 1,
-        "R8": 47
+        "R8": 48
       },
       "resolution_type": {
         "direct_action": 27,
@@ -227,16 +236,16 @@
         "generic_information": 12,
         "needs_more_context": 8,
         "plan_created": 9,
-        "wait_and_monitor": 9
+        "wait_and_monitor": 10
       },
       "conversation_language": {
         "en-IN": 7,
-        "hi-IN": 67
+        "hi-IN": 68
       }
     },
     "test": {
-      "rows": 76,
-      "survey": 48,
+      "rows": 75,
+      "survey": 47,
       "rule": {
         "R1": 10,
         "R2": 2,
@@ -244,7 +253,7 @@
         "R4": 4,
         "R5": 8,
         "R6": 1,
-        "R8": 48
+        "R8": 47
       },
       "resolution_type": {
         "direct_action": 27,
@@ -253,11 +262,11 @@
         "generic_information": 12,
         "needs_more_context": 5,
         "plan_created": 15,
-        "wait_and_monitor": 3
+        "wait_and_monitor": 2
       },
       "conversation_language": {
         "en-IN": 2,
-        "hi-IN": 74
+        "hi-IN": 73
       }
     }
   },

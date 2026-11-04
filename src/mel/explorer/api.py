@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
+from mel.browse import ResultFilter, RunFilter
 from mel.bundle import Bundle, read_bytes
 from mel.config import ModelConfig, Settings, StrictModel
 from mel.configs import active_config, config_bundle, validate_definition
@@ -100,6 +101,13 @@ class NewBatchJob(StrictModel):
     dataset_id: UUID
     config_id: UUID | None = None  # Unset uses the active version.
     selection: InsightFilter = InsightFilter()
+
+
+class ResultPage(ResultFilter):
+    """A results filter with its page; query parameters are validated as one model."""
+
+    offset: int = Field(default=0, ge=0)
+    limit: int = Field(default=50, ge=1, le=200)
 
 
 class NewReviewList(StrictModel):
@@ -536,8 +544,8 @@ def create_app(
         return database_call(run)
 
     @app.get("/api/runs")
-    def runs():
-        return {"runs": database_call(lambda db: db.list_runs())}
+    def runs(selection: Annotated[RunFilter, Query()]):
+        return {"runs": database_call(lambda db: db.list_runs(selection))}
 
     @app.get("/api/runs/{run_id}")
     def run(run_id: UUID):
@@ -561,14 +569,16 @@ def create_app(
         return database_call(delete)
 
     @app.get("/api/runs/{run_id}/results")
-    def run_results(
-        run_id: UUID,
-        status: Literal["accepted", "skipped", "rejected", "failed"] | None = None,
-        offset: Annotated[int, Query(ge=0)] = 0,
-        limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    ):
-        rows = database_call(lambda db: db.run_results(str(run_id), status, offset, limit))
-        return {"results": rows, "offset": offset, "limit": limit}
+    def run_results(run_id: UUID, page: Annotated[ResultPage, Query()]):
+        selection = ResultFilter.model_validate(page.model_dump(exclude={"offset", "limit"}))
+        rows = database_call(
+            lambda db: db.run_results(str(run_id), selection, page.offset, page.limit)
+        )
+        return {"results": rows, "offset": page.offset, "limit": page.limit}
+
+    @app.get("/api/runs/{run_id}/facets")
+    def run_facets(run_id: UUID):
+        return database_call(lambda db: db.run_facets(str(run_id)))
 
     @app.get("/api/runs/{run_id}/results/{insight_id}")
     def run_result(run_id: UUID, insight_id: str):
