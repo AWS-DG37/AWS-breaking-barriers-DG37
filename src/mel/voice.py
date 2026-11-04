@@ -135,7 +135,7 @@ class S3Clips:
 class ElevenLabs:
     """Text to speech. `key` is called at most once, on the first recording."""
 
-    def __init__(self, key: Callable[[], str], timeout: float = 60) -> None:
+    def __init__(self, key: Callable[[], str], timeout: float = 30) -> None:
         self._key_source, self._key, self.timeout = key, None, timeout
 
     def speak(self, text: str) -> bytes:
@@ -172,24 +172,33 @@ class VoiceRecorder:
     speak: Callable[[str], bytes]
     attempts: int = 3
     wait: Callable[[float], None] = time.sleep
+    # No new step starts after this many seconds, so an outage costs one survey at most
+    # budget_seconds plus one call in progress (ElevenLabs.timeout).
+    budget_seconds: float = 120
+    clock: Callable[[], float] = time.monotonic
 
     def record(self, survey: dict) -> dict:
         needed = survey_clips(survey)
         recorded = []
+        deadline = self.clock() + self.budget_seconds
         for name, text in needed.items():
-            if self._attempt(name, lambda: self.clips.has(name)):
+            if self._attempt(name, deadline, lambda: self.clips.has(name)):
                 continue
-            audio = self._attempt(name, lambda: self.speak(text))
+            audio = self._attempt(name, deadline, lambda: self.speak(text))
             if not audio:
                 raise VoiceRecordingFailed(f"{name}: text to speech returned no audio")
-            self._attempt(name, lambda: self.clips.put(name, audio))
+            self._attempt(name, deadline, lambda: self.clips.put(name, audio))
             recorded.append(name)
         return {"clips": list(needed), "recorded": recorded}
 
-    def _attempt(self, name: str, step: Callable):
+    def _attempt(self, name: str, deadline: float, step: Callable):
         # ponytail: fixed exponential backoff (1 s, 2 s). It also retries errors that a
         # retry cannot fix, such as an expired key; at most `attempts` calls per survey.
         for attempt in range(1, self.attempts + 1):
+            if self.clock() >= deadline:
+                raise VoiceRecordingFailed(
+                    f"{name}: no time left ({self.budget_seconds:g} s budget for one survey)"
+                )
             try:
                 return step()
             except Exception as error:

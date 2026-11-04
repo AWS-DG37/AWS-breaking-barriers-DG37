@@ -69,8 +69,9 @@ class Dependencies:
     decisions: DecisionEngine
     generator: Agent
     reviewer: Agent
-    # Records the speech of accepted surveys. Only runs that hand surveys to the
-    # scheduler set it; previews and comparisons leave it None and record nothing.
+    # Records the speech of accepted surveys (mel.worker.process_insight, after the
+    # graph). Only runs that hand surveys to the scheduler set it; previews and
+    # comparisons leave it None and record nothing.
     voice: VoiceRecorder | VoiceOff | None = None
 
     @classmethod
@@ -123,7 +124,10 @@ def check_usage(state: State, result) -> None:
 
 async def record_voice(state: State, voice: VoiceRecorder | VoiceOff, payload: dict) -> dict:
     """Record the accepted survey's speech. A survey without all of its audio is taken
-    off the voice channel, and the trace and the log say why."""
+    off the voice channel, and the trace and the log say why.
+
+    The worker calls this after the graph, outside its time limit: a slow recording must
+    not fail a survey that can still go out on its other channels."""
     try:
         recording = await asyncio.to_thread(voice.record, state.survey)
     except VoiceRecordingFailed as error:
@@ -284,8 +288,6 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
                     "asks_personal_info": r.asks_personal_info,
                 }
                 payload = handoff(s.survey, s.insight, d.rules, s.now)
-                if d.voice is not None:
-                    payload = await record_voice(s, d.voice, payload)
                 d.contracts.validate("survey", s.survey)
                 d.contracts.validate("schedule_handoff", payload)
                 return finish(s, "accepted", survey=s.survey, handoff=payload)

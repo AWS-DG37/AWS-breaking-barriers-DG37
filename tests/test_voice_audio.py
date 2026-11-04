@@ -9,6 +9,7 @@ import asyncio
 import json
 import shutil
 import subprocess
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from pydantic_ai.models.test import TestModel
 from mel.bundle import Bundle
 from mel.clock import IST
 from mel.config import Settings
-from mel.graph import Dependencies, Select, State, survey_graph
+from mel.graph import Dependencies
 from mel.handoff import without_channel
 from mel.models import Review, SurveyDraft
 from mel.voice import (
@@ -33,6 +34,7 @@ from mel.voice import (
     spoken_lines,
     survey_clips,
 )
+from mel.worker import process_insight
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "docs/voice/survey-session.mjs"
@@ -154,6 +156,20 @@ def test_a_line_that_keeps_failing_raises_and_stores_nothing_for_it():
     assert clips.stored == {}
 
 
+def test_recording_stops_when_its_time_budget_is_spent():
+    now = [0.0]
+
+    def slow(text):
+        now[0] += 50
+        raise RuntimeError("ElevenLabs timed out")
+
+    recorder_ = VoiceRecorder(Clips(), slow, wait=lambda s: None, budget_seconds=90)
+    recorder_.clock = lambda: now[0]
+    with pytest.raises(VoiceRecordingFailed, match="no time left"):
+        recorder_.record(SURVEY)
+    assert now[0] == 100, "the third attempt would start after the budget, so it does not"
+
+
 def test_empty_audio_is_a_failure():
     with pytest.raises(VoiceRecordingFailed, match="no audio"):
         voice(speaker=lambda text: b"").record(SURVEY)
@@ -221,7 +237,13 @@ def test_removing_a_channel_keeps_the_last_wait_open_ended():
     assert channels(handoff) == ["app", "whatsapp", "voice"], "the input is not changed"
 
 
-def accept(voice_recorder):
+class Fixed(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return datetime(2026, 12, 4, 23, tzinfo=IST)
+
+
+def accept(voice_recorder, monkeypatch, timeout_seconds=None):
     """Accept the mustard survey (as tests/test_graph.py drafts it) for a farmer who
     prefers the voice channel."""
     bundle = Bundle.load(Settings(bedrock_model_id="test-model"))
@@ -248,25 +270,27 @@ def accept(voice_recorder):
         Agent(TestModel(custom_output_args=review), output_type=Review),
         voice=voice_recorder,
     )
-    state = State(insight, "S-0000000001", datetime(2026, 12, 4, 23, tzinfo=IST))
-    outcome = asyncio.run(survey_graph.run(Select(), state=state, deps=deps)).output
+    if timeout_seconds is not None:
+        deps.config.graph.insight_timeout_seconds = timeout_seconds
+    monkeypatch.setattr("mel.worker.datetime", Fixed)
+    outcome = asyncio.run(process_insight(insight, "S-0000000001", deps))
     assert outcome.status == "accepted", outcome.reason
     bundle.contracts.validate("schedule_handoff", outcome.handoff)
     events = [e.data for e in outcome.events if e.stage == "voice"]
     return outcome, events
 
 
-def test_an_accepted_survey_is_recorded_and_keeps_the_voice_channel():
+def test_an_accepted_survey_is_recorded_and_keeps_the_voice_channel(monkeypatch):
     clips = Clips()
-    outcome, (event,) = accept(voice(clips))
+    outcome, (event,) = accept(voice(clips), monkeypatch)
     assert channels(outcome.handoff)[0] == "voice"
     assert set(clips.stored) == set(survey_clips(outcome.survey))
     assert event["status"] == "recorded"
     assert event["clips"] == list(survey_clips(outcome.survey))
 
 
-def test_a_survey_without_its_audio_is_not_scheduled_for_voice(caplog):
-    outcome, (event,) = accept(voice(speaker=Speaker(fail=99)))
+def test_a_survey_without_its_audio_is_not_scheduled_for_voice(caplog, monkeypatch):
+    outcome, (event,) = accept(voice(speaker=Speaker(fail=99)), monkeypatch)
     assert "voice" not in channels(outcome.handoff)
     assert outcome.handoff["channel_order"][-1]["wait_hours"] is None
     assert event["status"] == "failed"
@@ -274,14 +298,24 @@ def test_a_survey_without_its_audio_is_not_scheduled_for_voice(caplog):
     assert "voice_recording_failed" in caplog.text
 
 
-def test_unconfigured_recording_is_not_scheduled_for_voice():
-    outcome, (event,) = accept(recorder(Settings()))
+def test_slow_recording_does_not_count_toward_the_survey_time_limit(monkeypatch):
+    def slow(text):
+        time.sleep(0.25)
+        return b"\xff\xf3" * 1000
+
+    outcome, (event,) = accept(voice(speaker=slow), monkeypatch, timeout_seconds=1)
+    assert event["status"] == "recorded"
+    assert channels(outcome.handoff)[0] == "voice"
+
+
+def test_unconfigured_recording_is_not_scheduled_for_voice(monkeypatch):
+    outcome, (event,) = accept(recorder(Settings()), monkeypatch)
     assert "voice" not in channels(outcome.handoff)
     assert "MEL_VOICE_BUCKET" in event["error"]
 
 
-def test_without_a_recorder_the_graph_does_not_touch_the_voice_channel():
+def test_without_a_recorder_the_worker_does_not_touch_the_voice_channel(monkeypatch):
     """Previews and comparisons never schedule a survey, so they record nothing."""
-    outcome, events = accept(None)
+    outcome, events = accept(None, monkeypatch)
     assert channels(outcome.handoff)[0] == "voice"
     assert events == []

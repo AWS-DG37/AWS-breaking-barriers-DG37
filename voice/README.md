@@ -99,6 +99,8 @@ flowchart LR
   key is not set, the worker removes `voice` from the handoff's `channel_order`, writes a
   `voice` trace event with the error, and logs `voice_recording_failed`. The survey still
   goes out on its other channels. A `voice` channel in a handoff means every clip exists.
+- **Bounded time.** Recording runs after the survey's own time limit, with a budget of
+  120 seconds per survey plus one call in progress (30 s). After that it counts as failed.
 - **Play a new survey.** Open the console, sign in, then open
   `https://<console>/voice/index.html?survey=/api/runs/<run_id>/results/<insight_id>/survey`.
 

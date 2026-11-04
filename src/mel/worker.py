@@ -27,7 +27,7 @@ from mel.evaluation import (
     score_decisions,
     score_surveys,
 )
-from mel.graph import Dependencies, Select, State, survey_graph
+from mel.graph import Dependencies, Select, State, record_voice, survey_graph
 from mel.models import Outcome
 from mel.store import Store
 from mel.voice import recorder as voice_recorder
@@ -66,6 +66,11 @@ async def process_insight(
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
+        if deps.voice is not None and outcome.status == "accepted":
+            # Outside the time limit above. VoiceRecorder bounds its own time and, when it
+            # fails, the survey keeps its other channels.
+            outcome.handoff = await record_voice(state, deps.voice, outcome.handoff)
+            outcome.events = list(state.events)
     except CostRefused:
         raise
     except Exception as error:
