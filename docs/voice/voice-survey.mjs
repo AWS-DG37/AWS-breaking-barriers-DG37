@@ -1,6 +1,7 @@
 // Voice survey page: shows one survey.schema.json, reads each question aloud, and records taps.
 // The farmer never speaks. With no tap within REPEAT.timeout_seconds after a question ends,
-// the question plays again, REPEAT.repeats times. Clips come from voice/render_audio.py.
+// the question plays again, REPEAT.repeats times. Clips are in audio/: on GitHub Pages from
+// voice/render_audio.py, in the console from the worker, which records each survey it accepts.
 import {REPEAT, createSession, finishSurvey, markShown, optionsFor, recordAnswer, spokenLines, clipName, voiceLanguage} from './survey-session.mjs';
 
 const SCENARIOS = {

@@ -9,6 +9,7 @@ import hashlib
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -237,7 +238,7 @@ def test_the_page_and_the_recorder_name_a_clip_the_same_way():
 
 
 def test_every_line_the_page_speaks_has_a_recording():
-    subprocess.run(["python3", str(ROOT / "voice/render_audio.py"), "--check"], check=True)
+    subprocess.run([sys.executable, str(ROOT / "voice/render_audio.py"), "--check"], check=True)
     manifest = json.loads((ROOT / "docs/voice/audio/index.json").read_text())
     for name in manifest["clips"]:
         assert (ROOT / "docs/voice/audio" / name).stat().st_size > 1000, name

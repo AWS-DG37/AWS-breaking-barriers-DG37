@@ -19,6 +19,14 @@ CAMPAIGN_ID_NAME = "{campaign_name}"
 FLOW_ID_NAME = "{org_id}/{survey_id}"
 
 
+def without_channel(payload: dict, channel: str) -> dict:
+    """The handoff without one channel. The new last channel waits with no limit.
+    whatsapp is always in the order, so removing voice never leaves it empty."""
+    kept = [dict(entry) for entry in payload["channel_order"] if entry["channel"] != channel]
+    kept[-1]["wait_hours"] = None
+    return {**payload, "channel_order": kept}
+
+
 def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
     p = rules["priority"]
     if (

@@ -30,6 +30,7 @@ from mel.evaluation import (
 from mel.graph import Dependencies, Select, State, survey_graph
 from mel.models import Outcome
 from mel.store import Store
+from mel.voice import recorder as voice_recorder
 
 logger = logging.getLogger("mel")
 
@@ -136,12 +137,14 @@ async def execute_run(
     budget_usd=None,
     retry_failed: bool = False,
     agent_factory=build_agents,
+    voice_factory=voice_recorder,
     on_progress=None,
 ) -> list[dict]:
     """One persisted handoff run: checkpointed, resumable, bounded by batch concurrency.
 
     The CLI `run` command and batch jobs both use this. `on_progress(done, total)` is
-    called from a worker thread after each checkpoint.
+    called from a worker thread after each checkpoint. Each accepted survey gets its
+    speech recorded (`voice_factory`), because these handoffs go to the scheduler.
     """
     config = bundle.config
     generator = reviewer = None
@@ -150,7 +153,7 @@ async def execute_run(
         generator, reviewer = agent_factory(
             config, settings.aws_region, bundle.snapshot["prompts"], settings.bedrock_project_id
         )
-        deps = Dependencies.from_bundle(bundle, generator, reviewer)
+        deps = Dependencies.from_bundle(bundle, generator, reviewer, voice_factory(settings))
         store.start_run(
             run_id,
             bundle.fingerprint(fingerprint_body, settings.aws_region),
