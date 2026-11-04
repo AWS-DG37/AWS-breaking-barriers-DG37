@@ -148,6 +148,9 @@ def test_voice_demo_reacts_to_english_answers_and_switches_back_after_completion
     assert page.evaluate("window.spoken.at(-1).lang") == "en-IN"
     record = json.loads(page.locator("#record").inner_text())
     assert record["status"] == "negative_outcome"
+    assert record["language"] == "hi-IN"
+    assert record["items"][0]["raw_input"] == "कीटनाशक नहीं मिला"
+    assert record["items"][1]["raw_input"] == "बढ़ गए"
     assert record["follow_up_reasons"] == ["could_not_get_input", "crop_or_animal_damaged"]
     page.get_by_role("checkbox", name="English text", exact=True).uncheck()
     expect(page.locator("#card h2")).to_have_text("धन्यवाद")

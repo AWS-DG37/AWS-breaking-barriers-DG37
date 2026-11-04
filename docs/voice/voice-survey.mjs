@@ -206,7 +206,8 @@ async function finish() {
 function tap(option) {
   silence();
   const item = currentItem();
-  recordAnswer(state.session, {item_id: item.item_id, value: option.value, heard: option.label});
+  const original = optionsFor(state.survey.items[state.index]).find(o => o.value === option.value);
+  recordAnswer(state.session, {item_id: item.item_id, value: option.value, heard: original.label});
   addEvent(`Tapped ${item.item_id} = ${option.value}`);
   if (state.voiceOn) Object.assign(state, {mode: 'answered', caption: ''});
   render();
