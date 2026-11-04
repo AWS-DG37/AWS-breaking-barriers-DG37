@@ -184,6 +184,24 @@ Failed calls are excluded from FP/FN denominators and independently fail the gat
 exceed the fixed limit of 2, or any reviewer call fails; `passed` is its inverse.
 The gate recommends the separate narrow check; calibration does not build it.
 
+### Result (2026-11-04)
+
+`privacy_calibration_dev.json`: review model `openai.gpt-6-luna` in `us-east-1`, all 47
+dev survey rows, 188 controls, 0 failed calls, 189 requests, 506,100 input and 46,405
+output tokens.
+
+| | English | Hindi | All |
+|---|---|---|---|
+| Missed personal questions (false negatives) | 0/47 | 0/47 | 0/94 |
+| Flagged clean surveys (false positives) | 0/47 | 0/47 | 0/94 |
+
+Hindi traps: पता नहीं 0/16, आधारित 0/16, फ़ोन किया 0/15 false positives. The gate does
+not call for the narrow check. The controls are synthetic and the eight personal
+questions are explicit. A perfect score shows that the reviewer applies the definition
+to clear cases. It does not show how it handles subtle or indirect wording, and it does
+not replace Hindi-speaking MEL review. A test fails if the review prompt, split or
+scorer changes without a new report.
+
 ## Relevance judge (calls Bedrock)
 
 The judge reads saved worker results. It does not run the worker and adds no

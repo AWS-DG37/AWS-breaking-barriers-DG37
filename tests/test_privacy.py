@@ -346,3 +346,11 @@ def test_cli_uses_production_review_config_counts_usage_and_preserves_reports(
         worker.main()
     assert error.value.code == 1
     assert output.read_bytes() == original
+
+
+def test_committed_dev_report_matches_current_prompt_split_and_scorer():
+    report = json.loads((ROOT / "eval/privacy_calibration_dev.json").read_text())
+    current = privacy._provenance(SPLIT, PROMPT, report["review_model"])
+    assert {key: report[key] for key in current} == current
+    assert report["passed"] and report["failed_calls"] == 0
+    assert report["controls"] == 4 * report["dev_survey_rows"] == 188
