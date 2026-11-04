@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#007A27">
+  <title>FarmerChat Voice Survey</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600&display=swap">
+  <link rel="stylesheet" href="voice-survey.css">
+  <script type="module" src="voice-survey.mjs"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand"><span>Digital Green</span><strong>FarmerChat</strong> <small>Voice survey</small></div>
+    <p class="tag">Team 37 demo. Synthetic farmers. No answer leaves this page.</p>
+  </header>
+  <main class="layout">
+    <section class="intro" aria-labelledby="intro-title">
+      <h1 id="intro-title">The farmer hears the survey, and still sees it.</h1>
+      <p>Pick a survey that the MEL agent wrote (<code>survey.schema.json</code>). The page reads each question and its choices aloud in an ElevenLabs voice, and the farmer taps the answer. With no tap within 8 seconds, the question plays once more. The answer record follows <code>response.schema.json</code>.</p>
+      <div class="controls">
+        <label>Survey <select id="scenario"></select></label>
+        <fieldset class="lang"><legend>Language</legend>
+          <label><input type="radio" name="lang" value="en" checked> English</label>
+          <label><input type="radio" name="lang" value="hi"> हिन्दी</label>
+        </fieldset>
+      </div>
+      <p id="provenance" class="provenance"></p>
+    </section>
+    <section class="phone" aria-label="FarmerChat survey">
+      <div class="phone-top"><strong>FarmerChat</strong><span id="progress"></span></div>
+      <div id="card" class="card" aria-live="polite"></div>
+      <div class="voice-bar">
+        <button id="voice" class="mic" type="button">Read aloud</button>
+        <div class="voice-state"><span id="status" class="status"></span><span id="caption" class="caption"></span></div>
+      </div>
+    </section>
+    <section class="evidence" aria-label="What the system records">
+      <h2>Voice log</h2>
+      <ol id="log" class="transcript"><li class="muted">Each reading, repeat and tap appears here.</li></ol>
+      <h2>Answer record <span id="record-status" class="pill"></span></h2>
+      <pre id="record" class="record"></pre>
+    </section>
+  </main>
+  <p id="error" class="error" role="alert" hidden></p>
+</body>
+</html>

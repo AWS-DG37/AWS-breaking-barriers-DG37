@@ -1,0 +1,154 @@
+{
+  "voice_id": "OwA6IqdLakQOd19pSLOn",
+  "model_id": "eleven_multilingual_v2",
+  "clips": {
+    "0ee7e5fb03cdca3f.mp3": {
+      "language": "hi-IN",
+      "text": "धन्यवाद। हमने यह नोट कर लिया है। FarmerChat आपसे इस बारे में फिर बात करेगा।"
+    },
+    "13250fdd7a06af2c.mp3": {
+      "language": "hi-IN",
+      "text": "क्या आपने गेहूँ में पहली सिंचाई कर दी? हाँ, समय पर। हाँ, पर देर से। या अभी नहीं।"
+    },
+    "13a4643c75c4eb88.mp3": {
+      "language": "hi-IN",
+      "text": "धन्यवाद। आपके जवाब से हम और अच्छी सलाह दे पाएँगे।"
+    },
+    "1a1231eb0f06bfbc.mp3": {
+      "language": "hi-IN",
+      "text": "क्या आपने पिछले 3 दिनों में आलू के पत्ते देखे? हाँ। या नहीं।"
+    },
+    "1f90fe641a1c971c.mp3": {
+      "language": "en-IN",
+      "text": "How many of these insects are on the plants now? Almost none. Fewer than before. Same as before. Or More than before."
+    },
+    "251c23a9bf02a6d7.mp3": {
+      "language": "en-IN",
+      "text": "How is your cow now? Better. Same as before. Or Worse."
+    },
+    "31849130f6a4e6a3.mp3": {
+      "language": "en-IN",
+      "text": "Did a vet see your cow? Yes. Or No."
+    },
+    "330f10fc3b0f77c1.mp3": {
+      "language": "en-IN",
+      "text": "Thank you. Your answers help us give better advice."
+    },
+    "3836d8bd24f4d12b.mp3": {
+      "language": "en-IN",
+      "text": "Was it easy to get the spray? Yes, easily. Yes, with difficulty. Or Could not get it."
+    },
+    "487f73083a618280.mp3": {
+      "language": "hi-IN",
+      "text": "क्या छिड़काव की दवा आसानी से मिल गई? हाँ, आसानी से। हाँ, मुश्किल से। या नहीं मिली।"
+    },
+    "499a3049b5a3ffef.mp3": {
+      "language": "hi-IN",
+      "text": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान। 1 से 5 तक कोई नंबर छूएँ।"
+    },
+    "4baefa4843a5b09a.mp3": {
+      "language": "en-IN",
+      "text": "How useful was the advice? 1 means not useful, 5 means very useful. Tap a number from 1 to 5."
+    },
+    "5a7b5b49b885d370.mp3": {
+      "language": "en-IN",
+      "text": "Did you check the potato leaves in the last 3 days? Yes. Or No."
+    },
+    "5addf06e8debe9d3.mp3": {
+      "language": "hi-IN",
+      "text": "आपकी गेहूँ की फसल अब कैसी दिख रही है? हरी और स्वस्थ। कुछ पत्ते पीले। या बहुत पत्ते पीले।"
+    },
+    "5c75b9b3ab7ce445.mp3": {
+      "language": "en-IN",
+      "text": "Did you give the first irrigation to your wheat? Yes, on time. Yes, but later. Or Not yet."
+    },
+    "5f5811928c11b014.mp3": {
+      "language": "hi-IN",
+      "text": "नमस्ते, यह FarmerChat है। आपको मिली सलाह के बारे में 2 छोटे सवाल हैं। स्क्रीन पर अपना जवाब छूएँ।"
+    },
+    "67fc73a996f38d94.mp3": {
+      "language": "hi-IN",
+      "text": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया? हाँ। या नहीं।"
+    },
+    "79a0ff0503078c8c.mp3": {
+      "language": "en-IN",
+      "text": "Which wheat seed did you sow? The suggested type. A different type. Or Not sown yet."
+    },
+    "7ade7542e2dc2cc5.mp3": {
+      "language": "en-IN",
+      "text": "How does your wheat crop look now? Green and healthy. Some yellow leaves. Or Many yellow leaves."
+    },
+    "7bfdfc49dbe4606f.mp3": {
+      "language": "hi-IN",
+      "text": "क्या आपने अनुशंसित कीटनाशक का छिड़काव किया? हाँ। अभी नहीं। नहीं। या कीटनाशक नहीं मिला।"
+    },
+    "845d1c9601a808d0.mp3": {
+      "language": "hi-IN",
+      "text": "सलाह कितनी काम की रही? 1 मतलब बिल्कुल नहीं, 5 मतलब बहुत काम की। 1 से 5 तक कोई नंबर छूएँ।"
+    },
+    "85ea59e424cbdd67.mp3": {
+      "language": "hi-IN",
+      "text": "क्या पशु डॉक्टर ने आपकी गाय को देखा? हाँ। या नहीं।"
+    },
+    "88f5783d1011b7e9.mp3": {
+      "language": "hi-IN",
+      "text": "भूरे धब्बों का अब क्या हाल है? नए धब्बे नहीं। पहले जैसे ही। फैल रहे हैं। या सफ़ेद फफूंद दिखी।"
+    },
+    "96c8abaf0db6ddca.mp3": {
+      "language": "en-IN",
+      "text": "Hello, this is FarmerChat. I have 3 short questions about the advice you got. Tap your answer on the screen."
+    },
+    "9ca6fdb56a40e4a2.mp3": {
+      "language": "hi-IN",
+      "text": "आपने छिड़काव करते समय किस समय पर किया? शाम को। दिन में। सुबह। या छिड़काव नहीं किया।"
+    },
+    "a2ab3d1cd1a30a75.mp3": {
+      "language": "en-IN",
+      "text": "What is happening to the brown spots? No new spots. Same as before. Spreading. Or White growth seen."
+    },
+    "a6be909adfbbe5be.mp3": {
+      "language": "en-IN",
+      "text": "Hello, this is FarmerChat. I have 2 short questions about the advice you got. Tap your answer on the screen."
+    },
+    "c4eed5f4cfad0fbd.mp3": {
+      "language": "hi-IN",
+      "text": "क्या आपने अनुशंसित कीटनाशक का छिड़काव किया? हाँ। अभी नहीं। या नहीं।"
+    },
+    "c6d8e9e4045a3d68.mp3": {
+      "language": "hi-IN",
+      "text": "अब पौधों पर ये कीड़े कितने हैं? लगभग नहीं। पहले से कम। पहले जितने। या पहले से ज़्यादा।"
+    },
+    "c8b3e497e1f81146.mp3": {
+      "language": "hi-IN",
+      "text": "सरसों की फूलों और तनों पर छोटी हरी कीड़े (माहू) कैसी हैं? ठीक हो गई। जैसी ही है। और बढ़ गई। नहीं जानता/जानती। या छिड़काव नहीं किया।"
+    },
+    "cc0c6afe7825f7a9.mp3": {
+      "language": "en-IN",
+      "text": "How easy was it to find good seed? 1 means very hard, 5 means very easy. Tap a number from 1 to 5."
+    },
+    "d94c43a49cb88973.mp3": {
+      "language": "hi-IN",
+      "text": "नमस्ते, यह FarmerChat है। आपको मिली सलाह के बारे में 3 छोटे सवाल हैं। स्क्रीन पर अपना जवाब छूएँ।"
+    },
+    "ec95357be65e9f0e.mp3": {
+      "language": "hi-IN",
+      "text": "सरसों के फूलों और तनों पर हरे कीड़ों की स्थिति कैसी है? कम हुए। वैसे ही हैं। बढ़ गए। या कह नहीं सकते।"
+    },
+    "f1628c54d90deca7.mp3": {
+      "language": "hi-IN",
+      "text": "आपकी गाय अब कैसी है? पहले से ठीक। पहले जैसी। या पहले से खराब।"
+    },
+    "fcb3425a58091949.mp3": {
+      "language": "en-IN",
+      "text": "Did you spray your mustard for the aphids (small green insects)? Yes. Or No."
+    },
+    "fd651a0274b01a6a.mp3": {
+      "language": "en-IN",
+      "text": "Thank you. We have noted this. FarmerChat will contact you again about it."
+    },
+    "fe80ae5c1015208c.mp3": {
+      "language": "hi-IN",
+      "text": "आपने गेहूँ का कौन सा बीज बोया? सुझाई गई किस्म। कोई दूसरी किस्म। या अभी नहीं बोया।"
+    }
+  }
+}
