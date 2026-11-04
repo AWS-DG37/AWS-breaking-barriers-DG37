@@ -1,5 +1,6 @@
 """LLM draft models and internal outcomes. Pack JSON Schemas remain the wire authority."""
 
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
@@ -59,7 +60,24 @@ class ScaleItem(StrictModel):
 Item = Annotated[ChoiceItem | ScaleItem, Field(discriminator="type")]
 
 
+class TraceEvent(StrictModel):
+    sequence: int = Field(ge=1)
+    stage: str
+    source: Literal["rule", "schema", "model", "runtime"]
+    attempt: int = Field(ge=0)
+    data: dict = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class QuestionEvidence(StrictModel):
+    item_id: str
+    measurement: Literal["adoption", "outcome", "barrier", "monitoring", "follow_up", "other"]
+    source_fields: list[str]
+    explanation: str
+
+
 class SurveyDraft(StrictModel):
+    question_evidence: list[QuestionEvidence] = Field(default_factory=list)
     items: list[Item] = Field(min_length=1, max_length=3)
     rationale: str = Field(min_length=1, max_length=400)
 
@@ -85,6 +103,8 @@ class Review(StrictModel):
 
 
 class Outcome(StrictModel):
+    events: list[TraceEvent] = Field(default_factory=list)
+    question_evidence: list[QuestionEvidence] = Field(default_factory=list)
     insight_id: str
     status: Literal["accepted", "skipped", "rejected", "failed"]
     reason: str | None = None

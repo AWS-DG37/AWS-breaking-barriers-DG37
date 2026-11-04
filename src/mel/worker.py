@@ -23,16 +23,23 @@ from mel.store import Store
 logger = logging.getLogger("mel")
 
 
-async def process_insight(insight: dict, survey_id: str, deps: Dependencies) -> Outcome:
+async def process_insight(
+    insight: dict, survey_id: str, deps: Dependencies, *, context: dict | None = None
+) -> Outcome:
     """The same generation/review loop for both local preview and persisted batches."""
     started = time.monotonic()
-    state = State(insight, survey_id, datetime.now(IST))
+    state = State(insight, survey_id, datetime.now(IST), context=context)
     try:
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
     except Exception as error:
+        state.record("failure", "runtime", error_type=type(error).__name__)
         outcome = Outcome(
+            events=state.events,
+            question_evidence=state.question_evidence,
+            candidate_survey=state.survey,
+            review=state.review,
             insight_id=insight["insight_id"],
             status="failed",
             reason=type(error).__name__,
@@ -339,17 +346,24 @@ def main() -> None:
 
                 settings = Settings(config_path=args.config) if args.config else Settings()
                 report = score_policy(
-                    bundle=Bundle.load(settings), golden_path=args.golden, split_path=args.split,
+                    bundle=Bundle.load(settings),
+                    golden_path=args.golden,
+                    split_path=args.split,
                 )
                 output = args.output or Path("outputs/eval") / f"policy-{uuid4()}.json"
                 output.parent.mkdir(parents=True, exist_ok=True)
                 with output.open("x") as target:
                     target.write(report.model_dump_json(indent=2) + "\n")
-                print(json.dumps({
-                    "event": "policy_evaluated", "output": str(output),
-                    "eligibility": report.eligibility.model_dump(),
-                    "legacy_eligibility": report.legacy.eligibility.model_dump(),
-                }))
+                print(
+                    json.dumps(
+                        {
+                            "event": "policy_evaluated",
+                            "output": str(output),
+                            "eligibility": report.eligibility.model_dump(),
+                            "legacy_eligibility": report.legacy.eligibility.model_dump(),
+                        }
+                    )
+                )
             elif args.command == "check-model":
                 asyncio.run(check_model(Settings()))
             elif args.command == "preview":

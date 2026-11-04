@@ -6,6 +6,7 @@ Prompts live in prompts/. Domain timing/channel rules live in rules.json.
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -17,7 +18,7 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
 from mel.config import AgentConfig
 from mel.contracts import Contracts
-from mel.models import Outcome, Review
+from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
 from mel.policy import eligibility, handoff, send_window
 
 
@@ -33,6 +34,20 @@ class State:
     review: Review | None = None
     usage: RunUsage = field(default_factory=RunUsage)
     usage_complete: bool = True
+    context: dict | None = None
+    events: list[TraceEvent] = field(default_factory=list)
+    question_evidence: list[QuestionEvidence] = field(default_factory=list)
+
+    def record(self, stage: str, source: str, **data) -> None:
+        self.events.append(
+            TraceEvent(
+                sequence=len(self.events) + 1,
+                stage=stage,
+                source=source,
+                attempt=self.attempts,
+                data=copy.deepcopy(data),
+            )
+        )
 
 
 @dataclass
@@ -46,8 +61,11 @@ class Dependencies:
 
 
 def finish(state: State, status: str, **kwargs) -> End[Outcome]:
+    state.record("decision", "rule", status=status, reason=kwargs.get("reason"))
     return End(
         Outcome(
+            events=state.events,
+            question_evidence=state.question_evidence,
             insight_id=state.insight["insight_id"],
             status=status,
             attempts=state.attempts,
@@ -73,12 +91,17 @@ def check_usage(state: State, result) -> None:
 class Select(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
+        s.record("select", "runtime", insight=s.insight)
+        if s.context is not None:
+            s.record("context", "runtime", context=s.context)
         if s.insight.get("quality_flag") == "junk":
             return finish(s, "skipped", reason="junk_insight")
         errors = d.contracts.errors("insight", s.insight)
+        s.record("schema", "schema", target="insight", valid=not errors, errors=errors)
         if errors:
             return finish(s, "skipped", reason="invalid_insight: " + "; ".join(errors))
         reason = eligibility(s.insight, d.rules)
+        s.record("select", "rule", eligible=reason is None, reason=reason)
         if reason:
             no_survey = None
             # Pack v1's no_survey schema cannot represent junk/invalid/verification skips.
@@ -96,6 +119,7 @@ class Select(BaseNode[State, Dependencies, Outcome]):
             s.window = send_window(s.insight, d.rules)
         except ValueError as error:
             return finish(s, "skipped", reason=str(error))
+        s.record("select", "rule", send_window=s.window)
         return Generate()
 
 
@@ -106,32 +130,40 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
         s.attempts += 1
         crop = s.insight["asset"]["name"]
         calendar = [row for row in d.calendar if row["crop"] == crop]
+        payload = {
+            "insight": s.insight,
+            "language": s.insight["conversation_language"],
+            "send_window": s.window,
+            "crop_calendar": calendar,
+            "previous_draft": s.survey,
+            "reviewer_feedback": s.feedback,
+            "context": s.context,
+        }
+        s.record("generate", "runtime", kind="request", payload=payload)
         result = await d.generator.run(
-            json.dumps(
-                {
-                    "insight": s.insight,
-                    "language": s.insight["conversation_language"],
-                    "send_window": s.window,
-                    "crop_calendar": calendar,
-                    "previous_draft": s.survey,
-                    "reviewer_feedback": s.feedback,
-                },
-                ensure_ascii=False,
-            ),
+            json.dumps(payload, ensure_ascii=False),
             usage=s.usage,
             usage_limits=UsageLimits(
                 request_limit=s.usage.requests + d.config.graph.max_requests_per_call
             ),
         )
         check_usage(s, result)
+        s.question_evidence = list(result.output.question_evidence)
         s.survey = {
             "survey_id": s.survey_id,
             "farmer_id": s.insight["farmer_id"],
             "source_insight_ids": [s.insight["insight_id"]],
             "language": s.insight["conversation_language"],
             "send_window": s.window,
-            **result.output.model_dump(exclude_none=True),
+            **result.output.model_dump(exclude_none=True, exclude={"question_evidence"}),
         }
+        s.record(
+            "generate",
+            "model",
+            kind="response",
+            survey=s.survey,
+            question_evidence=[q.model_dump() for q in s.question_evidence],
+        )
         return ReviewSurvey()
 
 
@@ -140,7 +172,9 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
         s.feedback = d.contracts.errors("survey", s.survey)
+        s.record("schema", "schema", target="survey", valid=not s.feedback, errors=s.feedback)
         if not s.feedback:
+            s.record("review", "runtime", kind="request", survey=s.survey)
             result = await d.reviewer.run(
                 json.dumps(
                     {
@@ -157,6 +191,7 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
             )
             check_usage(s, result)
             s.review = result.output
+            s.record("review", "model", kind="response", review=s.review.model_dump())
             r = s.review
             if (
                 r.relevance_score >= d.config.graph.relevance_threshold
