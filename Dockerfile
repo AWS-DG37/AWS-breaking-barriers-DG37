@@ -11,7 +11,7 @@ COPY migrations ./migrations
 COPY eval/golden_holdout.jsonl ./eval/golden_holdout.jsonl
 COPY docs/participant-pack/json/schemas ./docs/participant-pack/json/schemas
 COPY docs/participant-pack/json/rules ./docs/participant-pack/json/rules
-COPY docs/participant-pack/data/crop_calendar_bihar_rabi.csv docs/participant-pack/data/insights.jsonl ./docs/participant-pack/data/
+COPY docs/participant-pack/data/crop_calendar_bihar_rabi.csv ./docs/participant-pack/data/
 RUN mkdir -p certs && python -c "import urllib.request; urllib.request.urlretrieve('https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem', 'certs/global-bundle.pem')"
 USER 10001
 ENTRYPOINT ["mel-worker"]
