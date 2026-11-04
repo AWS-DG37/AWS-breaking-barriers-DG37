@@ -1,5 +1,8 @@
 """Held-out policy scorecard: the decision engine vs the declared golden holdout, with
-provenance hashes. Kept outside the generation implementation fingerprint."""
+provenance hashes. Kept outside the generation implementation fingerprint.
+
+The rules were written while reading all 150 golden rows, so this score is a
+regression baseline, not a generalization estimate."""
 
 from __future__ import annotations
 
@@ -14,6 +17,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from mel.bundle import Bundle
 from mel.decision import DecisionEngine
+from mel.evaluation import split as partition
+
+BASELINE_LABEL = (
+    "regression_baseline: the rules were written while reading all 150 golden rows, "
+    "test half included"
+)
 
 
 class _Evidence(BaseModel):
@@ -65,6 +74,7 @@ class LegacyReport(_Evidence):
 
 class PolicyReport(_Evidence):
     mode: Literal["offline_policy"] = "offline_policy"
+    label: str = BASELINE_LABEL
     split_version: str
     source_sha256: str
     holdout_sha256: str
@@ -72,7 +82,8 @@ class PolicyReport(_Evidence):
     scorer_sha256: str
     bundle_fingerprint: str
     source_cases: int
-    excluded_cases: int
+    dev_cases: int
+    test_cases: int
     eligibility: Measurement
     confusion: dict[str, int]
     reason_agreement: Measurement
@@ -125,7 +136,13 @@ def _rows(body: bytes, label: str) -> dict[str, dict]:
     return result
 
 
-def _load(golden_path: Path, split_path: Path) -> tuple[dict, dict, list[dict], bytes, bytes]:
+def load_split(split_path: Path) -> tuple[dict, dict[str, dict], bytes]:
+    """The verified manifest, its hashed source rows, and the manifest bytes.
+
+    Checks the source SHA-256, that dev and holdout partition the source, that the
+    prompt examples are in dev, that no advice, farmer or conversation spans both
+    halves, and that the recorded counts match the rows.
+    """
     split_bytes = split_path.read_bytes()
     split = json.loads(split_bytes)
     if not isinstance(split, dict) or not isinstance(split.get("version"), str):
@@ -144,21 +161,38 @@ def _load(golden_path: Path, split_path: Path) -> tuple[dict, dict, list[dict], 
     source_rows = _rows(source_bytes, "source")
     examples = _ids(split.get("prompt_example_ids"), "prompt example")
     held = _ids(split.get("holdout_ids"), "holdout")
-    exclusions = split.get("excluded")
-    if not isinstance(exclusions, list) or any(not isinstance(x, dict) for x in exclusions):
-        raise ValueError("split excluded must list excluded records")
-    excluded = _ids([x.get("golden_id") for x in exclusions], "excluded")
+    dev = _ids(split.get("dev_ids"), "dev")
     if (
-        set(held) & set(excluded)
-        or not set(examples) <= set(excluded)
-        or set(held) | set(excluded) != set(source_rows)
+        set(held) & set(dev)
+        or not set(examples) <= set(dev)
+        or set(held) | set(dev) != set(source_rows)
     ):
-        raise ValueError("holdout/excluded IDs must partition the source and exclude examples")
+        raise ValueError(
+            "dev/holdout IDs must partition the source and keep prompt examples in dev"
+        )
     example_insights = _ids(split.get("prompt_example_insight_ids"), "prompt insight")
     if set(example_insights) != {
         source_rows[key]["insight"].get("insight_id") for key in examples
     }:
         raise ValueError("prompt insight IDs do not match source examples")
+    method = split.get("method")
+    if not isinstance(method, dict) or type(method.get("seed")) is not int:
+        raise ValueError("split method must record its integer seed")
+    leaked = partition.leaks(source_rows, dev, held)
+    if leaked:
+        raise ValueError(f"grouping keys span dev and holdout: {leaked[:3]}")
+    recorded = {
+        "dev": partition.counts(source_rows[key] for key in dev),
+        "test": partition.counts(source_rows[key] for key in held),
+    }
+    if split.get("counts") != recorded:
+        raise ValueError("split counts do not match the dev/holdout rows")
+    return split, source_rows, split_bytes
+
+
+def _load(golden_path: Path, split_path: Path) -> tuple[dict, dict, list[dict], bytes, bytes]:
+    split, source_rows, split_bytes = load_split(split_path)
+    held = split["holdout_ids"]
     golden_bytes = golden_path.read_bytes()
     held_rows = _rows(golden_bytes, "holdout")
     if set(held_rows) != set(held):
@@ -281,13 +315,13 @@ def score_policy(*, bundle: Bundle, golden_path: Path, split_path: Path) -> Poli
         holdout_sha256=_sha(golden_bytes), split_sha256=_sha(split_bytes),
         scorer_sha256=_sha(scorer_bytes),
         bundle_fingerprint=bundle.fingerprint(golden_bytes, "offline-policy"),
-        source_cases=len(source), excluded_cases=len(split["excluded"]),
+        source_cases=len(source), dev_cases=len(split["dev_ids"]), test_cases=len(rows),
         eligibility=_measure(decisions), confusion=confusion,
         reason_agreement=_measure(reasons),
         window_agreement=_measure(windows),
         per_rule={key: _measure(value) for key, value in sorted(per_rule.items())},
         not_assessed={key: NotAssessed(reason=reason) for key, reason in {
-            "relevance_grounding": "Requires generated surveys and an independent MEL rubric.",
+            "relevance_grounding": "Scored separately by `mel-worker eval relevance`.",
             "language_quality": "Requires review of generated farmer-facing language.",
             "follow_up_semantics": "No generated survey or simulated responses are assessed.",
             "channel_precedence": "Golden channel precedence is unresolved; no channel score.",
@@ -297,6 +331,7 @@ def score_policy(*, bundle: Bundle, golden_path: Path, split_path: Path) -> Poli
         notes=(
             "Eligibility includes every holdout case, including unresolved policy misses.",
             "Exact window agreement is descriptive; golden/rule precedence is unresolved.",
-            "The candidate split is not a guarantee against semantic prompt leakage.",
+            "The grouped split catches exact normalized advice, not paraphrases.",
+            BASELINE_LABEL,
         ),
     )

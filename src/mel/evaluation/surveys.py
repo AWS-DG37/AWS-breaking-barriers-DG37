@@ -59,6 +59,7 @@ def score_surveys(results: list[dict], cases: list[GoldenCase]) -> dict:
         "cases": len(results),
         "status": dict(status),
         "decision_accuracy": _round(decision_hits / len(results)) if results else None,
+        "decision_correct": decision_hits,
         "items": {
             "mean": _mean(item_counts),
             "golden_mean": _mean(golden_item_counts),
@@ -69,9 +70,12 @@ def score_surveys(results: list[dict], cases: list[GoldenCase]) -> dict:
             "share_at_most_4": _round(
                 sum(n <= 4 for n in option_counts) / len(option_counts) if option_counts else None
             ),
+            "at_most_4": sum(n <= 4 for n in option_counts),
+            "questions": len(option_counts),
         },
         "follow_up_codes": dict(follow_ups),
         "review_relevance_mean": _mean(relevance),
+        "reviewed": len(relevance),
         "seconds_per_survey": {"mean": _mean(elapsed), "max": max(elapsed, default=None)},
         "tokens": {
             "complete": usage_complete,

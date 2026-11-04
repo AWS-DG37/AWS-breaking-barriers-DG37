@@ -69,16 +69,34 @@ problem or place, for example "Did you treat the whorl as advised?".
 Keep questions short and in everyday words a farmer would use; one clause where
 possible.
 
-Use survey-confirm (exactly two options), survey-single-select, or survey-scale
-(at most ten integer steps). Use single-select when more than two options are
-needed. Use q1, q2, q3 IDs and stable English option values. Keep prompts under
+Use survey-confirm (exactly two options) or survey-single-select. Use single-select
+when more than two options are needed. Use q1, q2, q3 IDs. Keep prompts under
 400 characters and answer labels at most 20 Unicode characters.
+Option values must use only these English answer codes with these meanings;
+write labels in the requested farmer language:
+- yes: Yes.
+- no: No.
+- not_yet: Not yet.
+- better: Better.
+- same: Same.
+- worse: Worse.
+- all_steps: All steps.
+- some_steps: Some steps.
+- not_started: Not started.
+- too_early: Too early to say.
+- cannot_tell: Cannot tell / don't know.
+- did_not_check: Did not check.
+- could_not_reach: Could not reach.
+- not_met_yet: Not met yet.
+- too_costly: Too costly.
+- not_available: Not available nearby.
+- no_time: No time.
+- did_not_understand: Did not understand.
 Annotate options indicating harm, failed advice, unavailable inputs, or an
 unreachable expert with the appropriate follow_up code. could_not_reach_expert is
 only for a veterinary doctor, agronomist, extension worker or other named expert;
 could_not_get_input is only for a product, seed or service the farmer could not
-obtain. A Worse outcome answer carries crop_or_animal_damaged. For scales, use
-follow_up_at_or_below and follow_up_reason where appropriate. A separate crop-damage
+obtain. A Worse outcome answer carries crop_or_animal_damaged. A separate crop-damage
 question is optional unless harm is central to the original advice; keep the
 primary outcome clear and flag negative answers already offered.
 Non-adoption, partial adoption, "did it differently", "other reason", "not yet",
@@ -93,7 +111,7 @@ measurement pattern, not the example's facts. All crops, animals, treatments,
 conditions, time periods and outcomes in your draft must come from the CURRENT
 insight. Never introduce a detail only because it appears in a reference.
 Reference questions are shown in English for review. Generate the farmer's copy
-in the requested language, with the same meaning and stable English option values.
+in the requested language, with the same meaning and the allowed English answer codes.
 The references are compact measurement sketches, not production survey JSON:
 produce the current schema, adapt broad outcome questions to the actual problem,
 and add follow-up annotations where needed. Keep their short answer sets.
@@ -139,8 +157,8 @@ Reference question: How is your cabbage now?
 Answer meanings: Better / Same / Worse
 Transferable lesson: Following advice can mean holding off; do not assume taking an action is always the desired adoption.
 
-Reference G-0045 | escalate_to_expert | buffalo
-Advice context: Advised to call the nearest veterinary doctor because fever and poor appetite needs a closer look.
+Reference G-0113 | escalate_to_expert | goat
+Advice context: Advised to call the nearest veterinary doctor because vaccination needs a closer look.
 Reference question: Did you meet the veterinary doctor?
 Answer meanings: Yes / Not yet / Could not reach
 Reference question: Did their advice help?
@@ -152,8 +170,8 @@ Advice context: Explained damping off in the nursery in general terms without a 
 Reference decision: no survey; no question is supported yet.
 Transferable lesson: General information with no advised action should not become an adoption questionnaire.
 
-Reference G-0018 | needs_more_context | lentil
-Advice context: Asked for more details on uneven emergence, such as the sowing date, before giving advice.
+Reference G-0092 | needs_more_context | maize
+Advice context: Asked for more details on leaf blight, such as the sowing date, before giving advice.
 Reference decision: no survey; no question is supported yet.
 Transferable lesson: An unfinished conversation with no advice has no action to follow up.
 

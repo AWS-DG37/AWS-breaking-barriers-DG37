@@ -28,6 +28,12 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
         survey = json.loads(
             (PACK / "json/scenarios/1-mustard-aphid-spray/survey.hi-IN.json").read_text()
         )
+        survey["items"] = [survey["items"][0], survey["items"][2]]
+        survey["items"][1]["options"] = [
+            {"value": "better", "label": "पहले से कम"},
+            {"value": "same", "label": "पहले जितने"},
+            {"value": "worse", "label": "पहले से ज़्यादा", "follow_up": "crop_or_animal_damaged"},
+        ]
         draft = {"items": survey["items"], "rationale": survey["rationale"]}
         self.review = {
             "relevance_score": 0.95,
@@ -91,9 +97,21 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.execute()).status, "rejected")
 
     async def test_personal_information_rejected(self):
-        bad = {**self.review, "asks_personal_info": True}
+        quote = "क्या आपके पास बैंक खाता है?"
+        bad = {**self.review, "asks_personal_info": True, "personal_info_quote": quote}
         self.deps.reviewer = Agent(TestModel(custom_output_args=bad), output_type=Review)
-        self.assertEqual((await self.execute()).status, "rejected")
+        result = await self.execute()
+        self.assertEqual(result.status, "rejected")
+        self.assertEqual(result.attempts, 2)
+        self.assertIsNone(result.handoff)
+        self.assertIn(quote, result.reason)
+        requests = [
+            event.data["payload"]
+            for event in result.events
+            if event.stage == "generate" and event.data.get("kind") == "request"
+        ]
+        self.assertTrue(any(quote in feedback for feedback in requests[1]["reviewer_feedback"]))
+        self.assertNotIn("personal_info_quote", result.candidate_survey.get("self_eval", {}))
 
     async def test_junk_never_calls_model(self):
         self.insight = {"insight_id": "broken", "quality_flag": "junk"}
@@ -162,22 +180,21 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
         data = draft.model_dump(exclude_none=True)
         self.assertNotIn("follow_up", data["items"][0]["options"][0])
 
-    def test_invalid_scale_rejected(self):
+    def test_scale_rejected_by_draft_but_allowed_by_pack(self):
+        item = {
+            "item_id": "q1",
+            "type": "survey-scale",
+            "prompt": "How much?",
+            "scale_min": 0,
+            "scale_max": 5,
+        }
+        survey = json.loads(
+            (PACK / "json/scenarios/1-mustard-aphid-spray/survey.hi-IN.json").read_text()
+        )
+        survey["items"] = [item]
+        self.bundle.contracts.validate("survey", survey)
         with self.assertRaises(ValidationError):
-            SurveyDraft.model_validate(
-                {
-                    "rationale": "Test",
-                    "items": [
-                        {
-                            "item_id": "q1",
-                            "type": "survey-scale",
-                            "prompt": "How much?",
-                            "scale_min": 0,
-                            "scale_max": 50,
-                        }
-                    ],
-                }
-            )
+            SurveyDraft.model_validate({"rationale": "Test", "items": [item]})
 
 
 if __name__ == "__main__":

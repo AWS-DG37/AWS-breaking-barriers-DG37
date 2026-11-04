@@ -369,7 +369,10 @@ def eval_rules(args: argparse.Namespace) -> None:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(body + "\n", encoding="utf-8")
-    summary = {key: report[key] for key in ("cases", "decision_accuracy", "rule_accuracy")}
+    summary = {key: report[key] for key in (
+        "label", "cases", "decision_accuracy", "decision_correct", "rule_accuracy",
+        "rule_correct",
+    )}
     print(
         json.dumps(
             {
@@ -392,6 +395,68 @@ def eval_surveys(args: argparse.Namespace) -> None:
             ensure_ascii=False,
         )
     )
+
+
+async def eval_relevance(args: argparse.Namespace) -> None:
+    """LLM judge over saved results, or its dev calibration. These are the only eval
+    commands that call a model."""
+    from pydantic_ai.usage import RunUsage
+
+    from mel.agents import build_agent
+    from mel.evaluation import relevance
+
+    settings = Settings(config_path=args.config) if args.config else Settings()
+    bundle = Bundle.load(settings)
+    overrides = {"model_id": args.model_id, "api": args.api}
+    model = bundle.config.review.model_copy(
+        update={key: value for key, value in overrides.items() if value}
+    )
+    rubric = args.rubric.read_text(encoding="utf-8")
+    agent = build_agent(
+        model, relevance.RelevanceJudgment, rubric, settings.aws_region,
+        settings.bedrock_project_id, bundle.config.graph.agent_output_retries,
+    )
+    usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
+
+    async def judge(message: str) -> relevance.RelevanceJudgment:
+        spent = RunUsage()  # Filled during the run, so failed calls still count.
+        try:
+            return (await agent.run(message, usage=spent)).output
+        finally:
+            usage["requests"] += spent.requests
+            usage["input_tokens"] += spent.input_tokens or 0
+            usage["output_tokens"] += spent.output_tokens or 0
+
+    common = {
+        "split_path": args.split, "rubric": rubric, "judge_model": model.model_id,
+        "concurrency": bundle.config.batch.concurrency,
+    }
+    try:
+        if args.evaluation_command == "calibrate-relevance":
+            prefix = "relevance-calibration"
+            report = await relevance.calibrate(judge, max_cases=args.max_cases, **common)
+        else:
+            prefix = f"relevance-{args.part}"
+            body = args.results.read_bytes()
+            results = [json.loads(line) for line in body.decode().splitlines() if line.strip()]
+            calibration = json.loads(args.calibration.read_text()) if args.calibration else None
+            report = await relevance.score(
+                judge, results, part=args.part, calibration=calibration,
+                results_sha256=hashlib.sha256(body).hexdigest(), **common,
+            )
+    finally:
+        await close_model_clients(agent)
+    report["usage"] = usage
+    output = args.output or Path("outputs/eval") / f"{prefix}-{uuid4()}.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("x", encoding="utf-8") as target:
+        target.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    summary = {
+        key: report[key]
+        for key in ("mode", "part", "passed", "agreement", "counts", "core_pass", "criteria")
+        if key in report
+    }
+    print(json.dumps({**summary, "usage": usage, "output": str(output)}, ensure_ascii=False))
 
 
 def golden_insights(args: argparse.Namespace) -> None:
@@ -527,17 +592,42 @@ def main() -> None:
     extract = sub.add_parser("golden-insights", help="Write golden insights as worker input")
     extract.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
     extract.add_argument("--output", type=Path, required=True)
-    evaluation = sub.add_parser("eval", help="Offline evaluation; no model or database calls")
+    evaluation = sub.add_parser(
+        "eval", help="Evaluation; only the relevance commands call a model, none use a database"
+    )
     evaluation_sub = evaluation.add_subparsers(dest="evaluation_command", required=True)
-    policy = evaluation_sub.add_parser("policy", help="Score the declared held-out policy cases")
+    policy = evaluation_sub.add_parser(
+        "policy", help="Rules regression baseline on the test half; no model calls"
+    )
     policy.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
     policy.add_argument("--split", type=Path, default=Path("eval/prompt_example_split.json"))
     policy.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
     policy.add_argument("--output", type=Path, help="New report path; existing files are preserved")
+    for name, help_text in (
+        ("calibrate-relevance", "Calibrate the relevance judge on dev controls (calls Bedrock)"),
+        ("relevance", "Judge generated surveys in saved results (calls Bedrock)"),
+    ):
+        judged = evaluation_sub.add_parser(name, help=help_text)
+        judged.add_argument("--split", type=Path, default=Path("eval/prompt_example_split.json"))
+        judged.add_argument("--rubric", type=Path, default=Path("eval/relevance_rubric.txt"))
+        judged.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
+        judged.add_argument("--model-id", help="Judge model; defaults to the review model")
+        judged.add_argument("--api", choices=("responses", "converse"))
+        judged.add_argument("--output", type=Path, help="New report path; never overwritten")
+        if name == "relevance":
+            judged.add_argument("--results", type=Path, required=True)
+            judged.add_argument("--part", choices=("dev", "test"), required=True)
+            judged.add_argument("--calibration", type=Path,
+                                help="Passing dev calibration report; required for --part test")
+        else:
+            judged.add_argument("--max-cases", type=int,
+                                help="Use only the first N dev survey rows (cost cap)")
     args = parser.parse_args()
     budget = getattr(args, "budget_usd", None)
     if budget is not None and (not budget.is_finite() or budget <= 0):
         parser.error("--budget-usd must be a positive finite amount")
+    if getattr(args, "max_cases", None) is not None and args.max_cases < 1:
+        parser.error("--max-cases must be at least 1")
     if args.command == "jobs" and args.resume and args.job_id is None:
         parser.error("--resume requires --job-id")
     if args.command == "config" and args.config_command == "save" and args.activate:
@@ -554,7 +644,9 @@ def main() -> None:
         args.output.write_text(json.dumps(local_bundle(args.config), indent=2, ensure_ascii=False))
     else:
         try:
-            if args.command == "eval":
+            if args.command == "eval" and args.evaluation_command != "policy":
+                asyncio.run(eval_relevance(args))
+            elif args.command == "eval":
                 from mel.evaluation import score_policy
 
                 settings = Settings(config_path=args.config) if args.config else Settings()

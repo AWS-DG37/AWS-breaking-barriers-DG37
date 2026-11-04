@@ -2,10 +2,11 @@
 
 import json
 
+from pydantic_ai import Agent
 from pydantic_ai.messages import ModelResponse, ToolCallPart, UserPromptPart
 from pydantic_ai.models.function import FunctionModel
 
-from mel.improvement import improver_agents
+from mel.improvement import ConfigProposal, Judgements, improver_agents
 
 
 def first_prompt(messages) -> dict:
@@ -33,7 +34,10 @@ def improver_factory(proposals: list[dict], scores: list[float], seen: list | No
         )
 
     def factory(model, region, project_id):
-        return improver_agents(FunctionModel(improve), FunctionModel(judge), {})
+        return improver_agents(
+            Agent(FunctionModel(improve), output_type=ConfigProposal, retries=3),
+            Agent(FunctionModel(judge), output_type=Judgements, retries=3),
+        )
 
     return factory
 

@@ -19,6 +19,12 @@ def dependencies(review=None):
             "docs/participant-pack/json/scenarios/1-mustard-aphid-spray/survey.hi-IN.json"
         ).read_text()
     )
+    survey["items"] = [survey["items"][0], survey["items"][2]]
+    survey["items"][1]["options"] = [
+        {"value": "better", "label": "पहले से कम"},
+        {"value": "same", "label": "पहले जितने"},
+        {"value": "worse", "label": "पहले से ज़्यादा", "follow_up": "crop_or_animal_damaged"},
+    ]
     draft = {
         "items": survey["items"],
         "rationale": survey["rationale"],

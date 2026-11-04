@@ -31,9 +31,8 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import Field, ValidationError, model_validator
 from pydantic_ai import Agent, ModelRetry, RunContext
-from pydantic_ai.models import Model
 
-from mel.agents import Providers, build_agents
+from mel.agents import build_agent, build_agents
 from mel.config import ModelConfig, Settings, StrictModel
 from mel.configs import config_bundle, validate_definition
 from mel.costs import CostedModel, RunCosts, request_scope
@@ -178,26 +177,10 @@ class ProposalContext:
 
 
 def improver_agents(
-    improver: Model, judge: Model, model_settings: dict
+    propose: Agent, grade: Agent
 ) -> tuple[Agent[ProposalContext, ConfigProposal], Agent[set[str], Judgements]]:
-    """The improver and judge agents for already-constructed models. Their output
-    validators send inapplicable proposals and incomplete judgements back for repair."""
-    propose = Agent(
-        improver,
-        output_type=ConfigProposal,
-        deps_type=ProposalContext,
-        instructions=IMPROVE_PROMPT.read_text(),
-        model_settings=model_settings,
-        output_retries=OUTPUT_RETRIES,
-    )
-    grade = Agent(
-        judge,
-        output_type=Judgements,
-        deps_type=set[str],
-        instructions=JUDGE_PROMPT.read_text(),
-        model_settings=model_settings,
-        output_retries=OUTPUT_RETRIES,
-    )
+    """Add the output validators that send inapplicable proposals and incomplete
+    judgements back to the model for repair."""
 
     @propose.output_validator
     def applicable(ctx: RunContext[ProposalContext], proposal: ConfigProposal) -> ConfigProposal:
@@ -218,8 +201,28 @@ def improver_agents(
 
 
 def build_improver_agents(model: ModelConfig, region: str, project_id: str):
-    native, model_settings = Providers(region, project_id).model(model)
-    return improver_agents(native, native, model_settings)
+    """The improver and judge share one model and one client."""
+    providers: dict = {}
+    return improver_agents(
+        build_agent(
+            model,
+            ConfigProposal,
+            IMPROVE_PROMPT.read_text(),
+            region,
+            project_id,
+            OUTPUT_RETRIES,
+            providers,
+        ),
+        build_agent(
+            model,
+            Judgements,
+            JUDGE_PROMPT.read_text(),
+            region,
+            project_id,
+            OUTPUT_RETRIES,
+            providers,
+        ),
+    )
 
 
 def _metered(agent: Agent, store, run_id: str, model: ModelConfig, region: str, role: str):
