@@ -4,12 +4,12 @@ import asyncio
 import copy
 import json
 from collections import Counter
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Literal
-from uuid import NAMESPACE_URL, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-import yaml
 from pydantic import Field, ValidationError, model_validator
 
 from dg_agent.checks import check_survey
@@ -17,9 +17,10 @@ from dg_agent.checks import rules as reference_rules
 from dg_agent.models import Insight, Survey
 from mel.agents import build_agents
 from mel.bundle import Bundle
-from mel.config import AgentConfig, ModelConfig, Settings, StrictModel
-from mel.configs import active_config
+from mel.config import AgentConfig, Settings, StrictModel
+from mel.configs import config_bundle
 from mel.contracts import Contracts
+from mel.costs import meter_agents
 from mel.decision import DecisionEngine
 from mel.graph import Dependencies
 from mel.models import Outcome, TraceEvent
@@ -28,25 +29,21 @@ from mel.worker import close_model_clients, process_insight
 
 
 class ExperimentCandidate(StrictModel):
-    label: str = Field(min_length=1, max_length=120, pattern=r"\S")
-    model: ModelConfig
+    """One configuration version under comparison. Recorded runs, saved before versions
+    existed, have no config_id; each run's manifest carries its configuration."""
 
-    @model_validator(mode="after")
-    def named_model(self):
-        if not self.model.model_id or not self.model.model_id.strip():
-            raise ValueError("candidate model_id is required")
-        return self
+    label: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    config_id: UUID | None = None
 
 
 class ExperimentSpec(StrictModel):
     name: str = Field(min_length=1, max_length=200, pattern=r"\S")
+    # Resolved from a dataset selection when the experiment is created, so every
+    # candidate sees exactly the same insights.
     insights: list[dict] = Field(min_length=1, max_length=50)
     candidates: list[ExperimentCandidate] = Field(min_length=1, max_length=6)
-    reviewer: ModelConfig
     evaluation_reference: Literal["rules", "golden"] = "rules"
-    ruleset: str = Field(default="participant-pack", min_length=1, max_length=100)
-    profiles: list[dict] = Field(default_factory=list, max_length=1000)
-    row_limit: int = Field(default=3, ge=1, le=50)
+    budget_usd: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def identities(self):
@@ -57,8 +54,6 @@ class ExperimentSpec(StrictModel):
             raise ValueError("insight IDs must be unique")
         if len({c.label for c in self.candidates}) != len(self.candidates):
             raise ValueError("candidate labels must be unique")
-        if not self.reviewer.model_id or not self.reviewer.model_id.strip():
-            raise ValueError("reviewer model_id is required")
         if any("expected" in row or "insight" in row for row in self.insights):
             raise ValueError("provide normalized insights, without evaluation targets")
         return self
@@ -107,35 +102,6 @@ def validate_assessment(detail: dict, assessment: QualityAssessment) -> None:
         raise ValueError("question does not belong to this survey")
 
 
-def ruleset_registry(settings: Settings) -> list[dict]:
-    path = settings.config_path.resolve().parent / "rulesets.yaml"
-    if not path.exists():
-        return [{"id": "participant-pack", "label": "Participant pack", "rules_path": None}]
-    entries = yaml.safe_load(path.read_text())["rulesets"]
-    if not isinstance(entries, list) or len({r["id"] for r in entries}) != len(entries):
-        raise ValueError("invalid configured ruleset registry")
-    return [
-        {
-            **row,
-            "rules_path": str((path.parent / row["rules_path"]).resolve())
-            if row.get("rules_path")
-            else None,
-        }
-        for row in entries
-    ]
-
-
-def select_rules(bundle: Bundle, settings: Settings, ruleset: str) -> dict:
-    entry = next((r for r in ruleset_registry(settings) if r["id"] == ruleset), None)
-    if entry is None:
-        raise ValueError("unknown configured ruleset")
-    return (
-        json.loads(Path(entry["rules_path"]).read_text())
-        if entry["rules_path"]
-        else bundle.snapshot["rules"]
-    )
-
-
 def resolve_context(insight: dict, profiles: list[dict], calendar: list[dict]) -> dict:
     matches = [p for p in profiles if p.get("farmer_id") == insight.get("farmer_id")]
     profile = copy.deepcopy(matches[0]) if matches else None
@@ -175,43 +141,42 @@ async def execute_experiment(
     experiment_id: str | None = None,
     job_id: str | None = None,
     agent_factory=build_agents,
+    on_progress=None,
 ) -> str:
-    """Each candidate is the active configuration version with the candidate's model,
-    the shared reviewer and the chosen ruleset. Candidates are saved as child versions,
-    so every experiment run records the exact configuration it used."""
+    """Run every candidate configuration version over the same insights, through the
+    same graph, and record each run against its version. `on_progress(done, total)`
+    counts insight results across all candidates and runs in a worker thread."""
+    if any(c.config_id is None for c in spec.candidates):
+        raise ValueError("live experiments compare saved configuration versions")
     key = experiment_id or str(uuid4())
     await asyncio.to_thread(store.create_experiment, key, spec.model_dump(mode="json"))
     await asyncio.to_thread(store.finish_experiment, key, "running")
     try:
-        base_id, bundle = await asyncio.to_thread(active_config, store, settings)
-        rules = select_rules(bundle, settings, spec.ruleset)
-        rows = spec.insights[: spec.row_limit]
+        rows = spec.insights
+        total = len(rows) * len(spec.candidates)
         had_errors = False
+
+        async def progress(done: int) -> None:
+            if on_progress is not None:
+                await asyncio.to_thread(on_progress, done, total)
+
         for index, candidate in enumerate(spec.candidates):
             run_had_errors = False
             run_id = str(uuid5(NAMESPACE_URL, f"{key}/{index}"))
-            config = bundle.config.model_copy(
-                deep=True, update={"generation": candidate.model, "review": spec.reviewer}
-            )
+            config_id = str(candidate.config_id)
+            bundle = await asyncio.to_thread(config_bundle, store, config_id)
+            config = bundle.config
             snapshot = {
                 **copy.deepcopy(bundle.snapshot),
-                "config": config.model_dump(mode="json"),
-                "rules": rules,
                 "label": candidate.label,
                 "contexts": {
-                    r["insight_id"]: resolve_context(r, spec.profiles, bundle.snapshot["calendar"])
+                    r["insight_id"]: resolve_context(r, [], bundle.snapshot["calendar"])
                     for r in rows
                 },
-                "selection": {"limit": spec.row_limit, "selected_rows": len(rows)},
+                "selection": {"selected_rows": len(rows)},
                 "bedrock_project_id": settings.bedrock_project_id,
             }
             candidate_bundle = Bundle(config, snapshot, bundle.contracts)
-            config_id = await asyncio.to_thread(
-                store.save_config,
-                candidate_bundle.definition,
-                parent_id=base_id,
-                note=f"Experiment {spec.name}: {candidate.label}",
-            )
             fingerprint = candidate_bundle.fingerprint(
                 json.dumps(rows, sort_keys=True).encode(), settings.aws_region
             )
@@ -230,8 +195,14 @@ async def execute_experiment(
                 agents = agent_factory(
                     config, settings.aws_region, snapshot["prompts"], settings.bedrock_project_id
                 )
+                if hasattr(store, "connection"):
+                    meter_agents(
+                        store, run_id, config, settings.aws_region, agents, spec.budget_usd
+                    )
                 deps = Dependencies.from_bundle(candidate_bundle, *agents)
                 completed = await asyncio.to_thread(store.completed, run_id, False)
+                finished = len(completed)
+                await progress(index * len(rows) + finished)
                 for ordinal, row in enumerate(rows, 1):
                     if row["insight_id"] in completed:
                         continue
@@ -242,6 +213,8 @@ async def execute_experiment(
                         context=snapshot["contexts"][row["insight_id"]],
                     )
                     await asyncio.to_thread(store.save, run_id, row, outcome)
+                    finished += 1
+                    await progress(index * len(rows) + finished)
                     run_had_errors |= outcome.status == "failed"
                     had_errors |= run_had_errors
                 persisted = await asyncio.to_thread(store.results, run_id)
@@ -272,6 +245,7 @@ async def execute_experiment(
                         )
                         await asyncio.to_thread(store.save, run_id, row, failed)
                 await asyncio.to_thread(store.finish, run_id, "failed")
+                await progress((index + 1) * len(rows))
                 if not isinstance(error, Exception):
                     raise
             finally:
@@ -332,7 +306,7 @@ def reference_checks(insight: dict, outcome: dict) -> dict:
 def compare_runs(detail: dict, *, reference: Literal["rules", "golden"] | None = None) -> dict:
     spec = detail["spec"]
     reference = reference or spec.get("evaluation_reference", "rules")
-    selected = spec.get("insights", [])[: spec.get("row_limit", 3)]
+    selected = spec.get("insights", [])
     golden = {}
     reference_snapshot = {"source": "each saved run manifest"}
     if reference == "golden":
@@ -352,7 +326,7 @@ def compare_runs(detail: dict, *, reference: Literal["rules", "golden"] | None =
     runs.extend(
         {
             "label": candidate["label"],
-            "model_id": candidate["model"]["model_id"],
+            "model_id": None,  # Known once the candidate's run starts.
             "results": [],
             "manifest": {},
         }

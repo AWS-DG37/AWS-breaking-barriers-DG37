@@ -62,17 +62,43 @@ AWS_PROFILE=digital-green AWS_EC2_METADATA_DISABLED=true \
   uv run --locked mel-worker jobs
 ```
 
-Open <http://127.0.0.1:8765> and select **New live experiment**. Supply normalized
-insight JSONL with no golden expectations. Choose candidate models and native APIs,
-a shared reviewer, and a configured ruleset. Model discovery does not prove access
-or structured-output compatibility. Unsupported calls remain failures; there is no
+Open <http://127.0.0.1:8765>, open **Compare** and select **New comparison**. Pick one
+to six saved configuration versions and a dataset selection (at most fifty insights);
+every version runs the same insights. Model discovery does not prove access or
+structured-output compatibility. Unsupported calls remain failures; there is no
 automatic provider or API substitution.
 
-Only **Run live experiment** invokes models and incurs AWS usage. A request allows
-at most six candidates and fifty insights, defaults to three insight rows, and uses
-the existing revision and timeout limits. Each runner executes one job at a time;
-start more runners for more concurrency. Each candidate is saved as a configuration
-version derived from the active one. Comparison results never enter the scheduler
+Only **Run comparison** invokes models and incurs AWS usage. Each runner executes one
+job at a time; start more runners for more concurrency.
+
+## Edit, test and save a configuration
+
+**Configure** lists the saved versions (the active one first), test drafts, and
+retired versions. A version's page shows what it changed from its parent, its rules
+scored against the golden holdout (instant, no model calls), each pipeline step's
+settings and prompts, and the comparisons it took part in.
+
+**Edit as draft** copies a version into an editor organized by step: Decide (human-call
+severities, send-window policy and days, the rules file), Generate and Review (model,
+reasoning effort, temperature, token budget, prompt with a line diff against the
+parent, acceptance threshold), and Loop (revisions, timeouts, concurrency). Each step
+shows how many settings changed. Edits stay in the browser tab until you act:
+
+- **Test against parent** keeps the draft as a draft, named after what it changed (or a
+  test name you give), runs it beside its parent on the chosen insights, and opens the
+  comparison. The page shows the versions and progress until results arrive.
+- **Save version** (or **Save as version** on a tested draft) makes it a saved version.
+  Saved versions are the runnable ones: Generate lists them, and **Make active** makes
+  one the default (the previous one is kept as retired).
+
+A definition must validate before it is saved: prompts cannot be empty, and hosted
+versions may only use the models the worker may call (`MEL_ALLOWED_MODELS`). The stack
+allows GPT-6 Luna through Mantle (`BedrockAllowedModelIds`) and the Converse models in
+`ConverseModelIds`: Claude Haiku, Sonnet and Opus 5.5, Nova Pro, Nova 2 Lite, Mistral
+Large 3, DeepSeek V3.2 and GPT 5.5. Each passed a tool-call check, which structured
+survey output needs; Llama 4 does not support tools. Converse agents never force the
+output tool (`mel.agents.converse_profile`), because Claude Sonnet and Opus 5.5 refuse
+a forced tool choice. Comparison results never enter the scheduler
 handoff queue.
 
 A local API defaults to loopback and has no sign-in. Keep it local.
@@ -105,13 +131,12 @@ every result, and selecting one shows the agent's steps and a survey preview.
 are shown greyed out until they exist. Hosted, `deploy.sh` copies the pack to the data
 bucket, from which the API imports it (`MEL_PACK_URI`).
 
-The worker's IAM policy authorizes Mantle inference only. Configure native Converse
-permissions before using Converse candidates in a deployed worker. 
+The worker's IAM policy authorizes Mantle inference for `BedrockAllowedModelIds` and
+Converse inference for Bedrock models and inference profiles; the console limits which. 
 ## Change a team-owned component
 
 | Concern | Owner |
 | --- | --- |
-| Registered rulesets | `config/rulesets.yaml`, with paths relative to that file |
 | Rule semantics and windows | `src/mel/decision/` |
 | Flow and emitted stage evidence | `src/mel/graph.py` |
 | Models, budgets, and revision settings | `config/agent.yaml` |

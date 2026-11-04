@@ -2,10 +2,24 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from memory_configs import MemoryConfigs
-from test_experiments import specification
+from test_experiments import versions
+from test_trace import insight
 
 from mel.config import Settings
 from mel.explorer.api import create_app
+
+DATASET = "00000000-0000-0000-0000-00000000000d"
+
+
+def experiment(store, **changes):
+    first, second = versions(store)
+    return {
+        "name": "Compare",
+        "candidates": [{"label": "A", "config_id": first}, {"label": "B", "config_id": second}],
+        "dataset_id": DATASET,
+        "selection": {"limit": 1},
+        **changes,
+    }
 
 
 class Store(MemoryConfigs):
@@ -24,6 +38,12 @@ class Store(MemoryConfigs):
 
     def create_experiment(self, key, spec, source="live"):
         self.created.append(key)
+
+    def dataset(self, key):
+        return {"dataset_id": key, "name": "Test", "row_count": 1} if key == DATASET else None
+
+    def insights(self, key, selection, offset=0):
+        return [insight()]
 
     def create_job(self, key, kind, spec):
         self.jobs.append((kind, spec))
@@ -132,12 +152,12 @@ def test_get_does_not_queue_and_invalid_requests_do_not_queue():
     with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
         assert client.get("/api/experiments").status_code == 200
         assert not store.jobs
-        spec = specification().model_dump(mode="json")
-        spec["row_limit"] = 51
-        assert client.post("/api/experiments", json=spec).status_code == 422
+        too_many = experiment(store, selection={"limit": 51})
+        assert client.post("/api/experiments", json=too_many).status_code == 422
+        unknown = experiment(store, candidates=[{"label": "A", "config_id": str(uuid4())}])
+        assert client.post("/api/experiments", json=unknown).status_code == 422
         assert not store.created and not store.jobs
-        spec["row_limit"] = 1
-        response = client.post("/api/experiments", json=spec)
+        response = client.post("/api/experiments", json=experiment(store))
     assert response.status_code == 202
     experiment_id = response.json()["experiment_id"]
     assert store.created == [experiment_id]
@@ -152,8 +172,7 @@ def test_experiments_and_batches_are_refused_when_live_execution_is_disabled():
         live_enabled=False,
     )
     with TestClient(app) as client:
-        spec = specification().model_dump(mode="json")
-        assert client.post("/api/experiments", json=spec).status_code == 403
+        assert client.post("/api/experiments", json=experiment(store)).status_code == 403
         batch = {"dataset_id": "00000000-0000-0000-0000-000000000001"}
         assert client.post("/api/jobs/batch", json=batch).status_code == 403
     assert not store.jobs
@@ -231,7 +250,7 @@ def test_queued_jobs_are_dispatched_and_a_failed_dispatch_fails_the_job():
     def broken(_, job_id):
         raise RuntimeError("no capacity")
 
-    spec = specification().model_dump(mode="json")
+    spec = experiment(store)
     app = create_app(settings=settings, store_factory=lambda _: store, dispatcher=dispatcher)
     with TestClient(app) as client:
         job_id = client.post("/api/experiments", json=spec).json()["job_id"]
@@ -271,3 +290,65 @@ def test_an_unreachable_pack_is_reported_not_crashed(tmp_path):
         response = client.post("/api/datasets/import-pack")
     assert response.status_code == 503
     assert "Participant pack unavailable" in response.json()["detail"]
+
+
+def test_drafts_keep_their_test_name_and_only_saved_versions_activate():
+    from mel.bundle import Bundle
+
+    store = Store()
+    settings = Settings(bedrock_model_id="test")
+    definition = Bundle.load(settings).definition
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
+        draft = client.post("/api/configs", json={"definition": definition, "name": "Try"}).json()
+        refused = client.post(f"/api/configs/{draft['config_id']}/activate")
+        named = client.post(f"/api/configs/{draft['config_id']}/save", json={"name": "Shorter"})
+        activated = client.post(f"/api/configs/{draft['config_id']}/activate")
+        unnamed = client.post("/api/configs", json={"definition": definition, "save": True})
+    assert draft["name"] == "Try" and draft["status"] == "draft"
+    assert refused.status_code == 422 and "Save this version" in refused.json()["detail"]
+    assert named.status_code == 200 and store.configs[draft["config_id"]]["name"] == "Shorter"
+    assert store.configs[draft["config_id"]]["status"] == "saved"
+    assert unnamed.status_code == 422
+    assert activated.status_code == 200 and store.active == draft["config_id"]
+
+
+def test_definitions_that_cannot_run_here_are_refused_with_the_reason():
+    from mel.bundle import Bundle
+
+    settings = Settings(
+        bedrock_model_id="test", allowed_models=[{"model_id": "test", "api": "responses"}]
+    )
+    good = Bundle.load(settings).definition
+    empty_prompt = {**good, "prompts": {**good["prompts"], "generate": "  "}}
+    other_model = {
+        **good,
+        "config": {**good["config"], "review": {**good["config"]["review"], "model_id": "x"}},
+    }
+    converse = {
+        **good,
+        "config": {
+            **good["config"],
+            "generation": {**good["config"]["generation"], "api": "converse"},
+        },
+    }
+    broken = {**good, "config": {**good["config"], "graph": {"max_revisions": -1}}}
+    with TestClient(create_app(settings=settings, store_factory=lambda _: Store())) as client:
+        details = [
+            client.post("/api/configs", json={"definition": value}).json()["detail"]
+            for value in (empty_prompt, other_model, converse, broken)
+        ]
+        assert client.post("/api/configs", json={"definition": good}).status_code == 201
+    assert "generate prompt is empty" in details[0]
+    assert "review model x (responses) is not enabled" in details[1]
+    assert "generation model test (converse) is not enabled" in details[2]
+    assert "graph.max_revisions" in details[3]
+
+
+def test_the_rules_check_scores_a_version_against_the_golden_holdout():
+    store = Store()
+    settings = Settings(bedrock_model_id="test")
+    (key,) = versions(store, models=("test",))
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
+        report = client.get(f"/api/configs/{key}/rules-check").json()
+    assert report["cases"] > 100
+    assert report["decision_accuracy"] == 1.0

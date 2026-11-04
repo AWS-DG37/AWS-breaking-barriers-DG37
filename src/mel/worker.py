@@ -17,6 +17,7 @@ from mel.bedrock import create_mantle_client
 from mel.bundle import Bundle, local_bundle, read_bytes, write_bytes
 from mel.clock import IST
 from mel.config import Settings
+from mel.costs import CostedModel, CostRefused, meter_agents
 from mel.datasets import parse_insights
 from mel.evaluation import (
     insights_jsonl,
@@ -39,7 +40,10 @@ async def close_model_clients(*agents) -> None:
     """Each native client is owned once, including distinct generator/reviewer clients."""
     seen = set()
     for agent in agents:
-        client = getattr(getattr(agent, "model", None), "client", None)
+        model = getattr(agent, "model", None)
+        while isinstance(model, CostedModel):
+            model = model.wrapped
+        client = getattr(model, "client", None)
         if client is None or id(client) in seen:
             continue
         seen.add(id(client))
@@ -60,6 +64,8 @@ async def process_insight(
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
+    except CostRefused:
+        raise
     except Exception as error:
         state.record("failure", "runtime", error_type=type(error).__name__)
         outcome = Outcome(
@@ -78,7 +84,8 @@ async def process_insight(
     outcome.elapsed_seconds = round(time.monotonic() - started, 3)
     prices = deps.config.batch
     if (
-        outcome.usage_complete
+        not isinstance(getattr(deps.generator, "model", None), CostedModel)
+        and outcome.usage_complete
         and prices.input_cost_per_million is not None
         and prices.output_cost_per_million is not None
     ):
@@ -125,6 +132,7 @@ async def execute_run(
     settings: Settings,
     config_id: str,
     job_id: str | None = None,
+    budget_usd=None,
     retry_failed: bool = False,
     agent_factory=build_agents,
     on_progress=None,
@@ -136,6 +144,7 @@ async def execute_run(
     """
     config = bundle.config
     generator = reviewer = None
+    run_started = False
     try:
         generator, reviewer = agent_factory(
             config, settings.aws_region, bundle.snapshot["prompts"], settings.bedrock_project_id
@@ -152,6 +161,11 @@ async def execute_run(
             config_id=config_id,
             job_id=job_id,
         )
+        run_started = True
+        if hasattr(store, "connection"):
+            meter_agents(
+                store, run_id, config, settings.aws_region, (generator, reviewer), budget_usd
+            )
         logger.info(
             json.dumps(
                 {
@@ -204,6 +218,10 @@ async def execute_run(
         failed = any(r["status"] == "failed" for r in results)
         store.finish(run_id, "completed_with_errors" if failed else "completed")
         return results
+    except BaseException:
+        if run_started:
+            store.finish(run_id, "failed")
+        raise
     finally:
         await close_model_clients(generator, reviewer)
 
@@ -390,6 +408,8 @@ def save_config_version(args: argparse.Namespace) -> None:
 
     def save(store: Store) -> dict:
         key = store.save_config(definition, parent_id=args.parent, note=args.note)
+        if args.name:
+            store.name_config(key, args.name, args.note)
         if args.activate:
             store.activate_config(key)
         return store.config(key)
@@ -463,7 +483,10 @@ def main() -> None:
     save.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
     save.add_argument("--parent", help="config_id this version was derived from")
     save.add_argument("--note", help="What changed and why")
-    save.add_argument("--activate", action="store_true", help="Make this the active version")
+    save.add_argument("--name", help="Name it, making it a saved, runnable version")
+    save.add_argument(
+        "--activate", action="store_true", help="Make this the active version (needs --name)"
+    )
     activate = configs_sub.add_parser("activate", help="Make a saved version the active one")
     activate.add_argument("config_id")
     configs_sub.add_parser("list", help="List saved versions, newest first")
@@ -503,6 +526,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "jobs" and args.resume and args.job_id is None:
         parser.error("--resume requires --job-id")
+    if args.command == "config" and args.config_command == "save" and args.activate:
+        if not args.name:
+            parser.error("--activate requires --name")
     if args.command == "eval-rules":
         eval_rules(args)
     elif args.command == "eval-surveys":

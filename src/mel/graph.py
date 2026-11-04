@@ -19,6 +19,7 @@ from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 from mel.bundle import Bundle
 from mel.config import AgentConfig
 from mel.contracts import Contracts
+from mel.costs import request_scope
 from mel.decision import CropCalendar, Decision, DecisionEngine
 from mel.handoff import handoff
 from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
@@ -165,13 +166,14 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
             "context": s.context,
         }
         s.record("generate", "runtime", kind="request", payload=payload)
-        result = await d.generator.run(
-            json.dumps(payload, ensure_ascii=False),
-            usage=s.usage,
-            usage_limits=UsageLimits(
-                request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-            ),
-        )
+        with request_scope(s.insight["insight_id"], s.attempts):
+            result = await d.generator.run(
+                json.dumps(payload, ensure_ascii=False),
+                usage=s.usage,
+                usage_limits=UsageLimits(
+                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                ),
+            )
         check_usage(s, result)
         s.question_evidence = list(result.output.question_evidence)
         s.survey = {
@@ -200,20 +202,24 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
         s.record("schema", "schema", target="survey", valid=not s.feedback, errors=s.feedback)
         if not s.feedback:
             s.record("review", "runtime", kind="request", survey=s.survey)
-            result = await d.reviewer.run(
-                json.dumps(
-                    {
-                        "insight": s.insight,
-                        "survey": s.survey,
-                        "constraints": {"max_questions": 3, "conditional_display_supported": False},
-                    },
-                    ensure_ascii=False,
-                ),
-                usage=s.usage,
-                usage_limits=UsageLimits(
-                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-                ),
-            )
+            with request_scope(s.insight["insight_id"], s.attempts):
+                result = await d.reviewer.run(
+                    json.dumps(
+                        {
+                            "insight": s.insight,
+                            "survey": s.survey,
+                            "constraints": {
+                                "max_questions": 3,
+                                "conditional_display_supported": False,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    usage=s.usage,
+                    usage_limits=UsageLimits(
+                        request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                    ),
+                )
             check_usage(s, result)
             s.review = result.output
             s.record("review", "model", kind="response", review=s.review.model_dump())

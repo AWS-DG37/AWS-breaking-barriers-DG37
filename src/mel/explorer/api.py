@@ -7,25 +7,36 @@ import argparse
 import hashlib
 import json
 import logging
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import Field, ValidationError, model_validator
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
 from mel.bundle import Bundle, read_bytes
 from mel.config import Settings, StrictModel
-from mel.configs import active_config, config_bundle
+from mel.configs import active_config, config_bundle, validate_definition
+from mel.costs import (
+    CostRefused,
+    NewPrice,
+    check_budget_prices,
+    estimate_run,
+    prices,
+    report,
+    save_price,
+)
 from mel.datasets import InsightFilter, parse_insights
+from mel.evaluation import load_golden, score_decisions
 from mel.experiments import (
+    ExperimentCandidate,
     ExperimentSpec,
     QualityAssessment,
     compare_runs,
-    ruleset_registry,
-    select_rules,
     validate_assessment,
 )
 from mel.explorer import auth
@@ -34,6 +45,7 @@ from mel.models import Outcome
 from mel.store import Store
 
 logger = logging.getLogger("mel.explorer")
+GOLDEN_HOLDOUT = Path("eval/golden_holdout.jsonl")
 BROWSE_LIMIT = 500
 
 
@@ -41,6 +53,35 @@ class NewConfig(StrictModel):
     definition: dict
     parent_id: UUID | None = None
     note: str | None = None
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    save: bool = False  # True: a saved, runnable version (needs a name); False: a draft.
+
+    @model_validator(mode="after")
+    def saved_versions_are_named(self):
+        if self.save and not self.name:
+            raise ValueError("name the version to save it")
+        return self
+
+
+class ConfigName(StrictModel):
+    name: str = Field(min_length=1, max_length=80, pattern=r"\S")
+    note: str | None = Field(default=None, max_length=500)
+
+
+class NewExperimentCandidate(StrictModel):
+    label: str = Field(min_length=1, max_length=120, pattern=r"\S")
+    config_id: UUID
+
+
+class NewExperiment(StrictModel):
+    """Compare saved versions on the same insights, chosen like a Generate selection."""
+
+    name: str = Field(min_length=1, max_length=200, pattern=r"\S")
+    candidates: list[NewExperimentCandidate] = Field(min_length=1, max_length=6)
+    dataset_id: UUID
+    selection: InsightFilter = InsightFilter(limit=10)
+    evaluation_reference: Literal["rules", "golden"] = "rules"
+    budget_usd: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
 
 
 class NewDataset(StrictModel):
@@ -49,6 +90,7 @@ class NewDataset(StrictModel):
 
 
 class NewBatchJob(StrictModel):
+    budget_usd: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
     dataset_id: UUID
     config_id: UUID | None = None  # Unset uses the active version.
     selection: InsightFilter = InsightFilter()
@@ -85,23 +127,34 @@ FLOW = {
 }
 
 
+def recorded_spec(name: str, insights: list[dict], labels: list[str]) -> ExperimentSpec:
+    """Recorded artifacts predate configuration versions; their candidates are labels,
+    and each run's manifest holds the configuration it used."""
+    return ExperimentSpec(
+        name=name,
+        insights=insights,
+        candidates=[ExperimentCandidate(label=label) for label in labels],
+    )
+
+
 def import_recorded(path: Path, store: Store) -> str:
     body = path.read_bytes()
     envelope = json.loads(body)
     if "runs" in envelope:
-        spec = ExperimentSpec.model_validate(envelope["spec"])
+        recorded = envelope["spec"]
+        spec = recorded_spec(
+            recorded["name"],
+            recorded["insights"][: recorded.get("row_limit", len(recorded["insights"]))],
+            [c["label"] for c in recorded["candidates"]],
+        )
         runs = envelope["runs"]
     else:
         bundle = envelope["bundle"]
         pairs = envelope["results"]
-        spec = ExperimentSpec.model_validate(
-            {
-                "name": envelope["manifest"].get("name", "Recorded FarmerChat run"),
-                "insights": [r["input"] for r in pairs],
-                "candidates": [{"label": "Recorded run", "model": bundle["config"]["generation"]}],
-                "reviewer": bundle["config"]["review"],
-                "row_limit": min(50, len(pairs)),
-            }
+        spec = recorded_spec(
+            envelope["manifest"].get("name", "Recorded FarmerChat run"),
+            [r["input"] for r in pairs][:50],
+            ["Recorded run"],
         )
         runs = [
             {"manifest": {**bundle, "recorded_manifest": envelope["manifest"]}, "results": pairs}
@@ -109,7 +162,7 @@ def import_recorded(path: Path, store: Store) -> str:
     if len(runs) != len(spec.candidates):
         raise ValueError("recorded runs must match the declared candidates")
     validated = []
-    selected = {r["insight_id"]: r for r in spec.insights[: spec.row_limit]}
+    selected = {r["insight_id"]: r for r in spec.insights}
     for run in runs:
         pairs = []
         for pair in run["results"]:
@@ -166,6 +219,26 @@ def create_app(
     app = FastAPI(title="FarmerChat MEL console")
     auth.install(app, settings, verifier=auth_verifier, exchange=auth_exchange)
 
+    @app.exception_handler(CostRefused)
+    async def costs_refused(request, error):
+        return JSONResponse({"detail": str(error)}, status_code=409)
+
+    @app.get("/api/prices")
+    def model_prices():
+        return {"prices": database_call(prices)}
+
+    @app.post("/api/prices", status_code=201)
+    def add_price(value: NewPrice):
+        return database_call(lambda db: save_price(db, value))
+
+    @app.get("/api/runs/{run_id}/costs")
+    def run_costs(
+        run_id: UUID,
+        limit: Annotated[int, Query(ge=1, le=200)] = 100,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ):
+        return database_call(lambda db: report(db, str(run_id), limit=limit, offset=offset))
+
     def database():
         db = None
         try:
@@ -194,7 +267,7 @@ def create_app(
         db = database()
         try:
             return operation(db)
-        except HTTPException:
+        except (HTTPException, CostRefused):
             raise
         except Exception as error:
             raise HTTPException(
@@ -214,21 +287,12 @@ def create_app(
     @app.get("/api/config")
     def configuration():
         try:
-            config_id, bundle = database_call(lambda db: active_config(db, settings))
+            config_id, _ = database_call(lambda db: active_config(db, settings))
             return {
                 "active_config_id": config_id,
-                "rulesets": [
-                    {"id": row["id"], "label": row["label"]} for row in ruleset_registry(settings)
-                ],
-                "default_reviewer": bundle.config.review.model_dump(mode="json"),
-                "default_candidates": [
-                    {
-                        "label": "Configured model",
-                        "model": bundle.config.generation.model_dump(mode="json"),
-                    }
-                ],
                 "flow": FLOW,
                 "live_enabled": live_enabled,
+                "allowed_models": [m.model_dump() for m in settings.allowed_models],
             }
         except HTTPException:
             raise
@@ -253,25 +317,67 @@ def create_app(
 
     @app.post("/api/configs", status_code=201)
     def create_config(value: NewConfig):
-        try:
-            definition = Bundle.from_definition(value.definition).definition
-        except Exception as error:
-            raise HTTPException(422, f"Invalid configuration ({type(error).__name__})") from None
+        """Store a definition as a draft or, with `save`, a saved version. An identical
+        definition returns the version that already holds it."""
+        definition = runnable(value.definition).definition
 
         def save(db):
             if value.parent_id and db.config(str(value.parent_id)) is None:
                 raise HTTPException(422, "Unknown parent configuration version")
             parent = str(value.parent_id) if value.parent_id else None
-            return db.config(db.save_config(definition, parent_id=parent, note=value.note))
+            key = db.save_config(definition, parent_id=parent, note=value.note, name=value.name)
+            if value.save:
+                db.name_config(key, value.name, value.note)
+            return db.config(key)
 
         return database_call(save)
+
+    def runnable(definition: dict) -> Bundle:
+        try:
+            return validate_definition(definition, settings)
+        except ValidationError as error:
+            first = error.errors()[0]
+            where = ".".join(str(part) for part in first["loc"])
+            raise HTTPException(422, f"Invalid configuration: {where}: {first['msg']}") from None
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(422, f"Invalid configuration: {error}") from None
+
+    @app.post("/api/configs/{config_id}/save")
+    def name_config(config_id: UUID, value: ConfigName):
+        def save(db):
+            if db.config(str(config_id)) is None:
+                raise HTTPException(404, "Configuration version not found")
+            db.name_config(str(config_id), value.name.strip(), value.note)
+            return db.config(str(config_id))
+
+        return database_call(save)
+
+    @app.get("/api/configs/{config_id}/rules-check")
+    def rules_check(config_id: UUID):
+        """The version's decision rules and send windows against the golden holdout:
+        free and instant, because no model is called."""
+
+        def check(db):
+            if db.config(str(config_id)) is None:
+                raise HTTPException(404, "Configuration version not found")
+            engine = config_bundle(db, str(config_id)).decision_engine()
+            report = score_decisions(engine, load_golden(GOLDEN_HOLDOUT)).to_dict()
+            return {
+                key: report[key]
+                for key in ("cases", "decision_accuracy", "rule_accuracy", "window")
+            } | {"mismatches": report["mismatches"][:20]}
+
+        return database_call(check)
 
     @app.post("/api/configs/{config_id}/activate")
     def activate_config(config_id: UUID):
         def activate(db):
             if db.config(str(config_id)) is None:
                 raise HTTPException(404, "Configuration version not found")
-            db.activate_config(str(config_id))
+            try:
+                db.activate_config(str(config_id))
+            except ValueError as error:
+                raise HTTPException(422, str(error).capitalize()) from None
             return {"active_config_id": str(config_id)}
 
         return database_call(activate)
@@ -352,7 +458,10 @@ def create_app(
         else:
             config_id = str(value.config_id)
         return BatchJobSpec(
-            dataset_id=value.dataset_id, config_id=config_id, selection=value.selection
+            dataset_id=value.dataset_id,
+            config_id=config_id,
+            selection=value.selection,
+            budget_usd=value.budget_usd,
         )
 
     @app.post("/api/jobs/batch/estimate")
@@ -363,7 +472,14 @@ def create_app(
             spec = batch_spec(db, value)
             bundle = config_bundle(db, str(spec.config_id))
             insights = db.insights(str(spec.dataset_id), spec.selection)
-            return {"config_id": str(spec.config_id), **estimate_batch(bundle, insights)}
+            result = {"config_id": str(spec.config_id), **estimate_batch(bundle, insights)}
+            if hasattr(db, "connection"):
+                result["costs"] = estimate_run(
+                    db, bundle.config, settings.aws_region, result["surveys"]
+                )
+                amount = result["costs"]["estimated_usd"]
+                result["cost_usd"] = float(amount) if amount is not None else None
+            return result
 
         return database_call(run)
 
@@ -376,6 +492,8 @@ def create_app(
         summary = database_call(lambda db: db.run_summary(str(run_id)))
         if summary is None:
             raise HTTPException(404, "Run not found")
+        if hasattr(summary, "get"):
+            summary["costs"] = database_call(lambda db: report(db, str(run_id)))
         return summary
 
     @app.get("/api/runs/{run_id}/results")
@@ -413,6 +531,9 @@ def create_app(
 
         def enqueue(db):
             spec = batch_spec(db, value)
+            if hasattr(db, "connection") and spec.budget_usd is not None:
+                bundle = config_bundle(db, str(spec.config_id))
+                check_budget_prices(db, bundle.config, settings.aws_region, spec.budget_usd)
             return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)
@@ -443,23 +564,72 @@ def create_app(
         detail = database_call(lambda db: db.experiment_detail(str(experiment_id)))
         if detail is None:
             raise HTTPException(404, "Experiment not found")
+
+        def costs(db):
+            if hasattr(db, "connection"):
+                for run in detail["runs"]:
+                    run["costs"] = report(db, run["run_id"])
+
+        database_call(costs)
         return {
             **detail,
             "comparison": compare_runs(detail, reference=evaluation_reference),
             "flow": FLOW,
         }
 
+    @app.post("/api/experiments/estimate")
+    def experiment_estimate(value: NewExperiment):
+        def estimate(db):
+            if db.dataset(str(value.dataset_id)) is None:
+                raise HTTPException(422, "Unknown dataset")
+            insights = db.insights(str(value.dataset_id), value.selection)
+            entries = []
+            for candidate in value.candidates:
+                if db.config(str(candidate.config_id)) is None:
+                    raise HTTPException(422, "Unknown configuration version")
+                bundle = config_bundle(db, str(candidate.config_id))
+                surveys = estimate_batch(bundle, insights)["surveys"]
+                entries.append(
+                    {
+                        "label": candidate.label,
+                        **estimate_run(db, bundle.config, settings.aws_region, surveys),
+                    }
+                )
+            return {"candidates": entries, "budget_scope": "Each candidate run has its own budget"}
+
+        return database_call(estimate)
+
     @app.post("/api/experiments", status_code=202)
-    def start_experiment(spec: ExperimentSpec):
+    def start_experiment(value: NewExperiment):
         if not live_enabled:
             raise HTTPException(403, "Live execution is disabled")
+        if (value.selection.limit or 51) > 50:
+            raise HTTPException(422, "An experiment compares at most 50 insights")
 
         def enqueue(db):
-            _, bundle = active_config(db, settings)
+            if db.dataset(str(value.dataset_id)) is None:
+                raise HTTPException(422, "Unknown dataset")
+            for candidate in value.candidates:
+                record = db.config(str(candidate.config_id))
+                if record is None:
+                    raise HTTPException(422, f"Unknown configuration version for {candidate.label}")
+                runnable(record["definition"])
+                if hasattr(db, "connection"):
+                    bundle = config_bundle(db, str(candidate.config_id))
+                    check_budget_prices(db, bundle.config, settings.aws_region, value.budget_usd)
+            insights = db.insights(str(value.dataset_id), value.selection)
+            if not insights:
+                raise HTTPException(422, "No insights match this selection")
             try:
-                select_rules(bundle, settings, spec.ruleset)
-            except ValueError:
-                raise HTTPException(422, "Unknown or invalid configured ruleset") from None
+                spec = ExperimentSpec(
+                    name=value.name,
+                    insights=insights,
+                    candidates=[c.model_dump() for c in value.candidates],
+                    evaluation_reference=value.evaluation_reference,
+                    budget_usd=value.budget_usd,
+                )
+            except ValidationError as error:
+                raise HTTPException(422, error.errors()[0]["msg"]) from None
             key = str(uuid4())
             db.create_experiment(key, spec.model_dump(mode="json"))
             job = queue(db, "experiment", {"experiment_id": key})

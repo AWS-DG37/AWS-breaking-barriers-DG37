@@ -1,4 +1,0 @@
-rulesets:
-  - id: participant-pack
-    label: Digital Green participant pack
-    rules_path: ../docs/participant-pack/json/rules/rules.json

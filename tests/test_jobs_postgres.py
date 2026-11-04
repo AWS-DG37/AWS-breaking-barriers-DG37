@@ -11,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 from postgres import requires_postgres
+from test_experiments import versions
 from test_trace import dependencies
 
 from mel.bundle import Bundle
@@ -38,6 +39,7 @@ def smoke_dataset(db):
 
 def active(db):
     key = db.save_config(Bundle.load(SETTINGS).definition, note="test")
+    db.name_config(key, "Test baseline")
     db.activate_config(key)
     return key
 
@@ -47,7 +49,14 @@ def test_identical_definitions_share_one_version_and_one_version_is_active(datab
     first = database.save_config(definition, note="first")
     assert database.save_config(definition, note="again") == first
     changed = {**definition, "prompts": {**definition["prompts"], "generate": "Changed."}}
-    second = database.save_config(changed, parent_id=first, note="prompt edit")
+    second = database.save_config(changed, parent_id=first, note="prompt edit", name="Test")
+    assert (database.config(second)["status"], database.config(second)["name"]) == ("draft", "Test")
+    with pytest.raises(ValueError, match="save this version"):
+        database.activate_config(second)
+    database.name_config(first, "Baseline")
+    database.name_config(second, "Prompt edit", "Shorter generate prompt")
+    assert database.config(second)["status"] == "saved"
+    assert database.config(second)["note"] == "Shorter generate prompt"
     database.activate_config(first)
     database.activate_config(second)
     assert database.active_config_id() == second
@@ -121,17 +130,13 @@ def test_a_failed_job_records_its_error_and_only_resume_reclaims_it(database):
     assert database.claim_job(job["job_id"], resume=True)["status"] == "running"
 
 
-def test_experiment_job_saves_each_candidate_as_a_child_of_the_active_version(database):
-    base = active(database)
+def test_experiment_job_runs_each_candidate_with_its_own_version(database):
+    first, second = versions(database)
     spec = ExperimentSpec.model_validate(
         {
             "name": "Queued comparison",
             "insights": [parse_insights(SMOKE.read_bytes())[0]],
-            "candidates": [
-                {"label": "A", "model": {"model_id": "test-a"}},
-                {"label": "B", "model": {"model_id": "test-b"}},
-            ],
-            "reviewer": {"model_id": "reviewer"},
+            "candidates": [{"label": "A", "config_id": first}, {"label": "B", "config_id": second}],
         }
     )
     key = str(uuid4())
@@ -140,13 +145,12 @@ def test_experiment_job_saves_each_candidate_as_a_child_of_the_active_version(da
     asyncio.run(run_queue(database, SETTINGS, job_id=job["job_id"], agent_factory=agents))
     record = database.job(job["job_id"])
     assert record["status"] == "completed", record["error"]
-    configs = {run["config_id"] for run in record["runs"]}
-    assert len(configs) == 2
-    for config_id in configs:
-        version = database.config(config_id)
-        assert version["parent_id"] == base
-        assert version["generation_model"] in {"test-a", "test-b"}
-    assert database.experiment_detail(key)["status"] == "completed"
+    assert record["progress"] == {"done": 2, "total": 2}
+    assert {run["config_id"] for run in record["runs"]} == {first, second}
+    detail = database.experiment_detail(key)
+    assert detail["status"] == "completed"
+    assert detail["job"]["status"] == "completed" and detail["job"]["progress"]["done"] == 2
+    assert {run["model_id"] for run in detail["runs"]} == {"test-a", "test-b"}
 
 
 def test_facets_counts_and_the_runs_view_describe_a_batch(database):

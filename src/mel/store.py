@@ -235,7 +235,8 @@ class Store:
                 "source": source,
                 "created_at": created.isoformat(),
                 "candidate_count": len(spec["candidates"]),
-                "insight_count": min(len(spec["insights"]), spec.get("row_limit", 3)),
+                "insight_count": len(spec["insights"]),
+                "config_ids": [c["config_id"] for c in spec["candidates"] if c.get("config_id")],
             }
             for key, spec, status, source, created in rows
         ]
@@ -249,6 +250,11 @@ class Store:
             if row is None:
                 return None
             spec, status, source, created = row
+            job = self.connection.execute(
+                "SELECT status,progress,error,created_at FROM jobs WHERE kind='experiment' "
+                "AND spec->>'experiment_id'=%s ORDER BY created_at DESC LIMIT 1",
+                (experiment_id,),
+            ).fetchone()
             runs = []
             for run_id, manifest, run_status in self.connection.execute(
                 "SELECT run_id,manifest,status FROM generation_runs WHERE experiment_id=%s "
@@ -292,6 +298,14 @@ class Store:
             "created_at": created.isoformat(),
             "runs": runs,
             "assessments": assessments,
+            "job": {
+                "status": job[0],
+                "progress": job[1],
+                "error": job[2],
+                "created_at": _iso(job[3]),
+            }
+            if job
+            else None,
         }
 
     def save_assessment(self, experiment_id: str, assessment: dict) -> dict:
@@ -308,16 +322,22 @@ class Store:
     # definition returns the existing version.
 
     def save_config(
-        self, definition: dict, *, parent_id: str | None = None, note: str | None = None
+        self,
+        definition: dict,
+        *,
+        parent_id: str | None = None,
+        note: str | None = None,
+        name: str | None = None,
     ) -> str:
         from psycopg.types.json import Jsonb
 
         digest = definition_sha256(definition)
         with self.lock:
             self.connection.execute(
-                "INSERT INTO agent_configs(config_id,parent_id,definition,definition_sha256,note) "
-                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (definition_sha256) DO NOTHING",
-                (str(uuid4()), parent_id, Jsonb(definition), digest, note),
+                "INSERT INTO agent_configs"
+                "(config_id,parent_id,definition,definition_sha256,note,name) "
+                "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT (definition_sha256) DO NOTHING",
+                (str(uuid4()), parent_id, Jsonb(definition), digest, note, name),
             )
             row = self.connection.execute(
                 "SELECT config_id FROM agent_configs WHERE definition_sha256=%s", (digest,)
@@ -327,21 +347,21 @@ class Store:
     def config(self, config_id: str) -> dict | None:
         with self.lock:
             row = self.connection.execute(
-                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,definition "
-                "FROM agent_configs WHERE config_id=%s",
+                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,name,"
+                "definition FROM agent_configs WHERE config_id=%s",
                 (config_id,),
             ).fetchone()
         if row is None:
             return None
-        return {**_config_summary(row[:6], row[6]), "definition": row[6]}
+        return {**_config_summary(row[:7], row[7]), "definition": row[7]}
 
     def list_configs(self) -> list[dict]:
         with self.lock:
             rows = self.connection.execute(
-                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,"
+                "SELECT config_id,parent_id,status,note,created_at,definition_sha256,name,"
                 "definition->'config' FROM agent_configs ORDER BY created_at DESC LIMIT 500"
             ).fetchall()
-        return [_config_summary(row[:6], {"config": row[6]}) for row in rows]
+        return [_config_summary(row[:7], {"config": row[7]}) for row in rows]
 
     def active_config_id(self) -> str | None:
         with self.lock:
@@ -350,12 +370,27 @@ class Store:
             ).fetchone()
         return str(row[0]) if row else None
 
+    def name_config(self, config_id: str, name: str, note: str | None = None) -> None:
+        """Name a version and mark a draft saved: a runnable version people can pick."""
+        with self.lock:
+            updated = self.connection.execute(
+                "UPDATE agent_configs SET name=%s,note=coalesce(%s,note),"
+                "status=CASE WHEN status='draft' THEN 'saved' ELSE status END "
+                "WHERE config_id=%s RETURNING config_id",
+                (name, note, config_id),
+            ).fetchone()
+        if updated is None:
+            raise ValueError("unknown config_id")
+
     def activate_config(self, config_id: str) -> None:
         with self.lock, self.connection.transaction():
-            if not self.connection.execute(
-                "SELECT 1 FROM agent_configs WHERE config_id=%s FOR UPDATE", (config_id,)
-            ).fetchone():
+            row = self.connection.execute(
+                "SELECT status FROM agent_configs WHERE config_id=%s FOR UPDATE", (config_id,)
+            ).fetchone()
+            if row is None:
                 raise ValueError("unknown config_id")
+            if row[0] == "draft":
+                raise ValueError("save this version before activating it")
             self.connection.execute(
                 "UPDATE agent_configs SET status='retired' WHERE status='active' AND config_id<>%s",
                 (config_id,),
@@ -691,10 +726,11 @@ def _run_summary(row) -> dict:
 
 
 def _config_summary(row, definition: dict) -> dict:
-    config_id, parent_id, status, note, created, digest = row
+    config_id, parent_id, status, note, created, digest, name = row
     config = definition["config"]
     return {
         "config_id": str(config_id),
+        "name": name,
         "parent_id": str(parent_id) if parent_id else None,
         "status": status,
         "note": note,

@@ -1,3 +1,4 @@
+import {budgetInput, costSummary, money} from './costs.mjs';
 // Generate: pick insights, see what the rules will do, run the agent, inspect results.
 // Routes: #generate, #generate/job/<job id>, #generate/run/<run id>[/<insight id>].
 import {el} from './dom.mjs';
@@ -98,12 +99,17 @@ async function composer() {
   const limit=el('label',{},'How many',el('input',{type:'number',min:1,step:1,placeholder:'All matching',value:s.limit ?? '',onInput:event=>set('limit',event.target.value?Number(event.target.value):null)}));
   const configPicker=el('select',{'aria-label':'Agent configuration',onChange:event=>{f.config=event.target.value;changed();}},
     el('option',{value:'',selected:!f.config},'Active version'),
-    view.configs.map(c=>el('option',{value:c.config_id,selected:c.config_id===f.config},configLabel(c))));
+    // Saved versions are the runnable ones; test drafts stay in Configure.
+    view.configs.filter(c=>['saved','active'].includes(c.status)).map(c=>el('option',{value:c.config_id,selected:c.config_id===f.config},configLabel(c))));
 
+  const budget=budgetInput();
+  budget.querySelector('input').value=f.budget || '5';
+  budget.querySelector('input').addEventListener('input',event=>{f.budget=event.target.value;});
   const form=el('form',{class:'gen-form',onSubmit:event=>event.preventDefault()},
     step('1','Insights',datasetPicker),
     step('2','Which ones',el('div',{class:'gen-filters'},...filters),dates,limit),
-    step('3','Agent configuration',configPicker));
+    step('3','Agent configuration',configPicker,el('p',{class:'small muted'},el('a',{href:'#configure'},'Edit configurations'))),
+    step('4','Spending limit',budget,el('p',{class:'small muted'},'Stops before the next request would exceed the limit. Each request reserves its full context bound until usage returns.')));
   panel.append(form);
   const plan=el('section',{class:'gen-plan','aria-labelledby':'plan-title'},el('h2',{id:'plan-title'},'Before you run'),summary,submit);
   estimate(summary,submit);
@@ -114,11 +120,11 @@ const step=(n,title,...body)=>el('fieldset',{class:'gen-step'},el('legend',{},el
 
 function configLabel(c) {
   const active=c.config_id===view.activeConfig?' (active)':'';
-  return `${c.version || 'Config'} · ${c.config_id.slice(0,8)}${active}${c.note?` · ${c.note}`:''}`;
+  return `${c.name}${active} · ${c.generation_model}`;
 }
 
 function batchBody() {
-  return {dataset_id:view.form.dataset,config_id:view.form.config || null,selection:view.form.selection};
+  return {dataset_id:view.form.dataset,config_id:view.form.config || null,selection:view.form.selection,budget_usd:view.form.budget || '5'};
 }
 
 async function estimate(summary,submit) {
@@ -134,15 +140,16 @@ async function estimate(summary,submit) {
     if (ticket!==view.request) return;
     const skipped=Object.entries(plan.skipped);
     const skippedTotal=skipped.reduce((sum,[,n])=>sum+n,0);
-    summary.replaceChildren(
+    summary.replaceChildren(...[
       el('p',{},el('strong',{},number(count.matched)),` insights match. `,count.selected<count.matched?`The first ${number(count.selected)} will run.`:'All of them will run.'),
       el('div',{class:'gen-split'},
         el('div',{class:'metric'},el('span',{},'Get a survey'),el('strong',{},number(plan.surveys))),
         el('div',{class:'metric'},el('span',{},'Skipped by rules'),el('strong',{},number(skippedTotal)))),
       skipped.length?el('ul',{class:'gen-rules small'},skipped.map(([rule,n])=>el('li',{},`${number(n)} · ${rule} ${RULES[rule] || ''}`))):null,
       el('p',{class:'small muted'},plan.surveys?
-        `About ${number(plan.model_calls.min)}–${number(plan.model_calls.max)} model calls and ${plan.minutes<1?'under a minute':`${plan.minutes} minutes`}. ${plan.cost_usd===null?'Cost unknown: no model prices are set in the configuration.':`About $${plan.cost_usd}.`}`:
-        'No model calls: the rules decide every selected insight.'));
+        `About ${number(plan.model_calls.min)}–${number(plan.model_calls.max)} model calls and ${plan.minutes<1?'under a minute':`${plan.minutes} minutes`}. ${plan.cost_usd===null?'Cost unknown: verified prices are missing for one or more models.':`About $${plan.cost_usd}.`}`:
+        'No model calls: the rules decide every selected insight.')].filter(Boolean));
+    if(plan.costs) summary.append(el('p',{class:'small muted'},plan.costs.note),...plan.costs.models.map(m=>el('p',{class:'small'},`${m.role}: ${m.model_id} · reserves ${money(m.request_reservation_usd)} per request.`)));
     submit.textContent=`Run on ${number(plan.selected)} insight${plan.selected===1?'':'s'}`;
     submit.dataset.selected=plan.selected;
     submit.dataset.calls=plan.model_calls.max;
@@ -155,6 +162,7 @@ async function start(submit,summary) {
   const selected=Number(submit.dataset.selected || 0);
   if (!selected) { summary.append(message('No insights match this selection.',true)); return; }
   if (selected>200 && !confirm(`This runs ${number(selected)} insights, up to ${number(submit.dataset.calls)} model calls. Continue?`)) return;
+  if(!view.root.querySelector('form').reportValidity()) return;
   submit.disabled=true; submit.textContent='Starting…';
   try {
     const job=await api('/jobs/batch',{method:'POST',body:JSON.stringify(batchBody())});
@@ -242,6 +250,7 @@ function runHeader(summary) {
       el('p',{class:'muted small'},`Started ${when(summary.created_at)} · configuration ${summary.config_id?.slice(0,8) || 'not recorded'} · ${number(summary.input_tokens+summary.output_tokens)} tokens`)),
       el('span',{class:`badge status-${summary.status}`},words(summary.status))),
   ];
+  head.push(costSummary(summary.costs,summary.run_id));
   if (summary.status==='running' && total) {
     head.push(el('div',{class:'progress',role:'progressbar','aria-valuemin':0,'aria-valuemax':total,'aria-valuenow':done,'aria-label':'Insights processed'},
       el('span',{style:`width:${Math.round(100*done/total)}%`})),el('p',{class:'small muted'},`${number(done)} of ${number(total)} insights processed`));

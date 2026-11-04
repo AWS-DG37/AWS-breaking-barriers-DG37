@@ -817,3 +817,51 @@ button.metric[aria-pressed=true] { border-color:var(--green); box-shadow:inset 0
   .gen-filters, .gen-row { grid-template-columns:1fr; }
   .tabs a { padding:6px 8px; font-size:14px; }
 }
+
+/* Configure */
+.configure { padding:32px 40px 48px; max-width:1600px; margin:auto; }
+.cfg { display:grid; grid-template-columns:260px minmax(0,1fr); gap:40px; align-items:start; }
+.cfg-list { position:sticky; top:16px; }
+.cfg-list h2 { margin-bottom:10px; }
+.cfg-list details { margin-top:12px; }
+.cfg-item { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; text-decoration:none; color:var(--ink); margin-bottom:4px; border:1px solid transparent; }
+.cfg-item:hover { border-color:var(--line); }
+.cfg-item[aria-current=true] { background:#EAF5EC; border-color:#A9D3B4; }
+.cfg-main { min-width:0; max-width:1000px; }
+.cfg-actions { display:flex; gap:10px; flex-wrap:wrap; margin:-12px 0 24px; }
+a.button { display:inline-flex; align-items:center; border:1px solid var(--control); border-radius:8px; padding:9px 16px; font-weight:600; text-decoration:none; color:var(--ink); background:white; }
+a.button.primary { background:var(--green); border-color:var(--green); color:white; }
+.cfg-check, .cfg-tests, .cfg-step, .cfg-finish { border-top:1px solid var(--line); padding:22px 0; }
+.cfg-step-head { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:12px; }
+.cfg-step-head h2 { margin:0; }
+.cfg-marker { margin-left:auto; font-size:12px; color:var(--control); }
+.cfg-marker.changed { color:var(--purple-ink); background:var(--purple-soft); border-radius:999px; padding:2px 10px; font-weight:700; }
+.cfg-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px 16px; margin:8px 0; }
+.cfg-wide { grid-column:1 / -1; }
+.cfg-checks { border:0; padding:0; margin:0 0 12px; display:flex; flex-wrap:wrap; gap:8px 18px; }
+.cfg-checks legend { font-weight:600; margin-bottom:6px; padding:0; }
+.cfg-check-item { display:flex; align-items:center; gap:6px; margin:0; }
+.cfg-code, .cfg-prompt { width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:13px; line-height:1.55; }
+.cfg-prompt { white-space:pre-wrap; max-height:420px; overflow:auto; }
+.cfg-prompt-field { margin-top:14px; }
+.cfg-prompt-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+.cfg-diff { margin-top:8px; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; max-height:360px; overflow:auto; }
+.diff-line { white-space:pre-wrap; padding:1px 4px; }
+.diff-add { background:#E9F6EC; color:var(--deep); }
+.diff-del { background:#FBEDEA; color:var(--error); text-decoration:line-through; }
+.diff-fold { color:var(--control); }
+.cfg-days { margin-top:10px; white-space:normal; }
+.cfg-days input { width:80px; }
+.cfg-error { color:var(--error); min-height:1.2em; }
+.cfg-finish { display:grid; grid-template-columns:1fr 1fr; gap:32px; }
+.cfg-finish-part { border:1px solid var(--line); border-radius:12px; padding:18px 20px; display:flex; flex-direction:column; gap:10px; }
+.cfg-finish-part h2 { margin:0; }
+.cfg-finish > div:last-child { grid-column:1 / -1; }
+@media(max-width:1120px) {
+  .cfg, .cfg-finish { grid-template-columns:1fr; }
+  .cfg-list { position:static; }
+}
+@media(max-width:700px) { .configure { padding:20px 16px 40px; } }
+.cfg-changes { margin:0; padding-left:18px; }
+.cfg-changes li { margin:4px 0; }
+.comparison-progress { margin:-12px 0 24px; }

@@ -1,12 +1,14 @@
+import {budgetInput, costSummary, money} from './costs.mjs';
 import {el} from './dom.mjs';
 import {signedIn, signOut} from './auth.mjs';
 import {api} from './api.mjs';
 import {showGenerate, leaveGenerate} from './generate.mjs';
+import {showConfigure} from './configure.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
-import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
+import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 
 const $ = id => document.getElementById(id);
-const state = {config:null, models:[], experiments:[], detail:null, run:0, result:0, stage:null, event:0, question:0, request:0};
+const state = {config:null, experiments:[], detail:null, run:0, result:0, stage:null, event:0, question:0, request:0};
 let poll;
 let rehearsalKey, rehearsalSession;
 const text=(value)=>typeof value === 'object' ? JSON.stringify(value,null,2) : displayValue(value);
@@ -22,11 +24,13 @@ async function listExperiments() {
   $('experiment-list').replaceChildren(...(state.experiments.length ? state.experiments.map(item=>el('button',{
     class:'experiment', 'aria-pressed':state.detail?.experiment_id===item.experiment_id,
     onClick:()=>openExperiment(item.experiment_id),
-  },el('strong',{},item.name),el('span',{class:'small muted'},`${item.source==='recorded'?'Recorded':'Live'} · ${item.insight_count} insights · ${item.candidate_count} candidates`),badge(item.status))) : [el('p',{class:'empty-note'},'No experiments saved yet. Import a recorded run or create a bounded live experiment.')]));
+  },el('strong',{},item.name),el('span',{class:'small muted'},`${item.source==='recorded'?'Recorded':'Live'} · ${item.insight_count} insights · ${item.candidate_count} versions`),badge(item.status))) : [el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or compare saved versions with New comparison.')]));
 }
 async function openExperiment(id, refresh=false, reference=null) {
   const ticket=++state.request;
   clearTimeout(poll);
+  // Shareable address without a hashchange, which would route back here.
+  if (location.hash!==`#compare/${id}`) history.replaceState(null,'',`#compare/${id}`);
   if(!refresh) { $('composer').hidden=true; $('content').hidden=false; $('content').replaceChildren(el('p',{class:'empty-note'},'Loading saved evidence…')); }
   try {
     reference=reference || (state.detail?.experiment_id===id ? state.detail.comparison?.reference : null);
@@ -46,9 +50,20 @@ function selected() {
 }
 function renderExperiment() {
   const d=state.detail, {run,result,outcome}=selected();
-  const heading=el('div',{class:'heading'},el('div',{},el('h1',{},d.name),el('p',{class:'muted'},d.source==='recorded'?'Recorded experiment. Saved results only.':'Live experiment. Selected native models and API configurations.')),el('div',{class:'status-group'},badge(d.source),badge(d.status)));
-  const controls=el('div',{class:'selection'},picker('Candidate',d.runs.map((r,i)=>[i,`${r.label} · ${r.api || 'API not recorded'}`]),state.run,value=>{rehearsalKey=null;state.run=Number(value);state.result=0;state.stage=null;state.question=0;renderExperiment();}),picker('Insight',(run?.results || []).map((r,i)=>[i,`${r.insight_id} · ${r.outcome.status}`]),state.result,value=>{rehearsalKey=null;state.result=Number(value);state.stage=null;state.question=0;renderExperiment();}));
-  const sections=[heading,controls];
+  const heading=el('div',{class:'heading'},el('div',{},el('h1',{},d.name),el('p',{class:'muted'},d.source==='recorded'?'Recorded comparison. Saved results only.':'Comparison of saved configuration versions on the same insights.')),el('div',{class:'status-group'},badge(d.source),badge(d.status)));
+  const controls=el('div',{class:'selection'},picker('Version',d.runs.map((r,i)=>[i,`${r.label} · ${r.api || 'API not recorded'}`]),state.run,value=>{rehearsalKey=null;state.run=Number(value);state.result=0;state.stage=null;state.question=0;renderExperiment();}),picker('Insight',(run?.results || []).map((r,i)=>[i,`${r.insight_id} · ${r.outcome.status}`]),state.result,value=>{rehearsalKey=null;state.result=Number(value);state.stage=null;state.question=0;renderExperiment();}));
+  const sections=[heading,renderProgress(d),run?costSummary(run.costs,run.run_id):null].filter(Boolean);
+  if(!d.runs.length) {
+    // No run has started yet: show what will run instead of empty pickers.
+    sections.push(el('div',{class:'gen-waiting'},['queued','running'].includes(d.status)?el('div',{class:'spinner','aria-hidden':true}):null,
+      el('div',{},el('h2',{},d.job?.status==='failed'?'The comparison did not start':'Starting the comparison'),
+        el('p',{class:'muted'},d.job?.status==='failed'?(d.job.error || 'The job failed before any version ran.'):'Hosted comparisons start a worker task, which takes about a minute. Each version then runs every insight in turn.'),
+        el('ul',{},(d.spec.candidates || []).map(c=>el('li',{},c.label))))));
+    sections.push(disclosure('Comparison inputs',d.spec));
+    $('content').replaceChildren(...sections);
+    return;
+  }
+  sections.push(controls);
   if(outcome) {
     sections.push(el('div',{class:'outcome-line'},badge(outcome.status),el('span',{},outcome.reason || 'No additional outcome reason recorded.'),el('span',{class:'small muted'},run.model_id)));
     sections.push(renderJourney(d.flow || state.config?.flow,outcome));
@@ -57,6 +72,15 @@ function renderExperiment() {
   sections.push(renderComparison(d));
   sections.push(disclosure('Experiment inputs and configuration',d.spec),disclosure('Run manifest',run?.manifest ?? 'Not recorded'));
   $('content').replaceChildren(...sections);
+}
+function renderProgress(d) {
+  const job=d.job, progress=job?.progress || {};
+  if(!job || !['queued','running'].includes(job.status) || !progress.total) return null;
+  const versions=(d.spec.candidates || []).length, perVersion=progress.total/versions;
+  const current=Math.min(versions,Math.floor(progress.done/perVersion)+1);
+  return el('div',{class:'comparison-progress'},
+    el('div',{class:'progress',role:'progressbar','aria-valuemin':0,'aria-valuemax':progress.total,'aria-valuenow':progress.done,'aria-label':'Results saved'},el('span',{style:`width:${Math.round(100*progress.done/progress.total)}%`})),
+    el('p',{class:'small muted'},`${progress.done} of ${progress.total} results saved · running version ${current} of ${versions}`));
 }
 function renderJourney(flow,outcome) {
   const events=outcome.events || [];
@@ -151,82 +175,90 @@ function renderComparison(d) {
   section.append(disclosure(`Scoped survey and run assessments (${other.length})`,other.length?other:'No survey or run assessments recorded.'));
   return section;
 }
-function modelOptions() {
-  const choices=[...state.models];
-  for(const candidate of [...(state.config?.default_candidates || []),{model:state.config?.default_reviewer}]) {
-    const m=candidate.model;
-    if(m?.model_id && !choices.some(c=>c.model_id===m.model_id && c.api===m.api)) choices.push({...m,name:m.model_id,status:'discovered',reason:'Configured model. Invocation access not verified.'});
-  }
-  return choices;
-}
-function renderComposer() {
+// A comparison runs saved configuration versions over the same insights.
+async function renderComposer() {
   clearTimeout(poll); ++state.request;
   $('content').hidden=true; $('composer').hidden=false;
-  const config=state.config;
-  if(!config) { $('composer').replaceChildren(el('h1',{},'Configuration unavailable'),el('p',{},'Refresh the page after the server configuration is available.')); return; }
-  const choices=modelOptions();
-  const selectModel=(name,defaultModel)=>el('select',{name,required:true,'aria-label':name==='reviewer'?'Reviewer model and native API':'Model and native API'},el('option',{value:''},'Choose a native model and API'),choices.map((m,i)=>el('option',{value:i,disabled:m.status==='unavailable',selected:m.model_id===defaultModel?.model_id && m.api===(defaultModel.api || 'responses')},`${m.name || m.model_id} · ${m.api} · ${m.status}${m.reason?' · '+m.reason:''}`)));
-  const input=el('textarea',{name:'insights',rows:7,required:true,spellcheck:false,placeholder:'One normalized insight JSON object per line'});
-  const profiles=el('textarea',{name:'profiles',rows:4,spellcheck:false,placeholder:'Optional profile JSONL. One source record per line.'});
+  $('composer').replaceChildren(el('p',{class:'empty-note'},'Loading versions and datasets…'));
+  let configs, active, datasets;
+  try {
+    const [list,data]=await Promise.all([api('/configs'),api('/datasets')]);
+    configs=list.configs.filter(c=>c.status!=='retired'); active=list.active_config_id; datasets=data.datasets;
+  } catch(error) { $('composer').replaceChildren(el('p',{class:'notice error'},`Cannot load versions. ${error.message}`)); return; }
+  const back=el('button',{class:'secondary',onClick:()=>{ $('composer').hidden=true; $('content').hidden=false; if(state.detail) openExperiment(state.detail.experiment_id); }},'Back to comparisons');
+  const heading=el('div',{class:'heading'},el('div',{},el('h1',{id:'form-title'},'New comparison'),el('p',{class:'muted'},'Run saved versions on the same insights and see them side by side.')),back);
+  if (!datasets.length) { $('composer').replaceChildren(heading,el('p',{class:'notice'},'Load the participant pack in Generate first.'),el('a',{href:'#generate'},'Open Generate')); return; }
+  const versionLabel=c=>`${c.name || `Draft ${c.config_id.slice(0,8)}`}${c.config_id===active?' (active)':''} · ${c.generation_model}`;
   const candidates=el('div',{class:'candidate-fields'});
-  function addCandidate(model) {
-    const row=el('div',{class:'candidate-row'},el('label',{},'Candidate label',el('input',{name:'candidate_label',required:true,value:`Candidate ${candidates.children.length+1}`})),el('label',{},'Model and native API',selectModel('candidate_model',model)));
+  function addCandidate(config) {
+    const picker=el('select',{name:'candidate_config','aria-label':'Configuration version'},configs.map(c=>el('option',{value:c.config_id,selected:c.config_id===config?.config_id},versionLabel(c))));
+    const label=el('input',{name:'candidate_label',required:true,maxlength:120,value:config?.name || `Candidate ${candidates.children.length+1}`});
+    const row=el('div',{class:'candidate-row'},el('label',{},'Label',label),el('label',{},'Version',picker));
     row.append(el('button',{type:'button',class:'quiet',onClick:()=>{row.remove();add.disabled=candidates.children.length>=6;}},'Remove')); candidates.append(row);
     add.disabled=candidates.children.length>=6;
   }
-  const add=el('button',{type:'button',class:'secondary',onClick:()=>addCandidate()},'Add candidate');
-  for(const candidate of config.default_candidates || []) addCandidate(candidate.model);
-  if(!candidates.children.length) addCandidate();
-  const upload=el('input',{type:'file',accept:'.jsonl,.ndjson,.json,text/plain',onChange:async event=>{const file=event.target.files[0]; if(file) input.value=await file.text();}});
+  const add=el('button',{type:'button',class:'secondary',onClick:()=>addCandidate()},'Add version');
+  addCandidate(configs.find(c=>c.config_id===active) || configs[0]);
+  const dataset=el('select',{name:'dataset','aria-label':'Dataset'},datasets.map(d=>el('option',{value:d.dataset_id},`${d.name} · ${d.row_count.toLocaleString()} insights`)));
+  const crop=el('select',{name:'crop','aria-label':'Crop'},el('option',{value:''},'Any crop'));
+  const loadCrops=async()=>{ const f=await api(`/datasets/${dataset.value}/facets`); crop.replaceChildren(el('option',{value:''},'Any crop'),...f.facets.crop.map(o=>el('option',{value:o.value},`${o.value} (${o.count.toLocaleString()})`))); };
+  dataset.addEventListener('change',loadCrops); loadCrops().catch(()=>{});
   const form=el('form',{onSubmit:async event=>{
     event.preventDefault();
     const submit=form.querySelector('[type=submit]');
     try {
-      const data=new FormData(form), insights=parseJsonLines(input.value), profileRows=parseJsonLines(profiles.value);
-      if(!insights.length) throw new Error('Add at least one normalized insight.');
-      if(!candidates.children.length) throw new Error('Select at least one candidate.');
-      const model=(index,defaults)=>selectedModel(choices[Number(index)],defaults);
-      const spec={name:data.get('name').trim(),insights,profiles:profileRows,candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value.trim(),model:model(row.querySelector('select').value,config.default_candidates[0]?.model)})),reviewer:model(data.get('reviewer'),config.default_reviewer),row_limit:Number(data.get('row_limit')),ruleset:data.get('ruleset'),evaluation_reference:data.get('reference')};
-      submit.disabled=true; notice('Submitting bounded live experiment…');
+      const data=new FormData(form);
+      const rows=[...candidates.children];
+      if(!rows.length) throw new Error('Add at least one version.');
+      const selection={limit:Number(data.get('limit'))}; if(data.get('crop')) selection.crop=data.get('crop');
+      const spec={name:data.get('name').trim(),dataset_id:data.get('dataset'),selection,evaluation_reference:data.get('reference'),budget_usd:data.get('budget_usd'),
+        candidates:rows.map(row=>({label:row.querySelector('input').value.trim(),config_id:row.querySelector('select').value}))};
+      submit.disabled=true; notice('Starting the comparison…');
       const result=await api('/experiments',{method:'POST',body:JSON.stringify(spec)});
-      notice('Live experiment queued. Execution results will appear as they are saved.'); await openExperiment(result.experiment_id);
-    } catch(error) { notice(`Experiment was not submitted. ${error.message}`,true); }
-    finally {submit.disabled=!config.live_enabled;}
+      notice('Comparison queued. Results appear as each version finishes an insight.'); await openExperiment(result.experiment_id);
+    } catch(error) { notice(`Comparison was not started. ${error.message}`,true); }
+    finally {submit.disabled=!state.config?.live_enabled;}
   }});
   form.append(
-    el('div',{class:'form-grid'},
-      el('label',{},'Experiment name',el('input',{name:'name',required:true,maxlength:200,placeholder:'Name the change you want to compare'})),
-      el('label',{},'Maximum insight rows',el('input',{name:'row_limit',type:'number',min:1,max:50,value:3,required:true}))),
-    el('label',{},'Normalized insight JSONL',input),
-    el('label',{class:'file'},'Load a local JSONL file',upload),
-    el('h2',{},'Generation candidates'),
-    el('p',{class:'muted'},'Each candidate runs the same selected insights. Catalog discovery does not prove invocation access. No model or API is silently substituted.'),
-    candidates,add,el('h2',{},'Shared review and evaluation'));
-  const shared=el('div',{class:'form-grid'},
-    el('label',{},'Reviewer model and native API',selectModel('reviewer',config.default_reviewer)),
-    el('label',{},'Ruleset',el('select',{name:'ruleset'},config.rulesets.map(r=>el('option',{value:r.id},r.label)))),
-    el('label',{},'Evaluation reference',el('select',{name:'reference'},el('option',{value:'rules'},'Configured rules'),el('option',{value:'golden'},'Golden reference'))));
-  form.append(shared,
-    el('p',{class:'small muted'},'Expected evaluation values are not generation inputs. The shared reviewer and rules stay fixed across candidates.'),
-    el('details',{},el('summary',{},'Optional farmer profile context'),el('label',{},'Profile JSONL',profiles)),
+    el('label',{},'Name',el('input',{name:'name',required:true,maxlength:200,placeholder:'Shorter outcome options vs baseline'})),
+    el('h2',{},'Versions'),
+    el('p',{class:'muted'},'Each version runs the same insights. Edit and save versions in Configure.'),
+    candidates,add,
+    el('h2',{},'Insights'),
+    el('div',{class:'form-grid'},el('label',{},'Dataset',dataset),el('label',{},'Crop',crop),
+      el('label',{},'How many (1–50)',el('input',{name:'limit',type:'number',min:1,max:50,value:10,required:true})),
+      el('label',{},'Score against',el('select',{name:'reference'},el('option',{value:'rules'},'Each version’s rules'),el('option',{value:'golden'},'Golden reference')))),
+    budgetInput('Budget per candidate run (USD)'),
+    el('p',{class:'small muted'},'Each candidate has its own limit. Total comparison exposure is at most the sum of those limits, subject to the configured prices and context bounds.'),
     el('div',{class:'launch'},
-      el('p',{},config.live_enabled?'This explicitly invokes the selected Bedrock models. Default run size is 3 insight rows. Experiment results stay outside the scheduler handoff queue.':'Live execution is disabled by the server. Recorded experiments remain available.'),
-      el('button',{type:'submit',class:'primary',disabled:!config.live_enabled},'Run live experiment')));
-
-  $('composer').replaceChildren(el('div',{class:'heading'},el('div',{},el('h1',{id:'form-title'},'New live experiment'),el('p',{class:'muted'},'Make a deliberate change. Keep the evidence.')),el('button',{class:'secondary',onClick:()=>{ $('composer').hidden=true; $('content').hidden=false; if(state.detail) openExperiment(state.detail.experiment_id); }},'Back to saved runs')),form);
+      el('p',{},state.config?.live_enabled?'This calls each version’s models. Results stay outside the scheduler handoff queue.':'Live execution is disabled by the server. Recorded comparisons remain available.'),
+      el('button',{type:'submit',class:'primary',disabled:!state.config?.live_enabled},'Run comparison')));
+  const costEstimate=el('div',{role:'status'});
+  form.append(el('button',{type:'button',class:'secondary',onClick:async()=>{
+    try { const data=new FormData(form);const selection={limit:Number(data.get('limit'))};if(data.get('crop'))selection.crop=data.get('crop');
+      const result=await api('/experiments/estimate',{method:'POST',body:JSON.stringify({name:data.get('name').trim() || 'Estimate',dataset_id:data.get('dataset'),selection,budget_usd:data.get('budget_usd'),candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value,config_id:row.querySelector('select').value}))})});
+      costEstimate.replaceChildren(...result.candidates.map(c=>el('p',{},`${c.label}: about ${money(c.estimated_usd)}. ${c.note}`)));
+    } catch(e) {costEstimate.replaceChildren(el('p',{class:'notice error'},e.message));}
+  }},'Estimate cost'),costEstimate);
+  form.addEventListener('input',()=>costEstimate.replaceChildren());
+  form.addEventListener('change',()=>costEstimate.replaceChildren());
+  $('composer').replaceChildren(heading,form);
 }
 $('new').addEventListener('click',renderComposer);
 $('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
 $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 let compareLoaded=false;
 function route() {
-  const tab=location.hash.startsWith('#compare')?'compare':'generate';
-  $('generate-view').hidden=tab!=='generate';
-  $('compare-view').hidden=tab!=='compare';
+  const hash=location.hash || '#generate';
+  const tab=['compare','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
+  for (const name of ['generate','compare','configure']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
-  if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),location.hash || '#generate'); return; }
+  if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),hash); return; }
   leaveGenerate();
-  if (!compareLoaded) { compareLoaded=true; bootCompare(); }
+  if (tab==='configure') { clearTimeout(poll); showConfigure($('configure-view'),hash); return; }
+  const id=hash.split('/')[1];
+  if (!compareLoaded) { compareLoaded=true; bootCompare(id); }
+  else if (id && id!==state.detail?.experiment_id) openExperiment(id);
 }
 async function boot() {
   try {
@@ -237,17 +269,16 @@ async function boot() {
   window.addEventListener('hashchange',route);
   route();
 }
-async function bootCompare() {
-  const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));
+async function bootCompare(id) {
   const results=await Promise.allSettled([api('/config'),listExperiments()]);
   const [config,experiments]=results;
   if(config.status==='fulfilled') state.config=config.value;
   if(experiments.status==='rejected') notice(`Cannot read experiments. ${experiments.reason.message} Use Refresh to try again.`,true);
-  else if(state.experiments.length) await openExperiment((state.experiments.find(e=>e.source==='recorded') || state.experiments[0]).experiment_id);
-  await catalog;
+  else if(id) await openExperiment(id);
+  else if(state.experiments.length) await openExperiment(state.experiments[0].experiment_id);
 }
 boot();
 window.addEventListener('pagehide',()=>clearTimeout(poll));
 $('sign-out').addEventListener('click',signOut);
 // The skip link focuses the visible section; a hash link would switch tabs.
-document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();($('generate-view').hidden?$('workspace'):$('generate-view')).focus();});
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});

@@ -14,6 +14,12 @@ Parameters:
     Type: CommaDelimitedList
     Default: openai.gpt-6-luna
     Description: Model names allowed for inference; include generation and review IDs.
+  ConverseModelIds:
+    Type: CommaDelimitedList
+    # Each passed a Converse tool-call check in this account (4 Nov 2026). Llama 4 is
+    # left out: it does not support tools, which structured survey output needs.
+    Default: us.anthropic.claude-haiku-5-5,us.anthropic.claude-sonnet-5-5,us.anthropic.claude-opus-5-5,us.amazon.nova-pro-v1:0,us.amazon.nova-2-lite-v1:0,mistral.mistral-large-3-675b-instruct,deepseek.v3.2,global.openai.gpt-5.5
+    Description: Bedrock Converse model or inference-profile IDs saved versions may use.
   DatabaseInstanceClass:
     Type: String
     Default: db.t4g.micro
@@ -198,6 +204,13 @@ Resources:
                 Condition:
                   StringEquals:
                     bedrock-mantle:Model: !Ref BedrockAllowedModelIds
+              # Converse candidates. The console allows only ConverseModelIds; inference
+              # profiles route across regions, so both resource kinds span regions.
+              - Effect: Allow
+                Action: [bedrock:InvokeModel, bedrock:InvokeModelWithResponseStream]
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*::foundation-model/*'
+                  - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
                 Resource: !GetAtt Database.MasterUserSecret.SecretArn
@@ -415,6 +428,11 @@ Resources:
           MEL_AUTH_ISSUER: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
           MEL_CONSOLE_URL: !Sub 'https://${UiDistribution.DomainName}'
           MEL_PACK_URI: !Sub 's3://${DataBucket}/datasets/participant-pack/insights.jsonl'
+          # Saved versions may only use the models the worker's IAM policy allows.
+          MEL_ALLOWED_MODELS: !Sub
+            - '[{"api":"responses","model_id":"${Mantle}"},{"api":"converse","model_id":"${Converse}"}]'
+            - Mantle: !Join ['"},{"api":"responses","model_id":"', !Ref BedrockAllowedModelIds]
+              Converse: !Join ['"},{"api":"converse","model_id":"', !Ref ConverseModelIds]
       Policies:
         - Version: '2012-10-17'
           Statement:

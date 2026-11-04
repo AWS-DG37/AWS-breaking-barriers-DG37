@@ -74,6 +74,11 @@ class AgentConfig(StrictModel):
     schemas_path: Path
 
 
+class AllowedModel(StrictModel):
+    model_id: str = Field(min_length=1)
+    api: Literal["responses", "converse"]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MEL_", extra="ignore")
     aws_region: str = "us-east-1"
@@ -91,6 +96,9 @@ class Settings(BaseSettings):
     # The participant pack's insights: a repository path locally, an s3:// URI when hosted
     # (the image omits datasets).
     pack_uri: str = "docs/participant-pack/data/insights.jsonl"
+    # Models a saved configuration may use. Empty allows any model (local work); hosted,
+    # these mirror the worker's IAM permissions.
+    allowed_models: list[AllowedModel] = []
     # Hosted deployments start one Fargate task per queued job. Unset, jobs wait for a
     # polling runner (`mel-worker jobs`), as in local development.
     job_cluster: str | None = None

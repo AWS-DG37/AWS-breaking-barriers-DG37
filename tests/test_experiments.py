@@ -1,25 +1,35 @@
 import asyncio
 import copy
+from uuid import uuid4
 
 import pytest
 from memory_configs import MemoryConfigs
 from pydantic import ValidationError
 from test_trace import dependencies, insight
 
+from mel.bundle import Bundle
 from mel.config import Settings
 from mel.experiments import ExperimentSpec, compare_runs, execute_experiment, resolve_context
 
 
-def specification():
+def versions(store, models=("test-a", "test-b")):
+    """Saved versions differing only in their generation model."""
+    base = Bundle.load(Settings(bedrock_model_id="test")).definition
+    keys = []
+    for model in models:
+        definition = copy.deepcopy(base)
+        definition["config"]["generation"]["model_id"] = model
+        keys.append(store.save_config(definition))
+    return keys
+
+
+def specification(config_ids=None):
+    first, second = config_ids or (str(uuid4()), str(uuid4()))
     return ExperimentSpec.model_validate(
         {
             "name": "Offline comparison",
             "insights": [insight()],
-            "candidates": [
-                {"label": "A", "model": {"model_id": "test-a"}},
-                {"label": "B", "model": {"model_id": "test-b"}},
-            ],
-            "reviewer": {"model_id": "reviewer"},
+            "candidates": [{"label": "A", "config_id": first}, {"label": "B", "config_id": second}],
         }
     )
 
@@ -75,16 +85,20 @@ def test_experiment_uses_same_graph_for_each_candidate_with_immutable_purpose():
         deps = dependencies()
         return deps.generator, deps.reviewer
 
+    progress = []
     asyncio.run(
         execute_experiment(
-            specification(),
+            specification(versions(store)),
             settings=Settings(bedrock_model_id="test"),
             store=store,
             agent_factory=agents,
+            on_progress=lambda done, total: progress.append((done, total)),
         )
     )
+    assert progress[-1] == (2, 2)
     assert len(store.runs) == 2
     assert store.status == "completed"
+    assert {run["binding"]["config_id"] for run in store.runs.values()} == set(store.configs)
     for run in store.runs.values():
         assert run["binding"]["purpose"] == "experiment"
         assert run["results"][0]["outcome"]["status"] == "accepted"
@@ -95,7 +109,6 @@ def test_comparison_keeps_failures_and_unknown_usage_and_does_not_make_human_sco
     detail = {
         "spec": {
             "evaluation_reference": "golden",
-            "row_limit": 3,
             "insights": [{"insight_id": "i1"}, {"insight_id": "i2"}],
         },
         "runs": [
@@ -131,11 +144,11 @@ def test_comparison_keeps_failures_and_unknown_usage_and_does_not_make_human_sco
 @pytest.mark.parametrize(
     "change",
     [
-        {"row_limit": 0},
-        {"row_limit": 51},
+        {"insights": []},
         {"candidates": []},
         {"name": " "},
-        {"candidates": [{"label": "A", "model": {"model_id": " "}}]},
+        {"candidates": [{"label": "A", "config_id": str(uuid4())}] * 2},
+        {"candidates": [{"label": f"C{n}", "config_id": str(uuid4())} for n in range(7)]},
     ],
 )
 def test_bounds_rejected(change):
@@ -156,7 +169,7 @@ def test_unavailable_candidate_keeps_all_cases_and_does_not_taint_next_run():
 
     asyncio.run(
         execute_experiment(
-            specification(),
+            specification(versions(store)),
             settings=Settings(bedrock_model_id="test"),
             store=store,
             agent_factory=agents,
@@ -181,3 +194,13 @@ def test_comparison_counts_candidates_that_never_started():
     assert len(compared["rows"]) == 2
     assert all(r["missing"] == r["total"] == 1 for r in compared["rows"])
     assert all(r["input_tokens"] is None for r in compared["rows"])
+
+
+def test_live_experiments_need_saved_versions():
+    spec = ExperimentSpec(name="Recorded", insights=[insight()], candidates=[{"label": "A"}])
+    with pytest.raises(ValueError, match="saved configuration versions"):
+        asyncio.run(
+            execute_experiment(
+                spec, settings=Settings(bedrock_model_id="test"), store=MemoryStore()
+            )
+        )

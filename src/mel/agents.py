@@ -1,8 +1,13 @@
+from dataclasses import replace
+
+import boto3
+from botocore.config import Config
 from pydantic_ai import Agent
 from pydantic_ai.models.bedrock import BedrockConverseModel
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
-from pydantic_ai.providers.bedrock import BedrockProvider
+from pydantic_ai.providers import bedrock as bedrock_profiles
+from pydantic_ai.providers.bedrock import BedrockModelProfile, BedrockProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from mel.bedrock import create_mantle_client
@@ -25,12 +30,24 @@ def build_agents(
             settings["temperature"] = model.temperature
         if model.api == "converse":
             if converse_provider is None:
-                converse_provider = BedrockProvider(region_name=region)
-            native_model = BedrockConverseModel(model.model_id, provider=converse_provider)
+                converse_provider = BedrockProvider(
+                    bedrock_client=boto3.client(
+                        "bedrock-runtime",
+                        region_name=region,
+                        config=Config(
+                            read_timeout=300,
+                            connect_timeout=60,
+                            retries={"total_max_attempts": 1, "mode": "standard"},
+                        ),
+                    )
+                )
+            native_model = BedrockConverseModel(
+                model.model_id, provider=converse_provider, profile=converse_profile(model.model_id)
+            )
         else:
             if responses_provider is None:
                 responses_provider = OpenAIProvider(
-                    openai_client=create_mantle_client(region, project_id)
+                    openai_client=create_mantle_client(region, project_id, max_retries=0)
                 )
             settings.update(
                 openai_store=False,
@@ -57,3 +74,14 @@ def build_agents(
         agent(config.generation, SurveyDraft, prompts["generate"]),
         agent(config.review, Review, prompts["review"]),
     )
+
+
+def converse_profile(model_id: str) -> BedrockModelProfile:
+    """Pydantic AI's Bedrock profile, without a forced tool choice. Survey drafts arrive
+    as an output tool call; forcing that call (toolChoice "any") is refused by some
+    models, such as Claude Sonnet and Opus 5.5, while every model with tool support
+    calls the output tool when offered it, and Pydantic AI retries a text-only reply."""
+    profile = BedrockModelProfile.from_profile(
+        bedrock_profiles.BedrockProvider.model_profile(model_id)
+    )
+    return replace(profile, bedrock_supports_tool_choice=False)

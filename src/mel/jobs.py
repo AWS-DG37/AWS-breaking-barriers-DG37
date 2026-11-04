@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 from collections import Counter
+from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import Field
@@ -60,6 +61,7 @@ def dispatch(settings: Settings, job_id: str) -> None:
 class BatchJobSpec(StrictModel):
     """Generate surveys for a dataset selection with one configuration version."""
 
+    budget_usd: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
     dataset_id: UUID
     config_id: UUID
     selection: InsightFilter = Field(default_factory=InsightFilter)
@@ -145,6 +147,7 @@ async def _batch(job, store, settings, agent_factory) -> str:
         settings=settings,
         config_id=config_id,
         job_id=job["job_id"],
+        budget_usd=spec.budget_usd,
         agent_factory=agent_factory,
         on_progress=lambda done, total: store.job_progress(
             job["job_id"], {"done": done, "total": total}
@@ -165,6 +168,9 @@ async def _experiment(job, store, settings, agent_factory) -> str:
         experiment_id=key,
         job_id=job["job_id"],
         agent_factory=agent_factory,
+        on_progress=lambda done, total: store.job_progress(
+            job["job_id"], {"done": done, "total": total}
+        ),
     )
     detail = await asyncio.to_thread(store.experiment_detail, key)
     return detail["status"]

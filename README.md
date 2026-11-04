@@ -279,7 +279,7 @@ request activates `config/agent.yaml` (reusing its version if one was already sa
 saves its configuration as a version, so every run records a `config_id`.
 
 ```bash
-uv run mel-worker config save --note "Shorter outcome options" --activate
+uv run mel-worker config save --name "Shorter outcomes" --note "Three options max" --activate
 uv run mel-worker config list
 uv run mel-worker config activate <config_id>
 ```
