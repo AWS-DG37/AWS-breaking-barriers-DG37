@@ -13,7 +13,7 @@
     {
       "item_id": "q1",
       "type": "survey-confirm",
-      "prompt": "Did you check the potato leaves in the last 3 days?",
+      "prompt": "Did you check the potato leaves every morning as advised?",
       "options": [
         {
           "value": "yes",

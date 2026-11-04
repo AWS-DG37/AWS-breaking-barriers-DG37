@@ -16,7 +16,7 @@ LATIN = re.compile(r"[A-Za-z]")
 BRACKETS = re.compile(r"[()\[\]{}<>/\\|*#_~^]")
 EMOJI = re.compile("[\U0001F300-\U0001FAFF\u2600-\u27BF]")
 DATE = re.compile(r"\b\d{1,2}[/-]\d{1,2}([/-]\d{2,4})?\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b|\b\d{4}-\d{2}-\d{2}\b", re.I)
-PERSONAL = re.compile(r"\b(name|phone|mobile|number|address|village|aadhaar|aadhar|income|acre|hectare|bigha|land size|how much money|rupees|family)\b|नाम|फोन|मोबाइल|पता|गाँव|गांव|आधार|आमदनी|आय |बीघा|एकड़|परिवार", re.I)
+PERSONAL = re.compile(r"\b(name|phone|mobile|number|address|village|aadhaar|aadhar|income|acre|hectare|bigha|land size|how much money|rupees|family)\b|नाम|फोन|मोबाइल|पता(?!\s*नही|\s*नहीं)|गाँव|गांव|आधार|आमदनी|आय |बीघा|एकड़|परिवार", re.I)
 
 def wrap(gen, insight):
     if "survey_id" in gen:

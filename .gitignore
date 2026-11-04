@@ -34,3 +34,7 @@ data/pack/
 .impeccable/config.local.json
 .impeccable/hook.cache.json
 .impeccable/hook.pending.json
+
+# mel-starter local state: survey/translation caches and sweep run results
+mel-starter/cache/
+mel-starter/runs/
