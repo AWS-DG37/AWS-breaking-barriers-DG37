@@ -1,0 +1,77 @@
+.survey-player { --deep:#00501A; --ink:#001D09; --control:#687D70; color:var(--ink); font-family:inherit; width:100%; }
+.survey-player *, .survey-player *::before, .survey-player *::after { box-sizing:border-box; }
+.survey-player .survey-phone {
+  width:344px;
+  max-width:100%;
+  margin:auto;
+  padding:8px;
+  background:#18251F;
+  border-radius:42px;
+  box-shadow:0 16px 28px -12px #273D3459;
+}
+.survey-player .phone-screen {
+  overflow:hidden;
+  border-radius:34px;
+  background:white;
+  height:680px;
+  display:flex;
+  flex-direction:column;
+}
+.survey-player .phone-status {
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  height:44px;
+  padding:0 24px;
+  font-size:12px;
+  font-weight:700;
+}
+.survey-player .phone-camera {
+  position:absolute;
+  left:50%;
+  top:11px;
+  width:70px;
+  height:20px;
+  transform:translateX(-50%);
+  border-radius:999px;
+  background:#18251F;
+}
+.survey-player .phone-reception { display:flex; align-items:flex-end; gap:2px; height:12px; }
+.survey-player .phone-reception i { width:3px; background:var(--ink); border-radius:1px; height:4px; }
+.survey-player .phone-reception i:nth-child(2) { height:6px; }
+.survey-player .phone-reception i:nth-child(3) { height:9px; }
+.survey-player .phone-reception i:nth-child(4) { height:12px; }
+.survey-player .phone-battery { width:20px; height:11px; margin-left:5px; border:1px solid var(--ink); border-radius:3px; padding:1px; }
+.survey-player .phone-battery:after { content:''; display:block; background:var(--ink); width:13px; height:7px; border-radius:1px; }
+.survey-player .phone-brand {
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:8px;
+  padding:12px 20px;
+  background:var(--deep);
+  color:white;
+}
+.survey-player .phone-brand strong { font-size:20px; letter-spacing:-.02em; }
+.survey-player .phone-brand span { font-size:11px; }
+.survey-player .phone-field { display:block; width:100%; height:126px; object-fit:cover; object-position:50% 46%; }
+
+.survey-player .survey-progress { display:flex; justify-content:space-between; gap:12px; color:var(--deep); font-size:13px; font-weight:600; }
+.survey-player .survey-progress span:last-child { font-variant-numeric:tabular-nums; white-space:nowrap; }
+.survey-player .phone-home { width:100px; height:4px; border-radius:999px; background:var(--ink); flex-shrink:0; margin:4px auto 10px; }
+
+.survey-player .phone-screen > * { flex-shrink:0; }
+.survey-player .player-body { padding:18px 20px; overflow-y:auto; flex:1 1 auto; min-height:0; }
+.survey-player .player-body h3 { color:var(--ink); font-size:20px; line-height:1.6; margin:12px 0; letter-spacing:0; }
+.survey-player .player-body p { font-size:14px; line-height:1.6; }
+.survey-player .answers { display:flex; flex-direction:column; gap:10px; margin:16px 0; }
+.survey-player .answers label { display:flex; flex-direction:row; align-items:center; gap:12px; background:white; color:var(--ink); border:1px solid var(--control); border-radius:12px; padding:12px; font-size:16px; font-weight:500; line-height:1.5; min-height:50px; cursor:pointer; }
+.survey-player .answers input { appearance:auto; width:18px; height:18px; min-width:18px; min-height:18px; margin:0; padding:0; accent-color:#007a27; }
+.survey-player .answers label:has(input:checked) { border-color:#007a27; box-shadow:inset 0 0 0 1px #007a27; }
+.survey-player :focus-visible { outline:3px solid #007a27; outline-offset:3px; }
+.survey-player h3:focus { outline:none; }
+.survey-player .player-navigation { display:flex; gap:10px; padding:12px 20px; background:white; border-top:1px solid #dce3dd; }
+.survey-player .player-navigation button { flex:1; border:1px solid #007a27; border-radius:10px; padding:10px 12px; background:#007a27; color:white; font-family:inherit; font-weight:600; font-size:15px; line-height:1.5; cursor:pointer; min-height:44px; }
+.survey-player .player-navigation button:disabled { opacity:.5; cursor:default; }
+.survey-player .player-hint { min-height:22px; color:#53635a; }

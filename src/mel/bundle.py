@@ -14,6 +14,10 @@ from mel.config import AgentConfig, Settings, load_config
 from mel.contracts import Contracts
 from mel.decision import CropCalendar, DecisionEngine, build_engine
 
+# Subpackages that read or present runs but never change generation. Editing them
+# must not invalidate a resumable run's fingerprint.
+OUTSIDE_GENERATION = frozenset({"evaluation", "experiments", "explorer"})
+
 
 def read_bytes(uri: str, region: str) -> bytes:
     if uri.startswith("s3://"):
@@ -93,15 +97,17 @@ class Bundle:
         for key in ("prompts", "rules_path", "calendar_path", "schemas_path"):
             snapshot["config"].pop(key, None)
         package = Path(__file__).parent
+        sources = [
+            p
+            for p in sorted(package.rglob("*.py"))
+            if p.relative_to(package).parts[0] not in OUTSIDE_GENERATION
+        ]
         manifest = {
             "bundle": snapshot,
             "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
             "region": region,
             "implementation_sha256": hashlib.sha256(
-                b"".join(
-                    str(p.relative_to(package)).encode() + p.read_bytes()
-                    for p in sorted(package.rglob("*.py"))
-                )
+                b"".join(str(p.relative_to(package)).encode() + p.read_bytes() for p in sources)
             ).hexdigest(),
         }
         return hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()

@@ -14,6 +14,7 @@ class StrictModel(BaseModel):
 
 class ModelConfig(StrictModel):
     model_id: str | None = None
+    api: Literal["responses", "converse"] = "responses"
     temperature: float | None = Field(default=None, ge=0, le=1)
     reasoning_effort: Literal["low", "medium", "high"] = "low"
     max_tokens: int = Field(default=1800, gt=0)

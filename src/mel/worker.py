@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import time
@@ -33,16 +34,38 @@ DEFAULT_ROW_LIMIT = 10  # Rows processed unless --full is given.
 GOLDEN_PATH = Path("docs/participant-pack/data/golden_set.jsonl")
 
 
-async def process_insight(insight: dict, survey_id: str, deps: Dependencies) -> Outcome:
+async def close_model_clients(*agents) -> None:
+    """Each native client is owned once, including distinct generator/reviewer clients."""
+    seen = set()
+    for agent in agents:
+        client = getattr(getattr(agent, "model", None), "client", None)
+        if client is None or id(client) in seen:
+            continue
+        seen.add(id(client))
+        close = getattr(client, "aclose", None) or getattr(client, "close", None)
+        if close:
+            result = close()
+            if inspect.isawaitable(result):
+                await result
+
+
+async def process_insight(
+    insight: dict, survey_id: str, deps: Dependencies, *, context: dict | None = None
+) -> Outcome:
     """The same generation/review loop for both local preview and persisted batches."""
     started = time.monotonic()
-    state = State(insight, survey_id, datetime.now(IST))
+    state = State(insight, survey_id, datetime.now(IST), context=context)
     try:
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
     except Exception as error:
+        state.record("failure", "runtime", error_type=type(error).__name__)
         outcome = Outcome(
+            events=state.events,
+            question_evidence=state.question_evidence,
+            candidate_survey=state.survey,
+            review=state.review,
             insight_id=insight["insight_id"],
             status="failed",
             reason=type(error).__name__,
@@ -188,9 +211,7 @@ async def run_batch(args: argparse.Namespace, settings: Settings) -> int:
     finally:
         if store is not None:
             store.close()
-        client = getattr(getattr(generator, "model", None), "client", None)
-        if client is not None:
-            await client.close()
+        await close_model_clients(generator, reviewer)
 
 
 async def preview(args: argparse.Namespace, settings: Settings) -> int:
@@ -225,7 +246,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
     manifest_path.write_text(json.dumps(manifest, indent=2))
     print(json.dumps(manifest), flush=True)
     outcomes = []
-    generator = None
+    generator = reviewer = None
     started = time.monotonic()
     try:
         generator, reviewer = build_agents(
@@ -284,9 +305,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
         raise
     finally:
         manifest_path.write_text(json.dumps(manifest, indent=2))
-        client = getattr(getattr(generator, "model", None), "client", None)
-        if client is not None:
-            await client.close()
+        await close_model_clients(generator, reviewer)
 
 
 def eval_rules(args: argparse.Namespace) -> None:
@@ -368,6 +387,13 @@ def main() -> None:
     extract = sub.add_parser("golden-insights", help="Write golden insights as worker input")
     extract.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
     extract.add_argument("--output", type=Path, required=True)
+    evaluation = sub.add_parser("eval", help="Offline evaluation; no model or database calls")
+    evaluation_sub = evaluation.add_subparsers(dest="evaluation_command", required=True)
+    policy = evaluation_sub.add_parser("policy", help="Score the declared held-out policy cases")
+    policy.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
+    policy.add_argument("--split", type=Path, default=Path("eval/prompt_example_split.json"))
+    policy.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
+    policy.add_argument("--output", type=Path, help="New report path; existing files are preserved")
     args = parser.parse_args()
     if args.command == "eval-rules":
         eval_rules(args)
@@ -380,7 +406,30 @@ def main() -> None:
         args.output.write_text(json.dumps(local_bundle(args.config), indent=2, ensure_ascii=False))
     else:
         try:
-            if args.command == "check-model":
+            if args.command == "eval":
+                from mel.evaluation import score_policy
+
+                settings = Settings(config_path=args.config) if args.config else Settings()
+                report = score_policy(
+                    bundle=Bundle.load(settings),
+                    golden_path=args.golden,
+                    split_path=args.split,
+                )
+                output = args.output or Path("outputs/eval") / f"policy-{uuid4()}.json"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                with output.open("x") as target:
+                    target.write(report.model_dump_json(indent=2) + "\n")
+                print(
+                    json.dumps(
+                        {
+                            "event": "policy_evaluated",
+                            "output": str(output),
+                            "eligibility": report.eligibility.model_dump(),
+                            "legacy_eligibility": report.legacy.eligibility.model_dump(),
+                        }
+                    )
+                )
+            elif args.command == "check-model":
                 asyncio.run(check_model(Settings()))
             elif args.command == "preview":
                 raise SystemExit(asyncio.run(preview(args, Settings())))

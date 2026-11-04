@@ -1,0 +1,15 @@
+[theme]
+base = "light"
+primaryColor = "#174B38"
+backgroundColor = "#F8F5EA"
+secondaryBackgroundColor = "#EEEADC"
+textColor = "#174B38"
+font = "sans serif"
+headingFont = "Georgia"
+headingFontWeights = 400
+
+[server]
+address = "127.0.0.1"
+
+[browser]
+gatherUsageStats = false

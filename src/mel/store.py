@@ -5,13 +5,17 @@ short DB operations through this connection; model calls remain concurrent.
 """
 
 import json
+from hashlib import sha256
 from pathlib import Path
 from threading import RLock
+from typing import Literal
 
 import boto3
 
 from mel.config import Settings
 from mel.models import Outcome
+
+RunPurpose = Literal["handoff", "experiment"]
 
 
 class Store:
@@ -46,11 +50,42 @@ class Store:
     def initialize(self) -> None:
         with self.lock, self.connection.transaction():
             self.connection.execute("SELECT pg_advisory_xact_lock(31890241)")
-            self.connection.execute(Path("migrations/001_initial.sql").read_text())
+            self.connection.execute(
+                "CREATE TABLE IF NOT EXISTS schema_migrations "
+                "(name text PRIMARY KEY, checksum text NOT NULL, "
+                "applied_at timestamptz NOT NULL DEFAULT now())"
+            )
+            for migration in sorted(Path("migrations").glob("*.sql")):
+                source = migration.read_bytes()
+                checksum = sha256(source).hexdigest()
+                previous = self.connection.execute(
+                    "SELECT checksum FROM schema_migrations WHERE name=%s", (migration.name,)
+                ).fetchone()
+                if previous:
+                    if previous[0] != checksum:
+                        raise ValueError(f"Applied migration changed: {migration.name}")
+                    continue
+                self.connection.execute(source.decode())
+                self.connection.execute(
+                    "INSERT INTO schema_migrations(name,checksum) VALUES (%s,%s)",
+                    (migration.name, checksum),
+                )
 
-    def start_run(self, run_id: str, fingerprint: str, manifest: dict) -> None:
+    def start_run(
+        self,
+        run_id: str,
+        fingerprint: str,
+        manifest: dict,
+        *,
+        purpose: RunPurpose = "handoff",
+        experiment_id: str | None = None,
+    ) -> None:
         from psycopg.types.json import Jsonb
 
+        if purpose not in ("handoff", "experiment") or (purpose == "experiment") != (
+            experiment_id is not None
+        ):
+            raise ValueError("purpose and experiment binding must agree")
         with self.lock:
             locked = self.connection.execute(
                 "SELECT pg_try_advisory_lock(hashtextextended(%s, 0))", (run_id,)
@@ -59,15 +94,23 @@ class Store:
                 raise ValueError("another worker owns this run_id")
             with self.connection.transaction():
                 self.connection.execute(
-                    "INSERT INTO generation_runs(run_id,fingerprint,manifest) VALUES (%s,%s,%s) "
+                    "INSERT INTO generation_runs"
+                    "(run_id,fingerprint,manifest,purpose,experiment_id) "
+                    "VALUES (%s,%s,%s,%s,%s) "
                     "ON CONFLICT (run_id) DO NOTHING",
-                    (run_id, fingerprint, Jsonb(manifest)),
+                    (run_id, fingerprint, Jsonb(manifest), purpose, experiment_id),
                 )
                 previous = self.connection.execute(
-                    "SELECT fingerprint FROM generation_runs WHERE run_id=%s", (run_id,)
-                ).fetchone()[0]
-                if previous != fingerprint:
+                    "SELECT fingerprint,purpose,experiment_id FROM generation_runs WHERE run_id=%s",
+                    (run_id,),
+                ).fetchone()
+                if previous[0] != fingerprint:
                     raise ValueError("run_id exists with different input/config; use a new ID")
+                if (
+                    previous[1] != purpose
+                    or (str(previous[2]) if previous[2] else None) != experiment_id
+                ):
+                    raise ValueError("run_id exists with different purpose or experiment binding")
                 self.connection.execute(
                     "UPDATE generation_runs SET status='running',finished_at=NULL WHERE run_id=%s",
                     (run_id,),
@@ -89,6 +132,11 @@ class Store:
         from psycopg.types.json import Jsonb
 
         with self.lock, self.connection.transaction():
+            run = self.connection.execute(
+                "SELECT purpose FROM generation_runs WHERE run_id=%s FOR SHARE", (run_id,)
+            ).fetchone()
+            if run is None:
+                raise ValueError("unknown run_id")
             self.connection.execute(
                 "INSERT INTO insight_results(run_id,insight_id,farmer_id,status,insight,outcome) "
                 "VALUES (%s,%s,%s,%s,%s,%s) ON CONFLICT(run_id,insight_id) DO UPDATE "
@@ -102,7 +150,7 @@ class Store:
                     Jsonb(outcome.model_dump(mode="json", exclude_none=True)),
                 ),
             )
-            if outcome.status == "accepted":
+            if outcome.status == "accepted" and run[0] == "handoff":
                 survey = outcome.survey
                 self.connection.execute(
                     "INSERT INTO survey_handoffs(survey_id,run_id,insight_id,farmer_id,"
@@ -134,6 +182,112 @@ class Store:
                 "UPDATE generation_runs SET status=%s,finished_at=now() WHERE run_id=%s",
                 (status, run_id),
             )
+
+    def create_experiment(self, experiment_id: str, spec: dict, *, source: str = "live") -> None:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO experiments(experiment_id,spec,source) VALUES (%s,%s,%s) "
+                "ON CONFLICT (experiment_id) DO NOTHING",
+                (experiment_id, Jsonb(spec), source),
+            )
+            previous = self.connection.execute(
+                "SELECT spec,source FROM experiments WHERE experiment_id=%s", (experiment_id,)
+            ).fetchone()
+            if previous != (spec, source):
+                raise ValueError("experiment_id exists with a different specification")
+
+    def finish_experiment(self, experiment_id: str, status: str) -> None:
+        with self.lock:
+            self.connection.execute(
+                "UPDATE experiments SET status=%s,finished_at=CASE WHEN %s='running' "
+                "THEN NULL ELSE now() END WHERE experiment_id=%s",
+                (status, status, experiment_id),
+            )
+
+    def list_experiments(self) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT experiment_id,spec,status,source,created_at FROM experiments "
+                "ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+        return [
+            {
+                "experiment_id": str(key),
+                "name": spec["name"],
+                "status": status,
+                "source": source,
+                "created_at": created.isoformat(),
+                "candidate_count": len(spec["candidates"]),
+                "insight_count": min(len(spec["insights"]), spec.get("row_limit", 3)),
+            }
+            for key, spec, status, source, created in rows
+        ]
+
+    def experiment_detail(self, experiment_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT spec,status,source,created_at FROM experiments WHERE experiment_id=%s",
+                (experiment_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            spec, status, source, created = row
+            runs = []
+            for run_id, manifest, run_status in self.connection.execute(
+                "SELECT run_id,manifest,status FROM generation_runs WHERE experiment_id=%s "
+                "ORDER BY created_at,run_id",
+                (experiment_id,),
+            ).fetchall():
+                model = manifest.get("config", {}).get("generation", {})
+                results = [
+                    {"insight_id": key, "input": insight, "outcome": outcome}
+                    for key, insight, outcome in self.connection.execute(
+                        "SELECT insight_id,insight,outcome FROM insight_results "
+                        "WHERE run_id=%s ORDER BY insight_id",
+                        (run_id,),
+                    ).fetchall()
+                ]
+                runs.append(
+                    {
+                        "run_id": str(run_id),
+                        "label": manifest.get("label", "Recorded model"),
+                        "model_id": model.get("model_id"),
+                        "api": model.get("api", "responses"),
+                        "status": run_status,
+                        "manifest": manifest,
+                        "results": results,
+                    }
+                )
+            assessments = [
+                r[0]
+                for r in self.connection.execute(
+                    "SELECT assessment FROM quality_assessments WHERE experiment_id=%s "
+                    "ORDER BY assessment_id",
+                    (experiment_id,),
+                ).fetchall()
+            ]
+        return {
+            "experiment_id": experiment_id,
+            "name": spec["name"],
+            "spec": spec,
+            "status": status,
+            "source": source,
+            "created_at": created.isoformat(),
+            "runs": runs,
+            "assessments": assessments,
+        }
+
+    def save_assessment(self, experiment_id: str, assessment: dict) -> dict:
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO quality_assessments(experiment_id,assessment) VALUES (%s,%s)",
+                (experiment_id, Jsonb(assessment)),
+            )
+        return assessment
 
     def close(self) -> None:
         self.connection.close()

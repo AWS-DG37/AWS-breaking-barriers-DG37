@@ -16,3 +16,21 @@ outputs/
 /.idea/farmerchat-mel.iml
 /.idea/modules.xml
 /.idea/vcs.xml
+# Python-generated files
+*.py[oc]
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Digital Green participant pack (confidential per the secure-attach email; do not commit)
+data/pack/
+
+
+
+# Impeccable review captures and local engine state
+.impeccable/review/
+.impeccable/config.local.json
+.impeccable/hook.cache.json
+.impeccable/hook.pending.json

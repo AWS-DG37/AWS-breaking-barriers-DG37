@@ -2,6 +2,11 @@
 
 Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 
+The [local pipeline explorer](docs/explorer.md) compares Bedrock candidates,
+shows saved decisions and question evidence, and runs a recorded demo in Docker.
+The [interactive architecture walkthrough](docs/architecture-walkthrough.html)
+maps these extensions to the team documents and module boundaries.
+
 - System diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/system-diagram.html
   (source: [docs/system-diagram.html](docs/system-diagram.html), published by GitHub Pages from `main` `/docs`)
 - System diagram: [docs/system-diagram.html](docs/system-diagram.html). Open the file in a browser.
@@ -209,8 +214,7 @@ Deploy the image for cloud integration tests after local quality checks pass.
 Requires Python 3.12 or 3.13, uv, Docker, and AWS credentials with access to your
 selected Bedrock model. Verify GPT-6 Luna access in the workshop account before a
 live test. Dependencies pin Pydantic AI and Graph to 1.84.1 because their
-APIs evolve; upgrade both deliberately. No lockfile is included yet: generate and
-commit `uv.lock` with `uv lock` when package-registry access is available.
+APIs evolve; upgrade both deliberately. The branch includes `uv.lock`; use `uv sync --locked` for the pinned environment.
 
 ```bash
 uv sync
@@ -436,3 +440,41 @@ References: [OpenAI on Amazon Bedrock](https://developers.openai.com/api/docs/gu
 [SAM deployment](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html).
 - Survey question patterns: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/survey-question-patterns.html
   (built from the golden set by `python3 scripts/build_question_patterns.py`; rerun it when Digital Green updates the pack)
+
+## Branch-local evaluation reference
+
+This branch retains `dg_agent/models.py`, `dg_agent/checks.py` and the original
+pack/schema/golden tests from the standalone `bb-digital-green` reference.
+`decide()` and `check_survey()` are kept as an independent regression comparator;
+production decisions come from `mel.decision`. The legacy 145/150 golden score
+measures eligibility only, not question quality.
+
+```bash
+uv run --locked pytest -q
+uv run --locked mel-worker eval policy
+```
+
+The retained reference tests and worker both use `docs/participant-pack/`, so a
+fresh checkout needs no extra ignored copy of the schemas. The original
+`data/pack/` directory remains untouched. `eval policy` scores the decision engine on the
+138-case holdout (prompt examples excluded, hashes recorded) alongside the
+independent all-150 reference baseline; `eval-rules` scores it on all 150. It writes a new JSON report under `outputs/eval/`, without model or
+database calls. See the [evaluation guide](eval/README.md) for provenance,
+denominators and timing-policy notes; generated-question quality
+is explicitly unassessed in this first slice.
+
+## Simple Bedrock chat smoke test
+
+The earlier Streamlit app remains available for a direct Nova Lite chat test:
+
+```bash
+uv sync --locked
+uv run streamlit run bedrock_app.py
+```
+
+Open <http://localhost:8501>. This app uses local AWS profile `digital-green` in
+`us-west-2`, with conversation history, retry and New chat. Each response is capped
+at 512 output tokens. It is independent of the `mel-worker` survey graph and is
+not an HTTP frontend for the Fargate worker. Temporary AWS credentials stay outside
+the repository. Its transport tests are named `tests/test_chat_transport.py` to
+keep them distinct from the worker's `tests/test_bedrock.py`.
