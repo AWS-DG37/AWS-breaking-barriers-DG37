@@ -1,3 +1,4 @@
+import http.client
 import os
 import time
 import urllib.error
@@ -18,7 +19,7 @@ def test_current_console_recorded_comparison_without_model_catalog():
             with urllib.request.urlopen(base + "/api/health", timeout=2) as response:
                 assert b'"database":"connected"' in response.read()
             break
-        except (urllib.error.URLError, AssertionError):
+        except (urllib.error.URLError, http.client.RemoteDisconnected, AssertionError):
             if attempt == 59:
                 raise
             time.sleep(1)
