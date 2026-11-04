@@ -22,6 +22,7 @@ from mel.config import Settings, StrictModel
 from mel.configs import config_bundle
 from mel.datasets import InsightFilter
 from mel.experiments import ExperimentSpec, execute_experiment
+from mel.improvement import ImprovementSpec, build_improver_agents, execute_improvement
 from mel.store import Store
 from mel.worker import execute_run
 
@@ -71,6 +72,10 @@ class ExperimentJobSpec(StrictModel):
     experiment_id: UUID
 
 
+class ImprovementJobSpec(StrictModel):
+    improvement_id: UUID
+
+
 # Rough per-survey figures from a live GPT-6 Luna run (one generation, one review).
 # They size a run before it starts; actual usage is recorded per outcome.
 ESTIMATE_SECONDS_PER_SURVEY = 12
@@ -116,7 +121,14 @@ def estimate_batch(bundle: Bundle, insights: list[dict]) -> dict:
     }
 
 
-async def run_job(job: dict, *, store: Store, settings: Settings, agent_factory=build_agents):
+async def run_job(
+    job: dict,
+    *,
+    store: Store,
+    settings: Settings,
+    agent_factory=build_agents,
+    improver_factory=build_improver_agents,
+):
     """Run one claimed job to a final status. Errors are recorded, not raised, except
     cancellation, which leaves the job `running` so `--resume` can pick it up."""
     try:
@@ -124,6 +136,8 @@ async def run_job(job: dict, *, store: Store, settings: Settings, agent_factory=
             status = await _batch(job, store, settings, agent_factory)
         elif job["kind"] == "experiment":
             status = await _experiment(job, store, settings, agent_factory)
+        elif job["kind"] == "improve":
+            status = await _improve(job, store, settings, agent_factory, improver_factory)
         else:
             raise ValueError(f"unknown job kind {job['kind']}")
         await asyncio.to_thread(store.finish_job, job["job_id"], status)
@@ -182,6 +196,26 @@ async def _experiment(job, store, settings, agent_factory) -> str:
     return detail["status"]
 
 
+async def _improve(job, store, settings, agent_factory, improver_factory) -> str:
+    key = str(ImprovementJobSpec.model_validate(job["spec"]).improvement_id)
+    record = await asyncio.to_thread(store.improvement, key)
+    if record is None:
+        raise ValueError(f"unknown improvement {key}")
+    await execute_improvement(
+        ImprovementSpec.model_validate(record["spec"]),
+        store=store,
+        settings=settings,
+        improvement_id=key,
+        job_id=job["job_id"],
+        agent_factory=agent_factory,
+        improver_factory=improver_factory,
+        on_progress=lambda done, total: store.job_progress(
+            job["job_id"], {"done": done, "total": total, "unit": "evaluations"}
+        ),
+    )
+    return "completed"
+
+
 async def run_queue(
     store: Store,
     settings: Settings,
@@ -191,6 +225,7 @@ async def run_queue(
     job_id: str | None = None,
     resume: bool = False,
     agent_factory=build_agents,
+    improver_factory=build_improver_agents,
 ) -> int:
     """Claim and run jobs until the queue is empty (`once`) or forever. Returns how
     many jobs ran. A named `job_id` runs only that job. The caller owns `store`."""
@@ -203,7 +238,13 @@ async def run_queue(
             await asyncio.sleep(poll_seconds)
             continue
         logger.info(json.dumps({"event": "job_started", "job_id": job["job_id"]}))
-        await run_job(job, store=store, settings=settings, agent_factory=agent_factory)
+        await run_job(
+            job,
+            store=store,
+            settings=settings,
+            agent_factory=agent_factory,
+            improver_factory=improver_factory,
+        )
         ran += 1
         if job_id is not None:
             return ran

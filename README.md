@@ -13,7 +13,7 @@ maps these extensions to the team documents and module boundaries.
 
 ## What runs today
 
-The console has **Generate, Runs, Compare and Configure** sections. Its FastAPI API
+The console has **Generate, Runs, Compare, Review and Configure** sections. Its FastAPI API
 uses **RDS PostgreSQL** for datasets, immutable configuration versions, jobs, results
 and request costs. On AWS, **CloudFront/S3** serves the UI, **API Gateway/Lambda**
 serves the API, **Cognito** handles sign-in, and each job starts an **ECS Fargate** task.
@@ -57,6 +57,7 @@ The worker never sends a real message or calls production FarmerChat.
 | Worker concurrency and optional token pricing | `config/agent.yaml`: `batch` |
 | Survey-writing instructions | `prompts/generate.txt` |
 | Model review instructions | `prompts/review.txt` |
+| Improver and judge instructions (Review section) | `prompts/improve.txt`, `prompts/judge.txt` |
 | Golden example provenance and held-out cases | `eval/prompt_example_split.json`, `eval/golden_holdout.jsonl` |
 | Survey-or-not rules R1–R8 and their order | `src/mel/decision/__init__.py` (`build_engine`) |
 | Human-call severities (R2), window policy | `config/agent.yaml`: `decision` |
