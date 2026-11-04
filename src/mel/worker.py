@@ -369,10 +369,17 @@ def eval_rules(args: argparse.Namespace) -> None:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(body + "\n", encoding="utf-8")
-    summary = {key: report[key] for key in (
-        "label", "cases", "decision_accuracy", "decision_correct", "rule_accuracy",
-        "rule_correct",
-    )}
+    summary = {
+        key: report[key]
+        for key in (
+            "label",
+            "cases",
+            "decision_accuracy",
+            "decision_correct",
+            "rule_accuracy",
+            "rule_correct",
+        )
+    }
     print(
         json.dumps(
             {
@@ -397,13 +404,13 @@ def eval_surveys(args: argparse.Namespace) -> None:
     )
 
 
-async def eval_relevance(args: argparse.Namespace) -> None:
-    """LLM judge over saved results, or its dev calibration. These are the only eval
-    commands that call a model."""
+async def eval_judge(args: argparse.Namespace) -> None:
+    """LLM relevance scoring or dev calibration of relevance and privacy."""
     from pydantic_ai.usage import RunUsage
 
     from mel.agents import build_agent
-    from mel.evaluation import relevance
+    from mel.evaluation import privacy, relevance
+    from mel.models import Review
 
     settings = Settings(config_path=args.config) if args.config else Settings()
     bundle = Bundle.load(settings)
@@ -411,14 +418,23 @@ async def eval_relevance(args: argparse.Namespace) -> None:
     model = bundle.config.review.model_copy(
         update={key: value for key, value in overrides.items() if value}
     )
-    rubric = args.rubric.read_text(encoding="utf-8")
+    is_privacy = args.evaluation_command == "calibrate-privacy"
+    rubric = (
+        bundle.snapshot["prompts"]["review"]
+        if is_privacy
+        else args.rubric.read_text(encoding="utf-8")
+    )
     agent = build_agent(
-        model, relevance.RelevanceJudgment, rubric, settings.aws_region,
-        settings.bedrock_project_id, bundle.config.graph.agent_output_retries,
+        model,
+        Review if is_privacy else relevance.RelevanceJudgment,
+        rubric,
+        settings.aws_region,
+        settings.bedrock_project_id,
+        bundle.config.graph.agent_output_retries,
     )
     usage = {"requests": 0, "input_tokens": 0, "output_tokens": 0}
 
-    async def judge(message: str) -> relevance.RelevanceJudgment:
+    async def judge(message: str) -> Review | relevance.RelevanceJudgment:
         spent = RunUsage()  # Filled during the run, so failed calls still count.
         try:
             return (await agent.run(message, usage=spent)).output
@@ -428,11 +444,23 @@ async def eval_relevance(args: argparse.Namespace) -> None:
             usage["output_tokens"] += spent.output_tokens or 0
 
     common = {
-        "split_path": args.split, "rubric": rubric, "judge_model": model.model_id,
+        "split_path": args.split,
+        "rubric": rubric,
+        "judge_model": model.model_id,
         "concurrency": bundle.config.batch.concurrency,
     }
     try:
-        if args.evaluation_command == "calibrate-relevance":
+        if is_privacy:
+            prefix = "privacy-calibration"
+            report = await privacy.calibrate(
+                judge,
+                split_path=args.split,
+                prompt=rubric,
+                review_model=model.model_id,
+                max_cases=args.max_cases,
+                concurrency=bundle.config.batch.concurrency,
+            )
+        elif args.evaluation_command == "calibrate-relevance":
             prefix = "relevance-calibration"
             report = await relevance.calibrate(judge, max_cases=args.max_cases, **common)
         else:
@@ -441,8 +469,12 @@ async def eval_relevance(args: argparse.Namespace) -> None:
             results = [json.loads(line) for line in body.decode().splitlines() if line.strip()]
             calibration = json.loads(args.calibration.read_text()) if args.calibration else None
             report = await relevance.score(
-                judge, results, part=args.part, calibration=calibration,
-                results_sha256=hashlib.sha256(body).hexdigest(), **common,
+                judge,
+                results,
+                part=args.part,
+                calibration=calibration,
+                results_sha256=hashlib.sha256(body).hexdigest(),
+                **common,
             )
     finally:
         await close_model_clients(agent)
@@ -453,7 +485,19 @@ async def eval_relevance(args: argparse.Namespace) -> None:
         target.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
     summary = {
         key: report[key]
-        for key in ("mode", "part", "passed", "agreement", "counts", "core_pass", "criteria")
+        for key in (
+            "mode",
+            "part",
+            "passed",
+            "agreement",
+            "counts",
+            "core_pass",
+            "criteria",
+            "false_negatives",
+            "false_positives",
+            "failed_calls",
+            "gate",
+        )
         if key in report
     }
     print(json.dumps({**summary, "usage": usage, "output": str(output)}, ensure_ascii=False))
@@ -593,7 +637,7 @@ def main() -> None:
     extract.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
     extract.add_argument("--output", type=Path, required=True)
     evaluation = sub.add_parser(
-        "eval", help="Evaluation; only the relevance commands call a model, none use a database"
+        "eval", help="Evaluation; relevance and privacy commands call a model; no database"
     )
     evaluation_sub = evaluation.add_subparsers(dest="evaluation_command", required=True)
     policy = evaluation_sub.add_parser(
@@ -605,11 +649,13 @@ def main() -> None:
     policy.add_argument("--output", type=Path, help="New report path; existing files are preserved")
     for name, help_text in (
         ("calibrate-relevance", "Calibrate the relevance judge on dev controls (calls Bedrock)"),
+        ("calibrate-privacy", "Calibrate the production reviewer's privacy flag (calls Bedrock)"),
         ("relevance", "Judge generated surveys in saved results (calls Bedrock)"),
     ):
         judged = evaluation_sub.add_parser(name, help=help_text)
         judged.add_argument("--split", type=Path, default=Path("eval/prompt_example_split.json"))
-        judged.add_argument("--rubric", type=Path, default=Path("eval/relevance_rubric.txt"))
+        if name != "calibrate-privacy":
+            judged.add_argument("--rubric", type=Path, default=Path("eval/relevance_rubric.txt"))
         judged.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
         judged.add_argument("--model-id", help="Judge model; defaults to the review model")
         judged.add_argument("--api", choices=("responses", "converse"))
@@ -617,11 +663,15 @@ def main() -> None:
         if name == "relevance":
             judged.add_argument("--results", type=Path, required=True)
             judged.add_argument("--part", choices=("dev", "test"), required=True)
-            judged.add_argument("--calibration", type=Path,
-                                help="Passing dev calibration report; required for --part test")
+            judged.add_argument(
+                "--calibration",
+                type=Path,
+                help="Passing dev calibration report; required for --part test",
+            )
         else:
-            judged.add_argument("--max-cases", type=int,
-                                help="Use only the first N dev survey rows (cost cap)")
+            judged.add_argument(
+                "--max-cases", type=int, help="Use only the first N dev survey rows (cost cap)"
+            )
     args = parser.parse_args()
     budget = getattr(args, "budget_usd", None)
     if budget is not None and (not budget.is_finite() or budget <= 0):
@@ -645,7 +695,7 @@ def main() -> None:
     else:
         try:
             if args.command == "eval" and args.evaluation_command != "policy":
-                asyncio.run(eval_relevance(args))
+                asyncio.run(eval_judge(args))
             elif args.command == "eval":
                 from mel.evaluation import score_policy
 

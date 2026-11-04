@@ -171,11 +171,50 @@ The policy score assesses decisions before inference. It does not score generate
 questions. Language quality, channel precedence and generation reliability stay
 `not_assessed`. The relevance judge below scores generated questions.
 
+## Privacy calibration (calls Bedrock)
+
+```bash
+uv run --locked mel-worker eval calibrate-privacy --max-cases 8
+```
+
+Omit `--max-cases` for all dev survey rows (48 in split v2, 192 reviewer calls before retries).
+Each row has clean and personal-question controls in English and Hindi; clean
+Hindi controls rotate three benign keyword traps. The judge is the production
+reviewer, using the config's review prompt and model. `--split`, `--config`,
+`--model-id`, `--api`, and `--output` override their defaults.
+
+Reports default to `outputs/eval/privacy-calibration-<uuid>.json` and never
+overwrite an existing file. They include prompt, split and scorer hashes, token
+usage including failed calls, FP/FN numerator/denominator counts by language,
+false positives by Hindi trap, quotes for disagreements, and failed cases.
+Failed calls are excluded from FP/FN denominators and independently fail the gate.
+`gate.build_narrow_check` is true if any false negative occurs, false positives
+exceed the fixed limit of 2, or any reviewer call fails; `passed` is its inverse.
+The gate recommends the separate narrow check; calibration does not build it.
+
+### Result (2026-11-04)
+
+`privacy_calibration_dev.json`: review model `openai.gpt-6-luna` in `us-east-1`, split v2,
+all 48 dev survey rows, 192 controls, 0 failed calls, 193 requests, 516,538 input and
+49,212 output tokens. An earlier run on split v1 (47 rows) gave the same result.
+
+| | English | Hindi | All |
+|---|---|---|---|
+| Missed personal questions (false negatives) | 0/48 | 0/48 | 0/96 |
+| Flagged clean surveys (false positives) | 0/48 | 0/48 | 0/96 |
+
+Hindi traps: पता नहीं 0/16, आधारित 0/16, फ़ोन किया 0/16 false positives. The gate does
+not call for the narrow check. The controls are synthetic and the eight personal
+questions are explicit. A perfect score shows that the reviewer applies the definition
+to clear cases. It does not show how it handles subtle or indirect wording, and it does
+not replace Hindi-speaking MEL review. A test fails if the review prompt, split or
+scorer changes without a new report.
+
 ## Relevance judge (calls Bedrock)
 
 The judge reads saved worker results. It does not run the worker and adds no
-inference loop to it. Only these two commands call a model. The judge model is the
-config's review model unless you set `--model-id` and `--api`.
+inference loop to it. These two commands and privacy calibration call a model.
+The judge model is the config's review model unless you set `--model-id` and `--api`.
 
 The rubric is `eval/relevance_rubric.txt`. For each generated survey, the judge
 marks six criteria as met, not met or not applicable:
