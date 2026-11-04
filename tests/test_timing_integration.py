@@ -64,6 +64,14 @@ class TimingPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.bundle = Bundle.load(Settings(bedrock_model_id="test-model"))
         self.base = json.loads((SCENARIO / "insight.json").read_text())
         survey = json.loads((SCENARIO / "survey.hi-IN.json").read_text())
+        # main's SurveyDraft constrains option values to a fixed answer-code enum, so
+        # shape the pack survey into an enum-valid draft (same approach as test_graph.py).
+        survey["items"] = [survey["items"][0], survey["items"][2]]
+        survey["items"][1]["options"] = [
+            {"value": "better", "label": "पहले से कम"},
+            {"value": "same", "label": "पहले जितने"},
+            {"value": "worse", "label": "पहले से ज़्यादा", "follow_up": "crop_or_animal_damaged"},
+        ]
         draft = {"items": survey["items"], "rationale": survey["rationale"]}
         review = {
             "relevance_score": 0.95,

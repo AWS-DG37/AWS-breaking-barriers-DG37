@@ -6,7 +6,7 @@ applies them in order; the first decision wins. Rules never call a model.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from typing import Protocol
