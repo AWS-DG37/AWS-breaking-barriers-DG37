@@ -29,16 +29,16 @@ jobs:
       AWS_EC2_METADATA_DISABLED: 'true'
       MEL_TEST_DB_PORT: '5432'
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
         with:
           version: '0.10.12'
       - run: uv sync --locked
       - run: uv run ruff check src deploy
-      - run: uv run cfn-lint template.yaml infra/bootstrap.yaml deploy/bootstrap.yaml
+      - run: uv run cfn-lint template.yaml infra/bootstrap.yaml deploy/*.yaml
       - run: uv run pytest -q
       - run: node --test src/mel/explorer/static/*.test.mjs
       - name: Check stdlib host paths on Python 3.9
@@ -62,7 +62,7 @@ jobs:
       - name: Save the tested image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker save fieldecho:tested -o /tmp/fieldecho-image.tar
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: tested-image
@@ -77,7 +77,7 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Read the single committed delivery target
         run: |
           python - <<'PY'
@@ -89,12 +89,12 @@ jobs:
               for k,v in {'DEPLOY_ROLE':t.deploy_role_arn,'AWS_REGION':t.region,'REGISTRY':t.registry}.items():
                   f.write(k+'='+v+'\n')
           PY
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: tested-image
           path: /tmp
       - run: docker load -i /tmp/fieldecho-image.tar
-      - uses: aws-actions/configure-aws-credentials@b47578312673ae6fa5b5096b330d9fbac3d116df # v4.2.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
           role-to-assume: ${{ env.DEPLOY_ROLE }}
           aws-region: ${{ env.AWS_REGION }}
@@ -104,7 +104,6 @@ jobs:
           set -euo pipefail
           registry_host="${REGISTRY%%/*}"
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry_host"
-          # An immutable tag from a completed publish can be reused on a workflow retry.
           if ! aws ecr describe-images --repository-name "${REGISTRY#*/}" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
             docker tag fieldecho:tested "$REGISTRY:$GITHUB_SHA"
             docker push "$REGISTRY:$GITHUB_SHA"
