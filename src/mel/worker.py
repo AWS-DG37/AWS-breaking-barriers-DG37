@@ -165,7 +165,13 @@ async def execute_run(
         run_started = True
         if hasattr(store, "connection"):
             meter_agents(
-                store, run_id, config, settings.aws_region, (generator, reviewer), budget_usd
+                store,
+                run_id,
+                config,
+                settings.aws_region,
+                (generator, reviewer),
+                budget_usd,
+                capped=job_id is not None,  # Console jobs count toward the spend cap.
             )
         logger.info(
             json.dumps(

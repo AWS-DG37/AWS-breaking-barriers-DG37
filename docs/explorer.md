@@ -211,8 +211,23 @@ old requests. Preview and model smoke checks have no persisted run ledger.
 Generate offers a USD limit for the run. Compare and Configure tests offer a limit
 **per candidate run**: two candidates with $5 each have a combined $10 limit. The UI
 starts at $5. The API accepts `budget_usd` on batch and comparison submissions; an
-omitted or null budget leaves the run unbounded for existing clients. CLI persisted
-runs also accept `mel-worker run ... --budget-usd 5`.
+omitted or null budget removes the per-run limit, but console runs still count toward
+the console spend cap. CLI persisted runs also accept
+`mel-worker run ... --budget-usd 5`.
+
+### Console spend cap
+
+One cumulative USD cap covers every run that the console queues: batches, comparisons
+and Configure tests. Command-line runs are outside it. The cap starts unset, and an
+unset cap refuses console runs that would call a model. Set it in the Generate or
+Compare form, or with `PUT /api/spend-cap` and the current `expected_version`.
+`GET /api/spend-cap` returns the cap, the committed exposure and the remainder.
+
+Each console request must fit both its run budget and the remaining cap. Committed
+exposure uses the same rules as a run: settled requests count at their estimate, and
+pending, unknown or overrun requests hold the larger of their reservation or estimate.
+A lower cap never releases exposure. Runs created before migration `006_spend_cap.sql`
+are not counted.
 
 Before each native request, a transaction locks that run's accounting row and
 reserves the model's full documented input context bound, at the highest configured

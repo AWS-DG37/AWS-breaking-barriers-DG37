@@ -1,4 +1,4 @@
-import {budgetInput, costSummary, money} from './costs.mjs';
+import {budgetInput, capPanel, costSummary, money} from './costs.mjs';
 import {el} from './dom.mjs';
 import {signedIn, signOut} from './auth.mjs';
 import {api} from './api.mjs';
@@ -229,6 +229,7 @@ async function renderComposer() {
       el('label',{},'How many (1–50)',el('input',{name:'limit',type:'number',min:1,max:50,value:10,required:true})),
       el('label',{},'Score against',el('select',{name:'reference'},el('option',{value:'rules'},'Each version’s rules'),el('option',{value:'golden'},'Golden reference')))),
     budgetInput('Budget per candidate run (USD)'),
+    capPanel(),
     el('p',{class:'small muted'},'Each candidate has its own limit. Total comparison exposure is at most the sum of those limits, subject to the configured prices and context bounds.'),
     el('div',{class:'launch'},
       el('p',{},state.config?.live_enabled?'This calls each version’s models. Results stay outside the scheduler handoff queue.':'Live execution is disabled by the server. Recorded comparisons remain available.'),

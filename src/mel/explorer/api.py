@@ -22,13 +22,16 @@ from mel.bundle import Bundle, read_bytes
 from mel.config import Settings, StrictModel
 from mel.configs import active_config, config_bundle, validate_definition
 from mel.costs import (
+    CapUpdate,
     CostRefused,
     NewPrice,
+    cap_view,
     check_budget_prices,
     estimate_run,
     prices,
     report,
     save_price,
+    set_cap,
 )
 from mel.datasets import InsightFilter, parse_insights
 from mel.evaluation import load_golden, score_decisions
@@ -230,6 +233,14 @@ def create_app(
     @app.post("/api/prices", status_code=201)
     def add_price(value: NewPrice):
         return database_call(lambda db: save_price(db, value))
+
+    @app.get("/api/spend-cap")
+    def spend_cap():
+        return database_call(cap_view)
+
+    @app.put("/api/spend-cap")
+    def update_spend_cap(value: CapUpdate):
+        return database_call(lambda db: set_cap(db, value))
 
     @app.get("/api/runs/{run_id}/costs")
     def run_costs(
@@ -530,11 +541,13 @@ def create_app(
 
         def enqueue(db):
             spec = batch_spec(db, value)
-            if hasattr(db, "connection") and spec.budget_usd is not None:
+            if hasattr(db, "connection"):
                 bundle = config_bundle(db, str(spec.config_id))
                 insights = db.insights(str(spec.dataset_id), spec.selection)
                 if estimate_batch(bundle, insights)["surveys"]:
-                    check_budget_prices(db, bundle.config, settings.aws_region, spec.budget_usd)
+                    check_budget_prices(
+                        db, bundle.config, settings.aws_region, spec.budget_usd, capped=True
+                    )
             return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)
@@ -596,7 +609,11 @@ def create_app(
                         **estimate_run(db, bundle.config, settings.aws_region, surveys),
                     }
                 )
-            return {"candidates": entries, "budget_scope": "Each candidate run has its own budget"}
+            return {
+                "candidates": entries,
+                "budget_scope": "Each candidate run has its own budget",
+                "spend_cap": cap_view(db) if hasattr(db, "connection") else None,
+            }
 
         return database_call(estimate)
 
@@ -618,12 +635,12 @@ def create_app(
             insights = db.insights(str(value.dataset_id), value.selection)
             if not insights:
                 raise HTTPException(422, "No insights match this selection")
-            if hasattr(db, "connection") and value.budget_usd is not None:
+            if hasattr(db, "connection"):
                 for candidate in value.candidates:
                     bundle = config_bundle(db, str(candidate.config_id))
                     if estimate_batch(bundle, insights)["surveys"]:
                         check_budget_prices(
-                            db, bundle.config, settings.aws_region, value.budget_usd
+                            db, bundle.config, settings.aws_region, value.budget_usd, capped=True
                         )
             try:
                 spec = ExperimentSpec(

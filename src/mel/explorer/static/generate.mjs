@@ -109,7 +109,7 @@ async function composer() {
     step('1','Insights',datasetPicker),
     step('2','Which ones',el('div',{class:'gen-filters'},...filters),dates,limit),
     step('3','Agent configuration',configPicker,el('p',{class:'small muted'},el('a',{href:'#configure'},'Edit configurations'))),
-    step('4','Spending limit',budget,el('p',{class:'small muted'},'Stops before the next request would exceed the limit. Each request reserves its full context bound until usage returns.')));
+    step('4','Spending limit',budget,el('p',{class:'small muted'},'Stops before the next request would exceed the limit. Each request reserves its full context bound until usage returns.'),capPanel()));
   panel.append(form);
   const plan=el('section',{class:'gen-plan','aria-labelledby':'plan-title'},el('h2',{id:'plan-title'},'Before you run'),summary,submit);
   estimate(summary,submit);

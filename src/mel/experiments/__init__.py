@@ -197,7 +197,13 @@ async def execute_experiment(
                 )
                 if hasattr(store, "connection"):
                     meter_agents(
-                        store, run_id, config, settings.aws_region, agents, spec.budget_usd
+                        store,
+                        run_id,
+                        config,
+                        settings.aws_region,
+                        agents,
+                        spec.budget_usd,
+                        capped=job_id is not None,  # Console jobs count toward the spend cap.
                     )
                 deps = Dependencies.from_bundle(candidate_bundle, *agents)
                 completed = await asyncio.to_thread(store.completed, run_id, False)

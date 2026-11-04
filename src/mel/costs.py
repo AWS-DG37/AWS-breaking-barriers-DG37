@@ -90,6 +90,55 @@ class Price(StrictModel):
         return (self.max_input_tokens * input_rate + outputs * output_rate) / 1_000_000
 
 
+class CapUpdate(StrictModel):
+    expected_version: int = Field(ge=0)
+    budget_usd: Decimal | None = Field(
+        default=None, gt=0, allow_inf_nan=False, max_digits=24, decimal_places=12
+    )
+
+
+CAP_REFUSED = "Set a console spend cap before running models"
+# Unsettled and unknown calls hold their full reservation, so the cap never under-counts.
+CAP_EXPOSURE = (
+    "SELECT coalesce(sum(CASE WHEN c.state='complete' THEN c.estimated_usd "
+    "ELSE greatest(c.reserved_usd,coalesce(c.estimated_usd,0)) END),0) "
+    "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped"
+)
+
+
+def cap_view(store):
+    with store.lock, store.connection.transaction():
+        version, budget = store.connection.execute(
+            "SELECT version,budget_usd FROM spend_cap"
+        ).fetchone()
+        committed = store.connection.execute(CAP_EXPOSURE).fetchone()[0]
+    return dict(
+        version=version,
+        budget_usd=str(budget) if budget is not None else None,
+        committed_usd=str(committed),
+        remaining_usd=str(max(Decimal(0), budget - committed)) if budget is not None else None,
+        scope="All runs the console queues. Command-line runs are outside this cap.",
+    )
+
+
+def set_cap(store, update: CapUpdate):
+    with store.lock, store.connection.transaction():
+        version = store.connection.execute("SELECT version FROM spend_cap FOR UPDATE").fetchone()[0]
+        if version != update.expected_version:
+            raise CostRefused("The spend cap changed. Refresh before saving.")
+        store.connection.execute(
+            "UPDATE spend_cap SET version=version+1,budget_usd=%s", (update.budget_usd,)
+        )
+    return cap_view(store)
+
+
+def _cap_remaining(connection):
+    budget = connection.execute("SELECT budget_usd FROM spend_cap FOR UPDATE").fetchone()[0]
+    if budget is None:
+        raise CostRefused(CAP_REFUSED)
+    return budget - connection.execute(CAP_EXPOSURE).fetchone()[0]
+
+
 class NewPrice(StrictModel):
     model_id: str = Field(min_length=1, max_length=300)
     api: Literal["responses", "converse"]
@@ -152,16 +201,22 @@ class RunCosts:
     def __init__(self, store, run_id):
         self.store, self.run_id = store, run_id
 
-    def initialize(self, budget):
+    def initialize(self, budget, capped=False):
         with self.store.lock:
-            # A resumed run keeps its original limit and all prior exposure.
+            # A resumed run keeps its original limit, cap membership and prior exposure.
             self.store.connection.execute(
-                "INSERT INTO run_costs(run_id,budget_usd) VALUES (%s,%s) ON CONFLICT DO NOTHING",
-                (self.run_id, budget),
+                "INSERT INTO run_costs(run_id,budget_usd,capped) VALUES (%s,%s,%s) "
+                "ON CONFLICT DO NOTHING",
+                (self.run_id, budget, capped),
             )
 
     def reserve(self, model, region, role, attempt, insight_id):
         with self.store.lock, self.store.connection.transaction():
+            capped = self.store.connection.execute(
+                "SELECT capped FROM run_costs WHERE run_id=%s", (self.run_id,)
+            ).fetchone()[0]
+            # Lock order is spend_cap, then run_costs, so concurrent workers cannot deadlock.
+            cap_remaining = _cap_remaining(self.store.connection) if capped else None
             budget, stopped = self.store.connection.execute(
                 "SELECT budget_usd,stop_reason FROM run_costs WHERE run_id=%s FOR UPDATE",
                 (self.run_id,),
@@ -170,6 +225,13 @@ class RunCosts:
                 raise CostRefused(stopped)
             price_id, price = lookup(self.store, model, region)
             amount = price.reservation(model.max_tokens) if price else Decimal(0)
+            if capped:
+                if price is None:
+                    raise CostRefused(
+                        f"Missing verified price: {model.model_id} / {model.api} / {region}"
+                    )
+                if amount > cap_remaining:
+                    raise CostRefused("Console spend cap cannot cover the next request reservation")
             if budget is not None:
                 exposure, unresolved = self.store.connection.execute(
                     "SELECT coalesce(sum(CASE WHEN state='complete' THEN estimated_usd "
@@ -411,9 +473,9 @@ class CostedModel(WrapperModel):
         yield
 
 
-def meter_agents(store, run_id, config, region, agents, budget=None):
+def meter_agents(store, run_id, config, region, agents, budget=None, capped=False):
     costs = RunCosts(store, run_id)
-    costs.initialize(budget)
+    costs.initialize(budget, capped)
     for agent, model, role in zip(
         agents, (config.generation, config.review), ("generate", "review")
     ):
@@ -457,9 +519,15 @@ def estimate_run(store, config, region, surveys):
     )
 
 
-def check_budget_prices(store, config, region, budget):
-    if budget is None:
+def check_budget_prices(store, config, region, budget, capped=False):
+    if budget is None and not capped:
         return
+    remaining = None
+    if capped:
+        cap = cap_view(store)
+        if cap["remaining_usd"] is None:
+            raise CostRefused(CAP_REFUSED)
+        remaining = Decimal(cap["remaining_usd"])
     with store.lock:
         for model in (config.generation, config.review):
             _, price = lookup(store, model, region)
@@ -467,5 +535,10 @@ def check_budget_prices(store, config, region, budget):
                 raise CostRefused(
                     f"Missing verified price: {model.model_id} / {model.api} / {region}"
                 )
-            if price.reservation(model.max_tokens) > budget:
+            reservation = price.reservation(model.max_tokens)
+            if budget is not None and reservation > budget:
                 raise CostRefused("Run budget is below a selected model's request reservation")
+            if remaining is not None and reservation > remaining:
+                raise CostRefused(
+                    "Console spend cap cannot cover a selected model's request reservation"
+                )

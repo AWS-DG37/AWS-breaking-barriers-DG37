@@ -11,11 +11,13 @@ from uuid import uuid4
 
 import pytest
 from postgres import requires_postgres
+from test_costs import price
 from test_experiments import versions
 from test_trace import dependencies
 
 from mel.bundle import Bundle
 from mel.config import Settings
+from mel.costs import CapUpdate, NewPrice, cap_view, save_price, set_cap
 from mel.datasets import InsightFilter, parse_insights
 from mel.experiments import ExperimentSpec
 from mel.jobs import BatchJobSpec, run_queue
@@ -35,6 +37,18 @@ def smoke_dataset(db):
     # A unique digest per test keeps rollback-only tests independent of earlier imports.
     digest = hashlib.sha256(body + uuid4().bytes).hexdigest()
     return db.import_dataset("Smoke", parse_insights(body), digest)
+
+
+def fund_console(db, *model_ids):
+    """Console jobs need verified prices and a spend cap before any model request."""
+    for model_id in model_ids:
+        for api in ("responses", "converse"):
+            pricing = price(max_input_tokens=1_000_000)
+            save_price(
+                db, NewPrice(model_id=model_id, api=api, region="us-east-1", pricing=pricing)
+            )
+    version = cap_view(db)["version"]
+    set_cap(db, CapUpdate(expected_version=version, budget_usd="1000"))
 
 
 def active(db):
@@ -96,6 +110,7 @@ def test_dataset_import_is_idempotent_and_filters_by_column_and_ist_day(database
 
 
 def test_batch_job_runs_the_selection_with_its_version_and_reports_progress(database):
+    fund_console(database, "test")
     config_id = active(database)
     dataset = smoke_dataset(database)
     spec = BatchJobSpec(
@@ -131,6 +146,7 @@ def test_a_failed_job_records_its_error_and_only_resume_reclaims_it(database):
 
 
 def test_experiment_job_runs_each_candidate_with_its_own_version(database):
+    fund_console(database, "test", "test-a", "test-b")
     first, second = versions(database)
     spec = ExperimentSpec.model_validate(
         {
@@ -154,6 +170,7 @@ def test_experiment_job_runs_each_candidate_with_its_own_version(database):
 
 
 def test_facets_counts_and_the_runs_view_describe_a_batch(database):
+    fund_console(database, "test")
     config_id = active(database)
     dataset = smoke_dataset(database)
     key = dataset["dataset_id"]

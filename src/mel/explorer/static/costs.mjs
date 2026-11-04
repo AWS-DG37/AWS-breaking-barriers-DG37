@@ -5,6 +5,27 @@ export const money=value=>value===null || value===undefined?'Unknown':`$${Number
 export function budgetInput(label='Run budget (USD)') {
   return el('label',{},label,el('input',{name:'budget_usd',type:'number',min:'0.000001',step:'any',value:'5',required:true,'aria-label':label}));
 }
+// The console-wide cumulative cap. Enter in its field must not submit the launch form.
+export function capPanel() {
+  const box=el('div',{class:'spend-cap small',role:'status'},'Loading the console spend cap…');
+  async function load() {
+    try {
+      const cap=await api('/spend-cap');
+      const input=el('input',{type:'number',min:'0.000001',step:'any',value:cap.budget_usd ?? '','aria-label':'Console spend cap (USD)',onKeydown:event=>{if(event.key==='Enter') event.preventDefault();}});
+      const save=el('button',{type:'button',class:'secondary',onClick:async()=>{
+        save.disabled=true;
+        try {await api('/spend-cap',{method:'PUT',body:JSON.stringify({expected_version:cap.version,budget_usd:input.value || null})});await load();}
+        catch(e) {box.append(el('p',{class:'notice error'},e.message));save.disabled=false;}
+      }},'Save cap');
+      box.replaceChildren(
+        el('p',{},cap.budget_usd===null?'No console spend cap is set. Live runs are refused until you set one.':`Console spend cap ${money(cap.budget_usd)} · committed ${money(cap.committed_usd)} · remaining ${money(cap.remaining_usd)}`),
+        el('label',{},'Console spend cap (USD)',input),save,
+        el('p',{class:'muted'},cap.scope));
+    } catch(e) {box.replaceChildren(el('p',{class:'notice error'},`Spend cap unavailable. ${e.message}`));}
+  }
+  load();
+  return box;
+}
 export function costSummary(costs,runId) {
   if (!costs?.available) return el('p',{class:'small muted'},'Cost unavailable: this run predates request accounting.');
   const summary=el('section',{class:'run-costs'},el('p',{},

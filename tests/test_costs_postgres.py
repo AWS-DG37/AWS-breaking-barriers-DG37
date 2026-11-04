@@ -10,7 +10,18 @@ from pydantic_ai.usage import RequestUsage
 from test_costs import price
 
 from mel.config import ModelConfig
-from mel.costs import CostRefused, NewPrice, RunCosts, report, save_price
+from mel.costs import (
+    CapUpdate,
+    CostRefused,
+    NewPrice,
+    RunCosts,
+    cap_view,
+    check_budget_prices,
+    lookup,
+    report,
+    save_price,
+    set_cap,
+)
 
 pytestmark = requires_postgres
 
@@ -57,6 +68,59 @@ def test_budget_reservations_include_inflight_calls_and_settle_once_at_saved_pri
     assert Decimal(result["estimated_usd"]) == Decimal("0.0015")
     assert result["calls"][0]["price_id"] == saved["price_id"]
     assert result["call_count"] == result["complete_calls"] == 1
+
+
+def capped_run(db):
+    key = str(uuid4())
+    db.start_run(key, key, {})
+    costs = RunCosts(db, key)
+    costs.initialize(None, capped=True)
+    return costs
+
+
+def test_console_runs_are_refused_until_a_spend_cap_is_set(database):
+    _, model, _ = setup_run(database, budget=None)
+    with pytest.raises(CostRefused, match="spend cap"):
+        reserve(capped_run(database), model)
+    config = type("Config", (), {"generation": model, "review": model})()
+    with pytest.raises(CostRefused, match="spend cap"):
+        check_budget_prices(database, config, "us-east-1", None, capped=True)
+
+
+def test_spend_cap_is_cumulative_across_console_runs_and_ignores_cli_runs(database):
+    uncapped, model, _ = setup_run(database, budget=None)
+    reservation = lookup(database, model, "us-east-1")[1].reservation(model.max_tokens)
+    version = cap_view(database)["version"]
+    set_cap(database, CapUpdate(expected_version=version, budget_usd=reservation))
+    first, second = capped_run(database), capped_run(database)
+    call = reserve(first, model)
+    with pytest.raises(CostRefused, match="spend cap"):
+        reserve(second, model)
+    reserve(uncapped, model)  # Command-line runs never draw on the cap.
+    first.settle(call, response(inputs=10, outputs=10))
+    view = cap_view(database)
+    assert Decimal(view["committed_usd"]) < reservation
+    assert Decimal(view["remaining_usd"]) == reservation - Decimal(view["committed_usd"])
+    with pytest.raises(CostRefused, match="spend cap"):
+        reserve(second, model)  # The remaining cap is below one full reservation.
+
+
+def test_unknown_console_calls_keep_their_reservation_against_the_cap(database):
+    _, model, _ = setup_run(database, budget=None)
+    reservation = lookup(database, model, "us-east-1")[1].reservation(model.max_tokens)
+    version = cap_view(database)["version"]
+    set_cap(database, CapUpdate(expected_version=version, budget_usd=reservation * 2))
+    run = capped_run(database)
+    run.settle(reserve(run, model), error="TimeoutError")
+    assert Decimal(cap_view(database)["committed_usd"]) == reservation
+
+
+def test_spend_cap_updates_need_the_current_version(database):
+    version = cap_view(database)["version"]
+    set_cap(database, CapUpdate(expected_version=version, budget_usd=Decimal("1")))
+    with pytest.raises(CostRefused, match="changed"):
+        set_cap(database, CapUpdate(expected_version=version, budget_usd=Decimal("2")))
+    assert cap_view(database)["budget_usd"] == "1"
 
 
 def test_resume_keeps_original_budget_spend_and_unknown_reservations(database):
@@ -121,13 +185,14 @@ def test_unpriced_models_remain_unknown_and_cannot_start_budgeted_calls(database
 def test_persisted_batch_captures_generation_and_review_and_retains_results(database):
     import asyncio
 
-    from test_jobs_postgres import active, agents, smoke_dataset
+    from test_jobs_postgres import active, agents, fund_console, smoke_dataset
 
     from mel.bundle import Bundle
     from mel.config import Settings
     from mel.datasets import InsightFilter
     from mel.jobs import BatchJobSpec, run_queue
 
+    fund_console(database)
     config_id = active(database)
     dataset = smoke_dataset(database)
     bundle = Bundle.load(Settings(bedrock_model_id="test"))
