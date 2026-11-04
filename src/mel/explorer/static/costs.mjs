@@ -17,6 +17,8 @@ export function capPanel() {
         try {await api('/spend-cap',{method:'PUT',body:JSON.stringify({expected_version:cap.version,budget_usd:input.value || null})});await load();}
         catch(e) {box.append(el('p',{class:'notice error'},e.message));save.disabled=false;}
       }},'Save cap');
+      // An unset cap refuses live runs, so it shows at every detail level.
+      if (cap.budget_usd===null) box.removeAttribute('data-level'); else box.setAttribute('data-level','2');
       box.replaceChildren(
         el('p',{},cap.budget_usd===null?'No console spend cap is set. Live runs are refused until you set one.':`Console spend cap ${money(cap.budget_usd)} · committed ${money(cap.committed_usd)} · remaining ${money(cap.remaining_usd)}`),
         el('label',{},'Console spend cap (USD)',input),save,
@@ -27,13 +29,14 @@ export function capPanel() {
   return box;
 }
 export function costSummary(costs,runId) {
-  if (!costs?.available) return el('p',{class:'small muted'},'Cost unavailable: this run predates request accounting.');
-  const summary=el('section',{class:'run-costs'},el('p',{},
+  if (!costs?.available) return el('p',{class:'small muted','data-level':2},'Cost unavailable: this run predates request accounting.');
+  // The cost lines are Detailed; a stop reason is a notice and shows at every level.
+  const summary=el('section',{class:'run-costs'},el('p',{'data-level':2},
     `Estimated spend ${money(costs.estimated_usd)}${!costs.complete?` · known subtotal ${money(costs.known_estimated_usd)}`:''} · budget ${costs.budget_usd===null?'No limit':money(costs.budget_usd)} · committed ${money(costs.committed_usd)}`),
-    el('p',{class:'small muted'},`${costs.complete_calls}/${costs.call_count} requests fully priced. Known tokens: ${costs.known_input_tokens} input / ${costs.known_output_tokens} output. Figures use saved model prices.`),
-    !costs.complete?el('p',{class:'small muted'},'Committed includes held reservations for requests whose final costs are unresolved. It is not confirmed spend; a zero known subtotal does not mean those requests were free.'):null);
+    el('p',{class:'small muted','data-level':2},`${costs.complete_calls}/${costs.call_count} requests fully priced. Known tokens: ${costs.known_input_tokens} input / ${costs.known_output_tokens} output. Figures use saved model prices.`),
+    !costs.complete?el('p',{class:'small muted','data-level':2},'Committed includes held reservations for requests whose final costs are unresolved. It is not confirmed spend; a zero known subtotal does not mean those requests were free.'):null);
   if (costs.stop_reason) summary.append(el('p',{class:'notice error'},costs.stop_reason));
-  const body=el('div',{}), details=el('details',{},el('summary',{},'Request costs and price sources'),body);
+  const body=el('div',{}), details=el('details',{'data-level':2},el('summary',{},'Request costs and price sources'),body);
   let loaded=false, offset=0;
   async function load() {
     const result=await api(`/runs/${runId}/costs?offset=${offset}&limit=100`);

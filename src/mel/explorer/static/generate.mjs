@@ -4,6 +4,8 @@ import {requestScope} from './api.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {insightJourney} from './journey.mjs';
 import {addToReviewList} from './review.mjs';
+import {summarizeCounts} from './domain.mjs';
+import {atLevel} from './detail.mjs';
 // Generate: pick insights, see what the rules will do, run the agent, inspect results.
 // Generate and the viewing-only Runs section share job, run and result screens.
 // Routes: #<generate|runs>[/job/<id>|/run/<id>[/<insight id>]].
@@ -29,7 +31,7 @@ const view = {
 const words = value => String(value ?? '').replaceAll('_',' ');
 const when = iso => iso ? new Date(iso).toLocaleString(undefined,{dateStyle:'medium',timeStyle:'short'}) : '';
 const number = value => Number(value).toLocaleString();
-const disclosure = (label,value) => el('details',{},el('summary',{},label),el('pre',{},JSON.stringify(value,null,2)));
+const disclosure = (label,value,attrs={}) => el('details',attrs,el('summary',{},label),el('pre',{},JSON.stringify(value,null,2)));
 const statusBadge = status => el('span',{class:`badge status-${status}`},STATUS[status] || words(status));
 function message(text,error=false) {
   return el('p',{class:error?'notice error':'notice',role:error?'alert':'status'},text);
@@ -297,16 +299,17 @@ function runHeader(summary) {
   const head=[
     el('div',{class:'heading'},el('div',{},
       el('h1',{},describeSelection(summary.selection?.selection || {limit:summary.selection?.limit})),
-      el('p',{class:'muted small'},`Started ${when(summary.created_at)} · configuration ${summary.config_id?.slice(0,8) || 'not recorded'} · ${number(summary.input_tokens+summary.output_tokens)} tokens`)),
+      el('p',{class:'gen-summary'},summarizeCounts(counts)),
+      el('p',{class:'muted small','data-level':2},`Started ${when(summary.created_at)} · configuration ${summary.config_id?.slice(0,8) || 'not recorded'} · ${number(summary.input_tokens+summary.output_tokens)} tokens`)),
       el('div',{class:'gen-run-actions'},el('span',{class:`badge status-${summary.status}`},words(summary.status)),
-        ['running','queued'].includes(summary.status)?null:el('button',{type:'button',class:'quiet danger',onClick:()=>deleteRun(summary)},'Delete run'))),
+        ['running','queued'].includes(summary.status)?null:el('button',{type:'button',class:'quiet danger','data-level':3,onClick:()=>deleteRun(summary)},'Delete run'))),
   ];
   head.push(costSummary(summary.costs,summary.run_id));
   if (summary.status==='running' && total) {
     head.push(el('div',{class:'progress',role:'progressbar','aria-valuemin':0,'aria-valuemax':total,'aria-valuenow':done,'aria-label':'Insights processed'},
       el('span',{style:`width:${Math.round(100*done/total)}%`})),el('p',{class:'small muted'},`${number(done)} of ${number(total)} insights processed`));
   }
-  head.push(el('div',{class:'gen-metrics'},Object.keys(STATUS).map(key=>el('button',{type:'button',class:'metric','aria-pressed':view.run.filter===key,
+  head.push(el('div',{class:'gen-metrics','data-level':2},Object.keys(STATUS).map(key=>el('button',{type:'button',class:'metric','aria-pressed':view.run.filter===key,
     onClick:()=>{view.run.filter=view.run.filter===key?null:key;view.run.rows=[];renderRun(view.run.id,view.run.insight);}},
     el('span',{},STATUS[key]),el('strong',{},number(counts[key] || 0))))));
   return head;
@@ -338,14 +341,14 @@ function outcomeText(row) {
 function resultsTable(summary,rows) {
   if (!rows.length) return el('p',{class:'empty-note'},['running','queued'].includes(summary.status)?'Results appear as each insight finishes.':'No results match this filter.');
   const table=el('table',{class:'gen-table'},
-    el('thead',{},el('tr',{},el('th',{},'Insight'),el('th',{},'Outcome'),el('th',{},'What happened'),el('th',{},'Time'))),
+    el('thead',{},el('tr',{},el('th',{},'Insight'),el('th',{},'Outcome'),el('th',{'data-level':2},'What happened'),el('th',{'data-level':3},'Time'))),
     el('tbody',{},rows.map(row=>el('tr',{'aria-selected':String(row.insight_id===view.run.insight),'data-insight':row.insight_id,tabindex:0,
       onClick:()=>{location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;},
       onKeydown:event=>{if(event.key==='Enter') location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;}},
       el('td',{},el('strong',{},row.insight_id),el('span',{class:'small muted'},` ${row.insight.crop || ''}`)),
       el('td',{},statusBadge(row.status)),
-      el('td',{class:'gen-what'},outcomeText(row)),
-      el('td',{class:'small muted'},row.elapsed_seconds?`${row.elapsed_seconds.toFixed(1)} s`:'')))));
+      el('td',{class:'gen-what','data-level':2},outcomeText(row)),
+      el('td',{class:'small muted','data-level':3},row.elapsed_seconds?`${row.elapsed_seconds.toFixed(1)} s`:'')))));
   const more=view.run.hasMore?el('button',{type:'button',class:'secondary',onClick:async()=>{
     more.disabled=true;
     const ticket=view.request, runId=view.run.id, filter=view.run.filter;
@@ -387,8 +390,8 @@ async function showDetail(panel,runId,insightId) {
     sections.push(
       el('h3',{},'Farmer asked'),el('p',{},insight.query_summary || 'Not recorded'),
       el('h3',{},'Advice given'),el('p',{},insight.advice_summary || 'Not recorded'),
-      insightJourney(outcome));
-    sections.push(disclosure('Full insight',insight),disclosure('Full outcome',outcome));
+      atLevel(insightJourney(outcome),2));
+    sections.push(disclosure('Full insight',insight,{'data-level':3}),disclosure('Full outcome',outcome,{'data-level':3}));
     panel.replaceChildren(...sections);
   } catch(error) {
     if (signal.aborted) return;
