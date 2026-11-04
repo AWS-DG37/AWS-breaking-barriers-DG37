@@ -1,6 +1,6 @@
 # Golden dev/test split, prompt examples and judges
 
-The current baseline (`luna-golden-patterns-v8`) retains seven compact examples
+The current baseline (`luna-golden-patterns-v9`) retains seven compact examples
 from Digital Green’s supplied golden set, introduced in the v3 generator and
 reviewer prompts. Five positive examples cover direct action (potato),
 monitoring (lentil), a plan (gram), holding off (cabbage), and expert escalation
@@ -67,7 +67,7 @@ each for the first dev row with the same resolution type, survey decision and ru
 | G-0018 (lentil) | G-0092 (maize) | needs_more_context |
 
 The replacements have the same reference questions, so only the advice context
-changed in both prompt files. The config version moved to `luna-golden-patterns-v8`.
+changed in both prompt files. The config version moved to `luna-golden-patterns-v9`.
 
 Use dev, and only dev, to tune prompts and calibrate judges. Score test, and do not
 tune on it. If a test row is used for tuning, rebuild the split and record why.

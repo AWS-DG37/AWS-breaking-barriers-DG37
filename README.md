@@ -189,7 +189,7 @@ Prompt history on held-out golden insights (all decisions correct in every run):
 | v6, on Fargate | all 138 | 2.9 (max 4) | 2.0 | 7.0; 8 of 88 rejected |
 | v7: fixed hold-off shape, no step lists, no "X or Y" | all 138, on Fargate | 2.9 (max 3) | 2.0 | 7.7; 5 of 88 rejected |
 
-The v6 and v7 rows used the earlier 138-row holdout. From v8 the test half has 76
+The v6 and v7 rows used the earlier 138-row holdout. From v9 the test half has 76
 rows; compare later runs only with runs on the same split version.
 
 Golden direct-action surveys often add "If not, what stopped you?" shown only after
