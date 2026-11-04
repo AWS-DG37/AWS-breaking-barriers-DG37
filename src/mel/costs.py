@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
 from datetime import date
@@ -270,7 +271,7 @@ class RunCosts:
                     inputs,
                     outputs,
                     estimate,
-                    Jsonb(usage.model_dump()) if usage else None,
+                    Jsonb(dataclasses.asdict(usage)) if usage else None,
                     response.provider_response_id if response else None,
                     error,
                     key,
@@ -326,7 +327,13 @@ def report(store, run_id, *, limit=0, offset=0):
                 "error_type",
                 "pricing",
             )
-            calls = [dict(zip(columns, r)) for r in rows]
+            calls = [
+                {
+                    k: str(v) if k in ("call_id", "price_id") and v is not None else v
+                    for k, v in zip(columns, r)
+                }
+                for r in rows
+            ]
     return dict(
         available=True,
         budget_usd=str(row[0]) if row[0] is not None else None,
