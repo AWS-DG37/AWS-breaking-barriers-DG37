@@ -1,7 +1,7 @@
 """LLM draft models and internal outcomes. Pack JSON Schemas remain the wire authority."""
 
 from datetime import UTC, datetime
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import Field, model_validator
 
@@ -14,9 +14,30 @@ FollowUp = Literal[
     "could_not_reach_expert",
 ]
 
+AnswerCode = Literal[
+    "yes",
+    "no",
+    "not_yet",
+    "better",
+    "same",
+    "worse",
+    "all_steps",
+    "some_steps",
+    "not_started",
+    "too_early",
+    "cannot_tell",
+    "did_not_check",
+    "could_not_reach",
+    "not_met_yet",
+    "too_costly",
+    "not_available",
+    "no_time",
+    "did_not_understand",
+]
+
 
 class Option(StrictModel):
-    value: str = Field(pattern=r"^[a-z0-9][a-z0-9_]{0,63}$")
+    value: AnswerCode
     label: str = Field(min_length=1, max_length=20)
     follow_up: FollowUp | None = None
 
@@ -35,30 +56,6 @@ class ChoiceItem(StrictModel):
         if len({o.value for o in self.options}) != len(self.options):
             raise ValueError("option values must be unique within a question")
         return self
-
-
-class ScaleItem(StrictModel):
-    item_id: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
-    type: Literal["survey-scale"]
-    prompt: str = Field(min_length=1, max_length=400)
-    scale_min: int = Field(ge=0, le=100)
-    scale_max: int = Field(ge=1, le=100)
-    follow_up_at_or_below: int | None = None
-    follow_up_reason: FollowUp | None = None
-
-    @model_validator(mode="after")
-    def check_range(self):
-        if not 1 <= self.scale_max - self.scale_min <= 9:
-            raise ValueError("scale must have two to ten integer steps")
-        if self.follow_up_at_or_below is not None:
-            if not self.scale_min <= self.follow_up_at_or_below <= self.scale_max:
-                raise ValueError("follow-up threshold outside scale")
-            if self.follow_up_reason is None:
-                raise ValueError("follow-up threshold requires a reason")
-        return self
-
-
-Item = Annotated[ChoiceItem | ScaleItem, Field(discriminator="type")]
 
 
 class TraceEvent(StrictModel):
@@ -82,7 +79,7 @@ class SurveyDraft(StrictModel):
         default_factory=list,
         description="Model-supplied diagnostic grounding. Not verified quality.",
     )
-    items: list[Item] = Field(min_length=1, max_length=3)
+    items: list[ChoiceItem] = Field(min_length=1, max_length=3)
     rationale: str = Field(min_length=1, max_length=400)
 
     @model_validator(mode="after")
@@ -100,6 +97,13 @@ class Review(StrictModel):
     language_correct: bool
     gives_new_advice: bool
     asks_personal_info: bool
+    personal_info_quote: str | None = Field(
+        default=None,
+        description=(
+            "The exact question or option text that asks for personal information; "
+            "required when asks_personal_info is true, else null."
+        ),
+    )
     issues: list[str] = Field(
         description="Blocking defects that make this short survey misleading, unsafe, or unusable."
     )
@@ -107,6 +111,14 @@ class Review(StrictModel):
         default_factory=list,
         description="Optional improvements; do not block acceptance. Stay within three questions.",
     )
+
+    @model_validator(mode="after")
+    def require_personal_info_quote(self):
+        if self.asks_personal_info and not (
+            self.personal_info_quote and self.personal_info_quote.strip()
+        ):
+            raise ValueError("asks_personal_info requires a non-empty personal_info_quote")
+        return self
 
 
 class Outcome(StrictModel):

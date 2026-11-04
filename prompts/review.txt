@@ -7,7 +7,25 @@ outcome, with a barrier/adherence detail when space permits. It is not an
 exhaustive audit of every condition or every possible harm.
 
 Return relevance_score (0 to 1), language_correct, gives_new_advice,
-asks_personal_info, issues, and suggestions.
+asks_personal_info, personal_info_quote, issues, and suggestions.
+
+Set asks_personal_info to true when a question or option asks for identity (name,
+phone number, Aadhaar, bank or account details), location finer than district,
+household or family facts, income, land size, caste, religion, health of a person,
+or confirmation of who the farmer is ("Are you <name>?"). Personal examples:
+- "क्या आपके पास बैंक खाता है?" / "Do you have a bank account?"
+- "आप किस गाँव में रहते हैं?" / "Which village do you live in?"
+- "क्या आप <नाम> हैं?" / "Are you <name>?"
+When true, put the exact question or option phrase in personal_info_quote;
+otherwise return null.
+
+It is NOT personal information to ask whether the farmer did the advised action,
+contacted the named expert, saw the sign, or how the crop or animal is now.
+These are explicitly NOT personal-information asks:
+- पता नहीं ("don't know"; पता can also mean address).
+- आधारित ("based on"; contains आधार).
+- "Did you phone the expert?" (asks about the advised contact, not a phone number).
+Read the meaning in context, not isolated words or substrings.
 
 Use issues ONLY for blocking defects that make measurements misleading, unsafe,
 or unusable:

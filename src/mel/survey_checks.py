@@ -5,9 +5,10 @@ models and the pack schema already enforce shape: label length, option counts an
 follow_up values. These cover what they cannot: emoji, exact dates, script that does
 not match the language, and surveys whose answers cannot route a bad outcome back.
 
-Personal-information asks are left to the model reviewer (Review.asks_personal_info).
-A keyword list rejected valid questions in three review rounds: पता नहीं ("don't
-know"), आधारित ("based on") and asking whether the farmer phoned the expert.
+Draft answers use closed codes; personal-information asks in question or option
+wording are the model reviewer's job (Review.asks_personal_info). A keyword list
+rejected valid questions in three review rounds: पता नहीं ("don't know"), आधारित
+("based on") and asking whether the farmer phoned the expert.
 """
 
 from __future__ import annotations
