@@ -1,5 +1,3 @@
-"""Website admission and estimated cost accounting. Batch workers are outside this budget."""
-
 from __future__ import annotations
 
 import asyncio
