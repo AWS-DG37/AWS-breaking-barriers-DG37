@@ -179,6 +179,8 @@ async function loadSurvey(load) {
   markShown(state.session, currentItem().item_id);
   document.documentElement.lang = state.survey.language;
   render();
+  document.querySelector('.demo-controls').disabled = false;
+  $('voice').disabled = false;
   return true;
 }
 
@@ -269,7 +271,7 @@ function renderRecord() {
 }
 
 function render() {
-  const nativeEnglish = voiceLanguage(state.survey) === 'en';
+  const nativeEnglish = state.survey.language?.split('-')[0] === 'en';
   for (const [id, enabled] of [['english-text', state.englishText], ['english-audio', state.englishAudio]]) {
     $(id).checked = nativeEnglish || enabled;
     $(id).disabled = !state.english || nativeEnglish;
@@ -303,6 +305,8 @@ function showError(message) {
 async function restart() {
   const load = ++state.load;
   silence();
+  document.querySelector('.demo-controls').disabled = true;
+  $('voice').disabled = true;
   $('log').replaceChildren(h('li', {class: 'muted'}, 'Each reading, repeat and tap appears here.'));
   try {
     if ((await loadSurvey(load)) && state.voiceOn) startVoice();
