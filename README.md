@@ -80,7 +80,7 @@ The worker reads it with `--bundle-uri s3://.../config/.../bundle.json`. A confi
 bundle is data, not executable graph code. Topology changes require a new image.
 Config snapshots include no database credentials.
 
-Prompt version `luna-golden-patterns-v6` embeds the same seven golden reference
+Prompt version `luna-golden-patterns-v7` embeds the same seven golden reference
 patterns in generation and review. Positive examples span five advice types and
 five crop/animal contexts, with two no-survey boundary examples. The agents are
 instructed to transfer the measurement pattern rather than copy crop-specific
@@ -157,6 +157,8 @@ Prompt history on held-out golden insights (all decisions correct in every run):
 | v5: main action first, two questions by default | 1–10 | 3.0 (max 3) | 2.0 | 4.9 |
 | v5 | 11–30 | 3.05 (max 4) | 2.0 | 5.4 |
 | v6: fixed plan and monitoring shapes | 1–30 | 2.9 (max 3) | 2.0 | 5.9 |
+| v6, on Fargate | all 138 | 2.9 (max 4) | 2.0 | 7.0; 8 of 88 rejected |
+| v7: fixed hold-off shape, no step lists, no "X or Y" | all 138, on Fargate | 2.9 (max 3) | 2.0 | 7.7; 5 of 88 rejected |
 
 Golden direct-action surveys often add "If not, what stopped you?" shown only after
 a No. The survey contract has no conditional display, so v5 leaves barrier

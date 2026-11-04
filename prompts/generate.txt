@@ -41,12 +41,13 @@ that resolves the problem. When the advice says to contact a veterinary doctor o
 other expert, that contact is the main action; precautions such as keeping an
 animal apart are secondary.
 
-Two resolution types have a fixed two-question shape. Use exactly these
+Three resolution types have a fixed two-question shape. Use exactly these
 measurements and answer sets, adapted to the insight's words and language:
 - plan_created:
   q1 How much of the plan has the farmer done? All steps / Some steps / Not started.
-     Name the plan's first step so the farmer knows which plan is meant, but ask
-     about the whole plan, not that step alone.
+     Name ONLY the plan's first step, in a few words, so the farmer knows which
+     plan is meant ("the plan that starts with the soil test"). Never list the
+     plan's steps in the question.
   q2 Is the plan working so far? Yes / Too early to say / No (No carries
      advice_did_not_work).
 - wait_and_monitor:
@@ -55,6 +56,16 @@ measurements and answer sets, adapted to the insight's words and language:
      observed, not whether they kept watch; Yes means the problem is growing and
      carries crop_or_animal_damaged.
   q2 Do they need more help? Yes / No.
+- do_not_act:
+  q1 Did the farmer hold off as advised? Yes / No. Name what to hold off from in
+     the advice's own words, as one thing, even when it lists several ("hold off
+     on storing wet or cut tubers"). Never split the items into separate questions
+     or options.
+  q2 How is the crop or animal now? Better / Same / Worse.
+
+When the advice offers alternatives ("apply X or spray Y"), do not ask "did you do
+X or Y?". Ask whether the farmer treated the problem as advised, naming the
+problem or place, for example "Did you treat the whorl as advised?".
 Keep questions short and in everyday words a farmer would use; one clause where
 possible.
 

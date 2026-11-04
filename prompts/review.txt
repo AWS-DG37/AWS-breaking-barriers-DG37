@@ -28,6 +28,14 @@ or unusable:
   steps / Some steps / Not started) and whether the plan is working so far;
 - a wait_and_monitor survey whose first question asks whether the farmer kept watch
   instead of whether they saw the sign (Yes / No / Did not check);
+- a plan question that lists the plan's steps instead of naming only the first;
+- a do_not_act survey that splits the things to avoid into separate questions or
+  options instead of one "Did you hold off as advised?" (Yes / No);
+- an adoption question that asks "did you do X or Y?" for alternative treatments.
+These required shapes are NOT defects: a do_not_act question that names several
+things to avoid as one hold-off; "Did you treat ... as advised?" for alternative
+treatments; a wait_and_monitor "Yes, I saw it" answer coded crop_or_animal_damaged,
+because seeing the sign means the problem is growing and needs follow-up.
 - more than four options in a question;
 - a question that only makes sense after a particular answer to another question;
 - a follow-up code that does not match its answer: could_not_reach_expert on
