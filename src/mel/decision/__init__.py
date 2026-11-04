@@ -12,6 +12,7 @@ from mel.decision.model import Decision, SendWindow
 from mel.decision.rules import (
     CropAlreadyHarvested,
     DecisionEngine,
+    InvalidVerification,
     JunkInsight,
     NoSurveyResolution,
     VerificationNotNeeded,
@@ -54,6 +55,9 @@ def build_engine(
                 by_resolution["needs_more_context"]["asks"],
             ),
             VerificationNotNeeded(),
+            InvalidVerification(
+                frozenset(rules["send_window_days"]) - {"none"},
+            ),
             WindowAfterSeason(),
             CropAlreadyHarvested(calendar),
         ],

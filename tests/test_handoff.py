@@ -10,7 +10,7 @@ import json
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import NAMESPACE_URL, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from mel.clock import IST
 from mel.handoff import handoff
@@ -643,6 +643,33 @@ class TimestampAndIdTests(unittest.TestCase):
                     result["farmerchat_flow"]["campaign_id"],
                     expected["farmerchat_flow"]["campaign_id"],
                 )
+
+    # Complement to the expected-failure pack-literal tests above: the schema only
+    # requires flow_id/campaign_id to be valid UUIDs, so assert that contract directly
+    # (always passes with the current uuid5 derivation). Determinism and uniqueness are
+    # pinned by the deterministic/differs tests elsewhere in this class.
+    def test_flow_id_is_a_valid_uuid_for_every_scenario(self):
+        for scenario in (MUSTARD, WHEAT_IRR, POTATO, COW, WHEAT_PLAN):
+            with self.subTest(scenario=scenario[0]["insight_id"]):
+                insight, survey, _ = scenario
+                result = handoff(survey, insight, RULES, _scenario_now(scenario))
+                # UUID() raises if the value is not a well-formed UUID.
+                self.assertEqual(
+                    str(UUID(result["farmerchat_flow"]["flow_id"])),
+                    result["farmerchat_flow"]["flow_id"],
+                )
+
+    def test_campaign_id_is_a_valid_uuid_and_shared_across_scenarios(self):
+        campaign_ids = set()
+        for scenario in (MUSTARD, WHEAT_IRR, POTATO, COW, WHEAT_PLAN):
+            with self.subTest(scenario=scenario[0]["insight_id"]):
+                insight, survey, _ = scenario
+                result = handoff(survey, insight, RULES, _scenario_now(scenario))
+                campaign_id = result["farmerchat_flow"]["campaign_id"]
+                self.assertEqual(str(UUID(campaign_id)), campaign_id)
+                campaign_ids.add(campaign_id)
+        # One campaign_name -> one campaign_id across every survey.
+        self.assertEqual(len(campaign_ids), 1)
 
     # flow_key -------------------------------------------------------------
 
