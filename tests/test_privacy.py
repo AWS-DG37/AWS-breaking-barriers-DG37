@@ -43,6 +43,9 @@ def rows():
     return [source[key] for key in manifest["dev_ids"]]
 
 
+N = sum(row["expected"]["survey"] for row in rows())
+
+
 def verdict(flag=False, quote=None):
     return Review(
         relevance_score=0,
@@ -84,12 +87,12 @@ def test_controls_cover_dev_surveys_languages_traps_and_personal_questions():
     original = copy.deepcopy(source)
     cases = privacy.controls(source)
     surveyed = [row for row in source if row["expected"]["survey"]]
-    assert len(surveyed) == 47
-    assert len(cases) == 188
+    assert len(surveyed) == N
+    assert len(cases) == 4 * N
     assert Counter(case.golden_id for case in cases) == {row["golden_id"]: 4 for row in surveyed}
     assert Counter(case.control for case in cases) == dict.fromkeys(
         ("clean_en", "pii_en", "clean_hi", "pii_hi"),
-        47,
+        N,
     )
     by_id = {row["golden_id"]: row for row in source}
     for case in cases:
@@ -131,7 +134,7 @@ def test_controls_cover_dev_surveys_languages_traps_and_personal_questions():
     for language, column in (("en", 0), ("hi", 1)):
         injected = [c for c in cases if c.control == f"pii_{language}"]
         assert [c.survey["items"][1]["prompt"] for c in injected] == [
-            PERSONAL[i % 8][column] for i in range(47)
+            PERSONAL[i % 8][column] for i in range(N)
         ]
     hindi = [json.dumps(c.survey, ensure_ascii=False) for c in cases if c.control == "clean_hi"]
     assert all(any(trap in survey for survey in hindi) for trap in TRAPS)
@@ -145,16 +148,16 @@ def test_oracle_passes_with_counts_and_provenance():
     assert report["mode"] == "privacy_calibration" and report["part"] == "dev"
     assert report["passed"] is True
     assert report["gate"]["build_narrow_check"] is False
-    assert report["controls"] == 188 and report["dev_survey_rows"] == 47
+    assert report["controls"] == 4 * N and report["dev_survey_rows"] == N
     assert report["failed_calls"] == 0
     assert report["disagreements"] == report["failures"] == []
     for key in ("false_negatives", "false_positives"):
-        assert report[key]["all"] == {"kind": "assessed", "numerator": 0, "denominator": 94}
+        assert report[key]["all"] == {"kind": "assessed", "numerator": 0, "denominator": 2 * N}
         for language in ("en", "hi"):
             assert report[key][language] == {
                 "kind": "assessed",
                 "numerator": 0,
-                "denominator": 47,
+                "denominator": N,
             }
     assert report["split_sha256"] == hashlib.sha256(SPLIT.read_bytes()).hexdigest()
     assert report["review_model"] == "test.review"
@@ -353,4 +356,4 @@ def test_committed_dev_report_matches_current_prompt_split_and_scorer():
     current = privacy._provenance(SPLIT, PROMPT, report["review_model"])
     assert {key: report[key] for key in current} == current
     assert report["passed"] and report["failed_calls"] == 0
-    assert report["controls"] == 4 * report["dev_survey_rows"] == 188
+    assert report["controls"] == 4 * report["dev_survey_rows"] == 4 * N

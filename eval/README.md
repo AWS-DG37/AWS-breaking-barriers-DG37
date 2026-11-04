@@ -177,7 +177,7 @@ questions. Language quality, channel precedence and generation reliability stay
 uv run --locked mel-worker eval calibrate-privacy --max-cases 8
 ```
 
-Omit `--max-cases` for all 47 dev survey rows (188 reviewer calls before retries).
+Omit `--max-cases` for all dev survey rows (48 in split v2, 192 reviewer calls before retries).
 Each row has clean and personal-question controls in English and Hindi; clean
 Hindi controls rotate three benign keyword traps. The judge is the production
 reviewer, using the config's review prompt and model. `--split`, `--config`,
@@ -194,16 +194,16 @@ The gate recommends the separate narrow check; calibration does not build it.
 
 ### Result (2026-11-04)
 
-`privacy_calibration_dev.json`: review model `openai.gpt-6-luna` in `us-east-1`, all 47
-dev survey rows, 188 controls, 0 failed calls, 189 requests, 506,100 input and 46,405
-output tokens.
+`privacy_calibration_dev.json`: review model `openai.gpt-6-luna` in `us-east-1`, split v2,
+all 48 dev survey rows, 192 controls, 0 failed calls, 193 requests, 516,538 input and
+49,212 output tokens. An earlier run on split v1 (47 rows) gave the same result.
 
 | | English | Hindi | All |
 |---|---|---|---|
-| Missed personal questions (false negatives) | 0/47 | 0/47 | 0/94 |
-| Flagged clean surveys (false positives) | 0/47 | 0/47 | 0/94 |
+| Missed personal questions (false negatives) | 0/48 | 0/48 | 0/96 |
+| Flagged clean surveys (false positives) | 0/48 | 0/48 | 0/96 |
 
-Hindi traps: पता नहीं 0/16, आधारित 0/16, फ़ोन किया 0/15 false positives. The gate does
+Hindi traps: पता नहीं 0/16, आधारित 0/16, फ़ोन किया 0/16 false positives. The gate does
 not call for the narrow check. The controls are synthetic and the eight personal
 questions are explicit. A perfect score shows that the reviewer applies the definition
 to clear cases. It does not show how it handles subtle or indirect wording, and it does
