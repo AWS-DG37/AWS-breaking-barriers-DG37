@@ -1,9 +1,13 @@
 import {budgetInput, costSummary, money} from './costs.mjs';
-// Generate: pick insights, see what the rules will do, run the agent, inspect results.
-// Routes: #generate, #generate/job/<job id>, #generate/run/<run id>[/<insight id>].
-import {el} from './dom.mjs';
-import {api} from './api.mjs';
+import {el, skeleton} from './dom.mjs';
+import {requestScope} from './api.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
+import {insightJourney} from './journey.mjs';
+// Generate: pick insights, see what the rules will do, run the agent, inspect results.
+// Generate and the viewing-only Runs section share job, run and result screens.
+// Routes: #<generate|runs>[/job/<id>|/run/<id>[/<insight id>]].
+const requests=requestScope(), estimates=requestScope(), details=requestScope();
+const api=(path,options)=>requests.api(path,options);
 
 export const RULES = {
   R1:'Junk or invalid insight', R2:'Critical: needs a human call', R3:'Nothing to verify',
@@ -13,11 +17,12 @@ export const RULES = {
 const STATUS = {accepted:'Accepted', skipped:'Skipped by rules', rejected:'Rejected by reviewer', failed:'Failed'};
 const FILTERS = [['crop','Crop'],['concern','Concern'],['resolution_type','Resolution'],['quality_flag','Quality']];
 const PAGE = 50;
+const facetCache=new Map();
 
 const view = {
-  root:null, request:0, poll:null, datasets:[], configs:[], activeConfig:null, facets:null,
+  root:null, section:'generate', request:0, poll:null, datasets:[], configs:[], activeConfig:null, facets:null,
   form:{dataset:null, config:'', selection:{limit:25}},
-  run:{id:null, filter:null, rows:[], insight:null},
+  run:{id:null, filter:null, rows:[], insight:null, hasMore:false},
 };
 
 const words = value => String(value ?? '').replaceAll('_',' ');
@@ -37,20 +42,49 @@ export function describeSelection(selection) {
   return s.limit?`${scope} · first ${number(s.limit)}`:scope;
 }
 
-export function showGenerate(root, hash) {
+export function showGenerate(root, hash) { return showScreen(root,hash,'generate'); }
+export function showRuns(root, hash) { return showScreen(root,hash,'runs'); }
+
+function showScreen(root, hash, section) {
   view.root=root;
-  clearTimeout(view.poll);
+  view.section=section;
   const [, page, id, insight]=hash.replace(/^#/,'').split('/');
+  if (page==='run' && id && !requests.signal.aborted && view.run.id===id && root.querySelector('.gen-run')) {
+    showDetail(root.querySelector('.gen-detail'),id,insight?decodeURIComponent(insight):null);
+    root.querySelectorAll('tr[aria-selected]').forEach(row=>row.setAttribute('aria-selected',String(row.dataset.insight===view.run.insight)));
+    return;
+  }
+  leaveGenerate(); requests.renew();
   if (page==='run' && id) return renderRun(id, insight?decodeURIComponent(insight):null);
   if (page==='job' && id) return followJob(id);
-  return renderHome();
+  return section==='runs'?renderRuns():renderHome();
+}
+
+// Viewing saved runs needs no generation configuration, datasets or estimates.
+async function renderRuns() {
+  const ticket=++view.request;
+  view.root.replaceChildren(skeleton('Loading runs…'));
+  try {
+    const [runs,jobs]=await Promise.all([api('/runs'),api('/jobs')]);
+    if (ticket!==view.request) return;
+    const waiting=jobs.jobs.filter(job=>job.kind==='batch' && job.status==='queued');
+    view.root.replaceChildren(
+      el('div',{class:'heading'},el('div',{},el('h1',{},'Runs'),
+        el('p',{class:'muted'},'Browse saved runs, inspect outcomes and preview surveys.')),
+        el('button',{type:'button',class:'secondary',onClick:()=>showRuns(view.root,'#runs')},'Refresh runs')),
+      recent(runs.runs,waiting,'runs'));
+  } catch(error) {
+    if (ticket===view.request) view.root.replaceChildren(message(`Cannot load runs. ${error.message}`,true),
+      el('button',{type:'button',class:'secondary',onClick:()=>showRuns(view.root,'#runs')},'Retry'));
+  }
 }
 
 // Home: the new-run panel and recent runs.
 
 async function renderHome() {
+  requests.renew(); estimates.cancel(); details.cancel();
   const ticket=++view.request;
-  view.root.replaceChildren(el('p',{class:'empty-note'},'Loading insights and runs…'));
+  view.root.replaceChildren(skeleton('Loading insights and runs…'));
   try {
     const [datasets,configs,runs,jobs]=await Promise.all([api('/datasets'),api('/configs'),api('/runs'),api('/jobs')]);
     if (ticket!==view.request) return;
@@ -60,6 +94,7 @@ async function renderHome() {
     if (!view.datasets.some(d=>d.dataset_id===view.form.dataset)) view.form.dataset=view.datasets[0]?.dataset_id || null;
     const waiting=jobs.jobs.filter(j=>j.kind==='batch' && j.status==='queued');
     const [panel,plan]=await composer();
+    if (ticket!==view.request) return;
     view.root.replaceChildren(el('div',{class:'gen-home'},panel,el('div',{class:'gen-side'},plan,recent(runs.runs,waiting))));
   } catch(error) {
     if (ticket===view.request) view.root.replaceChildren(message(`Cannot load the Generate page. ${error.message}`,true));
@@ -80,12 +115,15 @@ async function composer() {
       el('p',{},'The participant pack has 6,999 synthetic insights from farmers in Bihar.'),load));
     return [panel,null];
   }
-  view.facets=await api(`/datasets/${view.form.dataset}/facets`);
+  const datasetId=view.form.dataset;
+  view.facets=facetCache.get(datasetId) || await api(`/datasets/${datasetId}/facets`);
+  facetCache.set(datasetId,view.facets);
   const f=view.form, s=f.selection;
   const summary=el('div',{class:'gen-estimate',role:'status','aria-live':'polite'});
   const submit=el('button',{class:'primary wide',type:'button',onClick:()=>start(submit,summary)},'Run');
-  const changed=debounce(()=>estimate(summary,submit),350);
-  const set=(key,value)=>{ if (value===''||value===null) delete s[key]; else s[key]=value; changed(); };
+  const pageSignal=requests.signal;
+  const changed=debounce(()=>{if (!pageSignal.aborted) estimate(summary,submit);},350);
+  const set=(key,value)=>{ if (value===''||value===null) delete s[key]; else s[key]=value; estimates.cancel(); submit.disabled=true; delete submit.dataset.selected; changed(); };
 
   const datasetPicker=el('select',{'aria-label':'Insight dataset',onChange:event=>{f.dataset=event.target.value;f.selection={limit:s.limit};renderHome();}},
     view.datasets.map(d=>el('option',{value:d.dataset_id,selected:d.dataset_id===f.dataset},`${d.name} · ${number(d.row_count)} insights`)));
@@ -97,7 +135,7 @@ async function composer() {
     el('label',{},'From',el('input',{type:'date',min:range.from,max:range.to,value:s.created_from || '',onChange:event=>set('created_from',event.target.value)})),
     el('label',{},'To',el('input',{type:'date',min:range.from,max:range.to,value:s.created_to || '',onChange:event=>set('created_to',event.target.value)})));
   const limit=el('label',{},'How many',el('input',{type:'number',min:1,step:1,placeholder:'All matching',value:s.limit ?? '',onInput:event=>set('limit',event.target.value?Number(event.target.value):null)}));
-  const configPicker=el('select',{'aria-label':'Agent configuration',onChange:event=>{f.config=event.target.value;changed();}},
+  const configPicker=el('select',{'aria-label':'Agent configuration',onChange:event=>{f.config=event.target.value;estimates.cancel();submit.disabled=true;delete submit.dataset.selected;changed();}},
     el('option',{value:'',selected:!f.config},'Active version'),
     // Saved versions are the runnable ones; test drafts stay in Configure.
     view.configs.filter(c=>['saved','active'].includes(c.status)).map(c=>el('option',{value:c.config_id,selected:c.config_id===f.config},configLabel(c))));
@@ -112,7 +150,7 @@ async function composer() {
     step('4','Spending limit',budget,el('p',{class:'small muted'},'Stops before the next request would exceed the limit. Each request reserves its full context bound until usage returns.')));
   panel.append(form);
   const plan=el('section',{class:'gen-plan','aria-labelledby':'plan-title'},el('h2',{id:'plan-title'},'Before you run'),summary,submit);
-  estimate(summary,submit);
+  queueMicrotask(()=>{if (!requests.signal.aborted) estimate(summary,submit);});
   return [panel,plan];
 }
 
@@ -128,16 +166,20 @@ function batchBody() {
 }
 
 async function estimate(summary,submit) {
-  const ticket=++view.request;
-  summary.replaceChildren(el('p',{class:'small muted'},'Checking the rules…'));
+  estimates.renew();
+  const signal=estimates.signal;
+  submit.disabled=true;
+  delete submit.dataset.selected;
+  summary.replaceChildren(skeleton('Checking the rules…'));
   try {
     const s=view.form.selection;
     const query=new URLSearchParams(Object.entries(s).filter(([,v])=>v!==undefined));
     const [count,plan]=await Promise.all([
-      api(`/datasets/${view.form.dataset}/count?${query}`),
-      api('/jobs/batch/estimate',{method:'POST',body:JSON.stringify(batchBody())}),
+      estimates.api(`/datasets/${view.form.dataset}/count?${query}`),
+      estimates.api('/jobs/batch/estimate',{method:'POST',body:JSON.stringify(batchBody())}),
     ]);
-    if (ticket!==view.request) return;
+    if (signal.aborted) return;
+    submit.disabled=false;
     const skipped=Object.entries(plan.skipped);
     const skippedTotal=skipped.reduce((sum,[,n])=>sum+n,0);
     summary.replaceChildren(...[
@@ -154,7 +196,7 @@ async function estimate(summary,submit) {
     submit.dataset.selected=plan.selected;
     submit.dataset.calls=plan.model_calls.max;
   } catch(error) {
-    if (ticket===view.request) summary.replaceChildren(message(error.message,true));
+    if (!signal.aborted) summary.replaceChildren(message(error.message,true));
   }
 }
 
@@ -166,26 +208,27 @@ async function start(submit,summary) {
   submit.disabled=true; submit.textContent='Starting…';
   try {
     const job=await api('/jobs/batch',{method:'POST',body:JSON.stringify(batchBody())});
-    location.hash=`#generate/job/${job.job_id}`;
+    if (!requests.signal.aborted) location.hash=`#generate/job/${job.job_id}`;
   } catch(error) {
     submit.disabled=false; submit.textContent='Run';
     summary.append(message(`The run did not start. ${error.message}`,true));
   }
 }
 
-function recent(runs,waiting) {
-  const list=el('section',{class:'gen-recent','aria-labelledby':'recent-title'},el('h2',{id:'recent-title'},'Recent runs'));
+function recent(runs,waiting,section='generate') {
+  const titleId=`${section}-recent-title`;
+  const list=el('section',{class:'gen-recent','aria-labelledby':titleId},el('h2',{id:titleId},'Recent runs'));
   if (!runs.length && !waiting.length) {
     list.append(el('p',{class:'muted'},'Runs appear here. Each one keeps its insights, rulings, questions and every agent step.'));
     return list;
   }
   for (const job of waiting) {
-    list.append(el('a',{class:'gen-run-link',href:`#generate/job/${job.job_id}`},
+    list.append(el('a',{class:'gen-run-link',href:`#${section}/job/${job.job_id}`},
       el('strong',{},describeSelection(job.spec.selection)),el('span',{class:'small muted'},`Waiting to start · ${when(job.created_at)}`)));
   }
   for (const run of runs) {
     const counts=Object.entries(run.counts).map(([k,n])=>`${number(n)} ${k}`).join(' · ') || 'No results yet';
-    list.append(el('a',{class:'gen-run-link',href:`#generate/run/${run.run_id}`},
+    list.append(el('a',{class:'gen-run-link',href:`#${section}/run/${run.run_id}`},
       el('span',{class:'gen-run-title'},el('strong',{},describeSelection(run.selection?.selection || {limit:run.selection?.limit})),el('span',{class:`badge status-${run.status}`},words(run.status))),
       el('span',{class:'small muted'},`${counts} · ${when(run.created_at)}`)));
   }
@@ -194,18 +237,19 @@ function recent(runs,waiting) {
 
 // A queued job becomes a run once a runner claims it.
 
-async function followJob(jobId) {
+async function followJob(jobId, refresh=false) {
   const ticket=++view.request;
+  if (!refresh) view.root.replaceChildren(skeleton('Loading run status…'));
   try {
     const job=await api(`/jobs/${jobId}`);
     if (ticket!==view.request) return;
-    if (job.runs.length) { location.replace(`#generate/run/${job.runs[0].run_id}`); return; }
+    if (job.runs.length) { location.replace(`#${view.section}/run/${job.runs[0].run_id}`); return; }
     const waiting=job.status==='failed'?
       message(`The run failed before it started. ${job.error || ''}`,true):
       el('div',{class:'gen-waiting'},el('div',{class:'spinner','aria-hidden':true}),
         el('div',{},el('h2',{},'Starting the run'),el('p',{class:'muted'},'Hosted runs start a worker task, which takes about a minute. Locally, a `mel-worker jobs` runner picks the job up.')));
-    view.root.replaceChildren(el('a',{href:'#generate',class:'back'},'← All runs'),waiting);
-    if (job.status!=='failed') view.poll=setTimeout(()=>followJob(jobId),2000);
+    view.root.replaceChildren(el('a',{href:`#${view.section}`,class:'back'},'← All runs'),waiting);
+    if (job.status!=='failed') view.poll=setTimeout(()=>followJob(jobId,true),2000);
   } catch(error) {
     if (ticket===view.request) view.root.replaceChildren(message(`Cannot read the job. ${error.message}`,true));
   }
@@ -215,8 +259,12 @@ async function followJob(jobId) {
 
 async function renderRun(runId,insightId) {
   const ticket=++view.request;
+  clearTimeout(view.poll);
   const fresh=view.run.id!==runId;
+  if (fresh || !view.root.querySelector('.gen-run')) view.root.replaceChildren(skeleton('Loading run and results…'));
   if (fresh) Object.assign(view.run,{id:runId,filter:null,rows:[],insight:null});
+  const previousInsight=view.run.insight;
+  view.run.insight=insightId;
   try {
     const status=view.run.filter?`&status=${view.run.filter}`:'';
     const [summary,page]=await Promise.all([
@@ -224,18 +272,19 @@ async function renderRun(runId,insightId) {
       api(`/runs/${runId}/results?limit=${Math.max(PAGE,view.run.rows.length)}${status}`),
     ]);
     if (ticket!==view.request) return;
+    view.run.hasMore=page.results.length>=Math.max(PAGE,view.run.rows.length);
     view.run.rows=page.results;
     const shell=view.root.querySelector('.gen-run')?.dataset.run===runId?view.root.querySelector('.gen-run'):null;
     const layout=shell || el('div',{class:'gen-run','data-run':runId},
-      el('a',{href:'#generate',class:'back'},'← All runs'),el('div',{class:'gen-run-head'}),
+      el('a',{href:`#${view.section}`,class:'back'},'← All runs'),el('div',{class:'gen-run-head'}),
       el('div',{class:'gen-run-body'},el('div',{class:'gen-results'}),el('aside',{class:'gen-detail'})));
     if (!shell) view.root.replaceChildren(layout);
     layout.querySelector('.gen-run-head').replaceChildren(...runHeader(summary));
     layout.querySelector('.gen-results').replaceChildren(resultsTable(summary,page.results));
-    if (insightId!==view.run.insight || !shell) showDetail(layout.querySelector('.gen-detail'),runId,insightId);
+    if (previousInsight!==view.run.insight || !shell) showDetail(layout.querySelector('.gen-detail'),runId,view.run.insight);
     if (['running','queued'].includes(summary.status)) view.poll=setTimeout(()=>renderRun(runId,view.run.insight),4000);
   } catch(error) {
-    if (ticket===view.request) view.root.replaceChildren(el('a',{href:'#generate',class:'back'},'← All runs'),message(`Cannot load the run. ${error.message}`,true));
+    if (ticket===view.request) view.root.replaceChildren(el('a',{href:`#${view.section}`,class:'back'},'← All runs'),message(`Cannot load the run. ${error.message}`,true));
   }
 }
 
@@ -272,30 +321,39 @@ function resultsTable(summary,rows) {
   if (!rows.length) return el('p',{class:'empty-note'},['running','queued'].includes(summary.status)?'Results appear as each insight finishes.':'No results match this filter.');
   const table=el('table',{class:'gen-table'},
     el('thead',{},el('tr',{},el('th',{},'Insight'),el('th',{},'Outcome'),el('th',{},'What happened'),el('th',{},'Time'))),
-    el('tbody',{},rows.map(row=>el('tr',{'aria-selected':row.insight_id===view.run.insight,tabindex:0,
-      onClick:()=>{location.hash=`#generate/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;},
-      onKeydown:event=>{if(event.key==='Enter') location.hash=`#generate/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;}},
+    el('tbody',{},rows.map(row=>el('tr',{'aria-selected':String(row.insight_id===view.run.insight),'data-insight':row.insight_id,tabindex:0,
+      onClick:()=>{location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;},
+      onKeydown:event=>{if(event.key==='Enter') location.hash=`#${view.section}/run/${view.run.id}/${encodeURIComponent(row.insight_id)}`;}},
       el('td',{},el('strong',{},row.insight_id),el('span',{class:'small muted'},` ${row.insight.crop || ''}`)),
       el('td',{},statusBadge(row.status)),
       el('td',{class:'gen-what'},outcomeText(row)),
       el('td',{class:'small muted'},row.elapsed_seconds?`${row.elapsed_seconds.toFixed(1)} s`:'')))));
-  const more=rows.length>=Math.max(PAGE,view.run.rows.length)?el('button',{type:'button',class:'secondary',onClick:async()=>{
+  const more=view.run.hasMore?el('button',{type:'button',class:'secondary',onClick:async()=>{
     more.disabled=true;
-    const status=view.run.filter?`&status=${view.run.filter}`:'';
-    const next=await api(`/runs/${view.run.id}/results?offset=${view.run.rows.length}&limit=${PAGE}${status}`);
-    view.run.rows=[...view.run.rows,...next.results];
-    table.replaceWith(resultsTable(summary,view.run.rows));
+    const ticket=view.request, runId=view.run.id, filter=view.run.filter;
+    try {
+      const status=filter?`&status=${filter}`:'';
+      const next=await api(`/runs/${runId}/results?offset=${view.run.rows.length}&limit=${PAGE}${status}`);
+      if (ticket!==view.request || runId!==view.run.id || filter!==view.run.filter) return;
+      view.run.hasMore=next.results.length===PAGE;
+      view.run.rows=[...view.run.rows,...next.results];
+      more.parentElement.replaceWith(resultsTable(summary,view.run.rows));
+    } catch(error) {
+      if (ticket===view.request) { more.disabled=false; more.textContent='Retry loading more'; }
+    }
   }},'Show more'):null;
   return el('div',{},el('div',{class:'table-scroll'},table),more);
 }
 
 async function showDetail(panel,runId,insightId) {
+  details.renew();
+  const signal=details.signal;
   view.run.insight=insightId;
   if (!insightId) { panel.replaceChildren(el('p',{class:'muted'},'Select an insight to see the agent’s steps and preview its survey.')); return; }
-  panel.replaceChildren(el('p',{class:'small muted'},'Loading…'));
+  panel.replaceChildren(skeleton('Loading insight…'));
   try {
-    const record=await api(`/runs/${runId}/results/${encodeURIComponent(insightId)}`);
-    if (view.run.insight!==insightId) return;
+    const record=await details.api(`/runs/${runId}/results/${encodeURIComponent(insightId)}`);
+    if (signal.aborted || view.run.id!==runId || view.run.insight!==insightId) return;
     const {insight,outcome}=record;
     const survey=outcome.survey || outcome.candidate_survey;
     const sections=[
@@ -303,7 +361,7 @@ async function showDetail(panel,runId,insightId) {
       el('p',{class:'small muted'},[insight.asset?.name,words(insight.concern),insight.conversation_language,when(insight.created_at)].filter(Boolean).join(' · ')),
       el('h3',{},'Farmer asked'),el('p',{},insight.query_summary || 'Not recorded'),
       el('h3',{},'Advice given'),el('p',{},insight.advice_summary || 'Not recorded'),
-      el('h3',{},'Agent steps'),steps(outcome.events || []),
+      insightJourney(outcome),
     ];
     if (survey?.items?.length) {
       const host=el('div',{class:'survey-player'});
@@ -313,32 +371,9 @@ async function showDetail(panel,runId,insightId) {
     sections.push(disclosure('Full insight',insight),disclosure('Full outcome',outcome));
     panel.replaceChildren(...sections);
   } catch(error) {
+    if (signal.aborted) return;
     panel.replaceChildren(message(`Cannot load this result. ${error.message}`,true));
   }
-}
-
-function stepSummary(event) {
-  const d=event.data || {};
-  if (d.rule) return `${d.rule} · ${RULES[d.rule] || ''}${d.explanation?` · ${d.explanation}`:''}`;
-  if ('valid' in d) return `${words(d.target)} schema ${d.valid?'valid':`invalid (${(d.errors || []).length} errors)`}`;
-  if (event.stage==='generate' && d.kind==='request') return 'Insight and context sent to the generator';
-  if (event.stage==='generate' && d.survey) return `${d.survey.items?.length || 0} questions drafted`;
-  if (event.stage==='review' && d.kind==='request') return 'Draft sent to the reviewer';
-  if (d.review) return `Reviewer: relevance ${d.review.relevance_score}${d.review.issues?.length?` · ${d.review.issues.join('; ')}`:''}`;
-  if (d.status) return `Ruling: ${words(d.status)}${d.reason?` · ${d.reason}`:''}`;
-  if (d.error_type) return `Failed: ${d.error_type}`;
-  if (d.insight) return 'Insight received';
-  if (d.context) return 'Farmer context resolved';
-  return '';
-}
-
-function steps(events) {
-  if (!events.length) return el('p',{class:'muted'},'No steps were recorded for this result.');
-  return el('ol',{class:'gen-steps'},events.map(event=>el('li',{},
-    el('details',{},el('summary',{},el('span',{class:`step-source source-${event.source}`},event.source),
-      el('strong',{},words(event.stage)),event.attempt?el('span',{class:'small muted'},` attempt ${event.attempt}`):null,
-      el('span',{class:'step-text'},stepSummary(event))),
-    el('pre',{},JSON.stringify(event.data,null,2))))));
 }
 
 function debounce(fn,ms) {
@@ -349,4 +384,5 @@ function debounce(fn,ms) {
 export function leaveGenerate() {
   clearTimeout(view.poll);
   view.request++;
+  requests.cancel(); estimates.cancel(); details.cancel();
 }

@@ -352,3 +352,35 @@ def test_the_rules_check_scores_a_version_against_the_golden_holdout():
         report = client.get(f"/api/configs/{key}/rules-check").json()
     assert report["cases"] > 100
     assert report["decision_accuracy"] == 1.0
+
+
+def test_schema_initialization_is_once_per_app_and_configs_share_a_connection():
+    store = Store()
+    store.list_configs = lambda: []
+    initialized = []
+    store.initialize = lambda: initialized.append(True)
+    with TestClient(create_app(store_factory=lambda _: store)) as client:
+        assert client.get("/api/configs").status_code == 200
+        assert store.closed == 1
+        assert client.get("/api/configs").status_code == 200
+        assert store.closed == 2
+    assert initialized == [True]
+
+
+def test_failed_schema_initialization_can_be_retried():
+    store = Store()
+    store.list_configs = lambda: []
+    attempts = []
+
+    def initialize():
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError("temporary failure")
+
+    store.initialize = initialize
+    with TestClient(create_app(store_factory=lambda _: store)) as client:
+        assert client.get("/api/configs").status_code == 503
+        assert client.get("/api/configs").status_code == 200
+        assert client.get("/api/configs").status_code == 200
+    assert len(attempts) == 2
+    assert store.closed == 3

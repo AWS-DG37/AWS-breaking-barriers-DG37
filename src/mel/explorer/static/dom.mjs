@@ -8,3 +8,10 @@ export function el(tag, attrs={}, ...children) {
   node.append(...children.flat().filter(c=>c !== null && c !== undefined).map(c=>c instanceof Node ? c : document.createTextNode(String(c))));
   return node;
 }
+
+export function skeleton(label='Loading…') {
+  return el('div',{class:'loading-skeleton',role:'status','aria-live':'polite'},
+    el('span',{class:'small muted'},label),
+    el('div',{'aria-hidden':'true',class:'skeleton-line skeleton-title'}),
+    ...Array.from({length:4},()=>el('div',{'aria-hidden':'true',class:'skeleton-line'})));
+}

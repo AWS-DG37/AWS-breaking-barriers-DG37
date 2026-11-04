@@ -2,6 +2,25 @@ export const displayValue = value => value === null || value === undefined ? 'No
 export const questionAssessments = (assessments, runId, insightId, itemId) => assessments.filter(a => a.scope === 'question' && a.run_id === runId && a.insight_id === insightId && a.item_id === itemId);
 export const eventsForStage = (events, stage) => events.filter(event => event.stage === stage);
 
+// Contiguous visits preserve the execution path, including revisions and early exits.
+// Keep stage-local event indices so the inspector can open the exact saved event.
+export function journeyVisits(events = []) {
+  const counts = new Map(), visits = [];
+  for (const event of events) {
+    const index = counts.get(event.stage) || 0;
+    counts.set(event.stage, index + 1);
+    const phase = event.stage === 'select' && event.data?.insight ? 'input' : event.stage;
+    let visit = visits.at(-1);
+    if (!visit || visit.phase !== phase || visit.attempt !== event.attempt) {
+      visit = {stage:event.stage, phase, attempt:event.attempt, events:[], eventIndices:[]};
+      visits.push(visit);
+    }
+    visit.events.push(event);
+    visit.eventIndices.push(index);
+  }
+  return visits;
+}
+
 // Value at a dotted path, e.g. read(definition, 'config.generation.model_id').
 export const read = (value, path) => path.split('.').reduce((node, key) => node?.[key], value);
 

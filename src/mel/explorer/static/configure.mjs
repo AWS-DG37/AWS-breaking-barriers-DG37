@@ -1,10 +1,13 @@
 import {budgetInput} from './costs.mjs';
+import {el, skeleton} from './dom.mjs';
+import {requestScope} from './api.mjs';
+import {changedPaths, lineDiff, read, write} from './domain.mjs';
 // Configure: view versions, edit a draft step by step, test it against its parent, save
 // it as a named (runnable) version, and make it active.
 // Routes: #configure, #configure/<config id>, #configure/<config id>/edit.
-import {el} from './dom.mjs';
-import {api} from './api.mjs';
-import {changedPaths, lineDiff, read, write} from './domain.mjs';
+const requests=requestScope();
+const api=(path,options)=>requests.api(path,options);
+export function leaveConfigure() { ++view.request; requests.cancel(); }
 
 const SEVERITIES = ['low','medium','high','critical'];
 const EFFORTS = ['low','medium','high'];
@@ -41,10 +44,12 @@ export function showConfigure(root, hash) {
 }
 
 async function render(id, editing) {
+  requests.renew();
   const ticket=++view.request;
+  view.root.replaceChildren(skeleton('Loading configuration…'));
   try {
     const [list,settings,catalog]=await Promise.all([
-      api('/configs'), view.settings || api('/config'), view.models.length?{models:view.models}:api('/models'),
+      api('/configs'), view.settings || api('/config'), !editing || view.models.length?{models:view.models}:api('/models'),
     ]);
     if (ticket!==view.request) return;
     view.versions=list.configs; view.active=list.active_config_id || settings.active_config_id;
@@ -161,7 +166,7 @@ function tests(id) {
 async function activate(record) {
   if (!confirm(`Make "${versionName(record)}" the active version? Generate will use it by default.`)) return;
   try { await api(`/configs/${record.config_id}/activate`,{method:'POST'}); render(record.config_id,false); }
-  catch(error) { view.root.querySelector('.cfg-main').prepend(message(error.message,true)); }
+  catch(error) { if(error.name!=='AbortError') view.root.querySelector('.cfg-main')?.prepend(message(error.message,true)); }
 }
 
 // A tested draft becomes a saved, runnable version.
@@ -169,7 +174,7 @@ async function saveDraft(record) {
   const name=window.prompt('Name this version. Saved versions can be picked in Generate and made active.',record.name || '');
   if (!name?.trim()) return;
   try { await api(`/configs/${record.config_id}/save`,{method:'POST',body:JSON.stringify({name:name.trim()})}); render(record.config_id,false); }
-  catch(error) { view.root.querySelector('.cfg-main').prepend(message(error.message,true)); }
+  catch(error) { if(error.name!=='AbortError') view.root.querySelector('.cfg-main')?.prepend(message(error.message,true)); }
 }
 
 // Draft editor.
@@ -328,7 +333,7 @@ function finish(parent,draft) {
   const testName=el('input',{maxlength:MAX_NAME,'aria-label':'Test name',placeholder:'What this draft tries'});
   const datasetPicker=el('select',{'aria-label':'Test insights'});
   const limit=el('input',{type:'number',min:1,max:50,step:1,value:10,'aria-label':'How many insights'});
-  api('/datasets').then(({datasets})=>datasetPicker.replaceChildren(...(datasets.length?datasets.map(d=>el('option',{value:d.dataset_id},`${d.name} · ${d.row_count.toLocaleString()}`)):[el('option',{value:''},'Load the participant pack in Generate first')])));
+  api('/datasets').then(({datasets})=>datasetPicker.replaceChildren(...(datasets.length?datasets.map(d=>el('option',{value:d.dataset_id},`${d.name} · ${d.row_count.toLocaleString()}`)):[el('option',{value:''},'Load the participant pack in Generate first')]))).catch(error=>{if (!requests.signal.aborted) feedback.append(message(error.message,true));});
   const budget=budgetInput('Budget per test candidate (USD)');
   const test=el('button',{type:'button',onClick:async()=>{
     feedback.replaceChildren();

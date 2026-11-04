@@ -9,6 +9,7 @@ import json
 import logging
 from decimal import Decimal
 from pathlib import Path
+from threading import Lock
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
@@ -100,28 +101,31 @@ FLOW = {
     "nodes": [
         {"id": key, "label": label}
         for key, label in [
-            ("select", "Select eligible insight"),
-            ("context", "Resolve source context"),
+            ("context", "Source context (optional)"),
+            ("select", "Eligibility and timing"),
             ("generate", "Generate survey"),
             ("schema", "Validate schema"),
             ("review", "Review survey"),
-            ("decision", "Accept, revise or reject"),
+            ("decision", "Accepted, skipped or rejected"),
             ("failure", "Execution failure"),
         ]
     ],
     "edges": [
         {"from": a, "to": b, "label": label}
         for a, b, label in [
-            ("select", "context", "eligible"),
-            ("context", "generate", "grounded input"),
+            ("context", "select", "when supplied"),
+            ("select", "generate", "eligible"),
             ("generate", "schema", "draft"),
             ("schema", "review", "valid"),
-            ("schema", "generate", "revise"),
-            ("review", "generate", "revise"),
+            ("schema", "generate", "invalid; revisions remain"),
+            ("schema", "decision", "invalid; revisions exhausted"),
+            ("review", "generate", "failed gates; revisions remain"),
             ("review", "decision", "accept or reject"),
             ("select", "decision", "skip"),
-            ("generate", "failure", "provider error"),
-            ("review", "failure", "provider error"),
+            ("select", "failure", "execution error"),
+            ("schema", "failure", "execution error"),
+            ("generate", "failure", "execution error"),
+            ("review", "failure", "execution or contract error"),
         ]
     ],
 }
@@ -239,11 +243,21 @@ def create_app(
     ):
         return database_call(lambda db: report(db, str(run_id), limit=limit, offset=offset))
 
+    schema_ready = False
+    schema_lock = Lock()
+
     def database():
+        nonlocal schema_ready
         db = None
         try:
             db = store_factory(settings)
-            db.initialize()
+            # Migrations take a PostgreSQL advisory lock. Running them on every
+            # request serialized the parallel calls made by each console screen.
+            if not schema_ready:
+                with schema_lock:
+                    if not schema_ready:
+                        db.initialize()
+                        schema_ready = True
             return db
         except Exception as error:
             if db is not None:
@@ -303,10 +317,9 @@ def create_app(
 
     @app.get("/api/configs")
     def configs():
-        return {
-            "configs": database_call(lambda db: db.list_configs()),
-            "active_config_id": database_call(lambda db: db.active_config_id()),
-        }
+        return database_call(
+            lambda db: {"configs": db.list_configs(), "active_config_id": db.active_config_id()}
+        )
 
     @app.get("/api/configs/{config_id}")
     def config_version(config_id: UUID):
