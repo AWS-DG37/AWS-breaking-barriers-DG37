@@ -10,3 +10,8 @@ docs/*.docx
 docs/participant-pack/spreadsheets
 docs/participant-pack/data/insights*
 docs/participant-pack/data/golden*
+
+*.env
+.env.*
+work
+deploy/*private*
