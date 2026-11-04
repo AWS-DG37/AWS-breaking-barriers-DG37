@@ -234,6 +234,15 @@ shared null-ID fallbacks can change both resolved roles.
   precedence and provenance, rather than silently overriding insight language.
 - Confirm the team's authority for tracked participant-pack distribution before
   any new publication. This proposal adds no copies or participant records.
+- How are `farmerchat_flow.campaign_id` and `flow_id` made? Our assumption: the
+  pack calls `farmerchat_flow` what FarmerChat "needs to register" the flow, so the
+  sender computes them. Both are UUID v5 values of the URL namespace and a name:
+  `campaign_name` from `rules.json` for the campaign, and `{org_id}/{survey_id}`
+  for the flow. They are deterministic, so re-sending a survey keeps its ID. The
+  pack's sample IDs are also UUID v5, but the pack does not publish its name or
+  namespace, so ours differ. To adopt Digital Green's recipe, change the three
+  constants at the top of `src/mel/handoff.py`. The two `expectedFailure` ID tests
+  in `tests/test_handoff.py` then pass.
 
 ## Implemented first slice and next boundary
 
