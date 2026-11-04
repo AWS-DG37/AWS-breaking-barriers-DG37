@@ -126,7 +126,8 @@ function summaryFor(step,def) {
   const c=def.config;
   const model=m=>`${m.model_id} · ${m.api} · reasoning ${m.reasoning_effort}${m.temperature!==null?` · temperature ${m.temperature}`:''} · ${m.max_tokens} tokens`;
   if (step==='decide') return el('div',{},
-    el('p',{},`Human call for ${c.decision.human_call_severities.join(', ')} severity · ${c.decision.window_policy==='golden_v1'?'Golden v1 send windows':'Participant pack send windows'}`),
+    el('p',{},`Human call for ${c.decision.human_call_severities.join(', ')} severity · ${c.decision.window_policy==='golden_v1'?'Timing inferred from golden examples':'Timing from participant pack’s written rules'}`),
+    el('p',{class:'small muted'},'The supplied golden examples and written rules disagree on timing. This version uses the selected interpretation to calculate send windows.'),
     el('details',{},el('summary',{},'Rules file'),el('pre',{},JSON.stringify(def.rules,null,2))));
   if (step==='generate') return el('div',{},el('p',{},model(c.generation)),promptView('Generation prompt',def.prompts.generate));
   if (step==='review') return el('div',{},el('p',{},`${model(c.review)} · accept at relevance ${c.graph.relevance_threshold}`),promptView('Review prompt',def.prompts.review));
@@ -136,15 +137,16 @@ function summaryFor(step,def) {
 const promptView=(label,text)=>el('details',{},el('summary',{},`${label} · ${text.split('\n').length} lines`),el('pre',{class:'cfg-prompt'},text));
 
 function rulesCheck(id) {
-  const box=el('section',{class:'cfg-check'},el('p',{class:'small muted'},'Checking the rules against the golden holdout…'));
+  const box=el('section',{class:'cfg-check'},el('p',{class:'small muted'},'Checking agreement with the golden examples…'));
   api(`/configs/${id}/rules-check`).then(report=>{
     const pct=value=>value===null?'n/a':`${Math.round(value*1000)/10}%`;
-    box.replaceChildren(...[el('h2',{},'Rules against the golden holdout'),
+    box.replaceChildren(...[el('h2',{},'Agreement with golden examples'),
       el('div',{class:'gen-split'},
         el('div',{class:'metric'},el('span',{},'Survey decision'),el('strong',{},pct(report.decision_accuracy))),
         el('div',{class:'metric'},el('span',{},'Deciding rule'),el('strong',{},pct(report.rule_accuracy))),
         el('div',{class:'metric'},el('span',{},'Exact send window'),el('strong',{},pct(report.window.exact_match)))),
       el('p',{class:'small muted'},`${report.cases} golden cases, decided by this version's rules alone. No model calls. ${report.mismatches.length?`${report.mismatches.length} mismatches listed below.`:''}`),
+      el('p',{class:'small muted'},'These scores measure agreement with the supplied examples. Following the pack’s written timing rules can reduce exact-window agreement because the sources conflict. The rules were developed using the golden cases, so this is a regression check, not an independent measure of performance on unseen cases.'),
       report.mismatches.length?el('details',{},el('summary',{},'Mismatches'),el('pre',{},JSON.stringify(report.mismatches,null,2))):null].filter(Boolean));
   }).catch(error=>box.replaceChildren(message(`Rules check unavailable. ${error.message}`,true)));
   return box;
@@ -247,7 +249,7 @@ function choiceField(label,path,choices,draft,set) {
 function decisionFields(draft,set) {
   const severities=new Set(read(draft,'config.decision.human_call_severities'));
   const golden=read(draft,'config.decision.golden_v1');
-  const days=el('table',{class:'cfg-days'},el('thead',{},el('tr',{},el('th',{},'Action window'),el('th',{},'Opens on day'),el('th',{},'Closes on day'))),
+  const days=el('table',{class:'cfg-days'},el('thead',{},el('tr',{},el('th',{},'Verification timing'),el('th',{},'Opens on day'),el('th',{},'Closes on day'))),
     el('tbody',{},WINDOW_DAYS.map(key=>el('tr',{},el('td',{},words(key)),...[0,1].map(i=>el('td',{},el('input',{type:'number',min:0,max:90,step:1,value:golden.days[key][i],
       'aria-label':`${words(key)} ${i?'closes':'opens'}`,
       onInput:event=>{ if (event.target.value==='') return; const pair=[...read(draft,`config.decision.golden_v1.days.${key}`)]; pair[i]=Number(event.target.value); set(`config.decision.golden_v1.days.${key}`,pair); }})))))));
@@ -260,8 +262,11 @@ function decisionFields(draft,set) {
         event.target.checked?severities.add(level):severities.delete(level);
         set('config.decision.human_call_severities',SEVERITIES.filter(s=>severities.has(s)));
       }}),level))),
-    choiceField('Send window policy','config.decision.window_policy',[['golden_v1','Golden v1 (matches the golden set)'],['pack','Participant pack written rules']],draft,set),
-    el('details',{},el('summary',{},'Golden v1 send windows'),
+    choiceField('Send window timing source','config.decision.window_policy',[['golden_v1','Timing inferred from golden examples'],['pack','Timing from participant pack’s written rules']],draft,set),
+    el('p',{class:'small muted'},'The supplied examples and written rules disagree on timing; precedence has not been confirmed. This choice changes how send windows are calculated for runs using this configuration. It does not select the input dataset or the scoring reference.'),
+    el('p',{class:'small muted'},'Golden timing is our interpretation of the example surveys, not a separate supplied policy. It uses the settings below and does not enforce the action window or a minimum two-day width. The pack’s written rules wait until the action window ends, require at least a two-day window and use the timing values in the rules file.'),
+    el('details',{},el('summary',{},'Settings for timing inferred from golden examples'),
+      el('p',{class:'small muted'},'Applies only when the golden timing source is selected. Day offsets count from the advice date; times are in India Standard Time.'),
       el('div',{class:'cfg-grid'},
         el('label',{},'Opens at',el('input',{type:'time',value:golden.opens,onInput:event=>set('config.decision.golden_v1.opens',event.target.value)})),
         el('label',{},'Closes at',el('input',{type:'time',value:golden.closes,onInput:event=>set('config.decision.golden_v1.closes',event.target.value)})),

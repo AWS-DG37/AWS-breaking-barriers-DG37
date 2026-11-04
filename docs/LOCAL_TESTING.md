@@ -1,8 +1,10 @@
 # Test the survey worker locally
 
 The local and Fargate paths use the same `mel-worker` graph. This is a batch
-worker, not an HTTP application server. Docker Compose starts PostgreSQL; it does
-not start a web UI or continuously running worker.
+worker plus a separate FastAPI console. `docker compose up` starts PostgreSQL and
+the console at <http://127.0.0.1:8080>, with live model execution disabled. It does
+not start a polling job runner. `docker compose up -d postgres` starts only the
+database. See [console usage](explorer.md) for recorded demos and live job setup.
 
 ## Install and test without AWS calls
 
@@ -27,21 +29,26 @@ uv run --locked mel-worker eval policy
 It prints a new JSON report path under `outputs/eval/`. See the
 [evaluation guide](../eval/README.md) for the dataset checks, separate legacy
 baseline, metric coverage and current disagreements. This is a repository-local
-evaluation path; golden data is deliberately excluded from the Fargate image.
+evaluation path: the full source and split manifest are not included in the
+image. The image includes `eval/golden_holdout.jsonl` for the console's rule and
+comparison checks; run `eval policy` from a checkout with all evaluation assets.
 
 ## Iterate on prompts with real Bedrock
 
-On **macdaddy-laptop**, the workshop credentials are in AWS profile
-`digital-green`:
+Use your authenticated workshop environment. With a named profile:
 
 ```bash
-export AWS_PROFILE=digital-green
+export AWS_PROFILE=workshop
 export MEL_AWS_REGION=us-east-1
 uv run --locked mel-worker check-model
 uv run --locked mel-worker preview
 ```
 
-`preview` defaults to the first three fixture records and writes a fresh directory
+If using exported temporary AWS access/secret/session credentials, unset
+`AWS_PROFILE` and `AWS_DEFAULT_PROFILE` and omit profile assignments in this guide.
+Check the selected account with `aws sts get-caller-identity`.
+
+`preview` defaults to the first 10 nonblank fixture records and writes a fresh directory
 under `outputs/local/`. Inspect `results.jsonl`, `summary.json`, `run.json` and
 `bundle.json`. Rejected drafts are evidence too; a zero process exit does not mean
 all surveys were accepted. This path calls Bedrock but needs no database or AWS
@@ -61,7 +68,7 @@ another machine, start that engine instead.
 ```bash
 colima start
 docker compose -p dg37-evals up -d --wait postgres
-AWS_PROFILE=digital-green MEL_AWS_REGION=us-east-1 MEL_DATABASE_SSLMODE=disable \
+AWS_PROFILE=workshop MEL_AWS_REGION=us-east-1 MEL_DATABASE_SSLMODE=disable \
   uv run --locked mel-worker run \
   --input tests/fixtures/smoke_insights.jsonl \
   --output outputs/local-db-results.jsonl

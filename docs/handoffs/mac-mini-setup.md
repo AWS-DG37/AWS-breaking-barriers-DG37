@@ -1,5 +1,10 @@
 # Set up the Digital Green Explorer on mac-mini
 
+Historical machine-specific handoff for the prototype. The branch, minimum commit,
+UI labels and `verify_explorer.py` checks below predate the current console. Use
+[console usage](../explorer.md) for current setup, features and verification limits.
+The remaining text preserves the original setup request and visual direction.
+
 You are running on my mac-mini. Set up the full Digital Green Pipeline Explorer so I can inspect an insight through the pipeline and try its survey in the phone. Execute the setup, not just a plan. This task works with any coding agent.
 
 Repository: https://github.com/atredd23/AWS-breaking-barriers-DG37.git

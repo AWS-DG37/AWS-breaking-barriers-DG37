@@ -1,6 +1,12 @@
 # Field Echo architecture proposal
 
-Status: proposal for Team 37 review, 3 November 2026. Work stays on
+Status: historical proposal for Team 37 review, 3 November 2026.
+This records the design at that date, not the current feature inventory. Use
+[README](../README.md) and [console usage](explorer.md) for current architecture,
+deployment and setup. Since this proposal, configuration versions, dataset imports,
+persistent jobs, Converse support, run costs and the hosted console have landed.
+
+Original branch scope: Work stays on
 `ben/evals-and-checks`; this does not authorize a merge into `main`.
 
 ## Problem
@@ -23,16 +29,16 @@ These commands exist today:
 
 ```bash
 # One or a few structured insights, local artifacts, real Bedrock calls.
-AWS_PROFILE=digital-green MEL_AWS_REGION=us-east-1 \
+AWS_PROFILE=workshop MEL_AWS_REGION=us-east-1 \
   uv run --locked mel-worker preview --input path/to/insights.jsonl
 
 # The same graph, with PostgreSQL checkpoints and a transactional handoff.
-AWS_PROFILE=digital-green MEL_AWS_REGION=us-east-1 MEL_DATABASE_SSLMODE=disable \
+AWS_PROFILE=workshop MEL_AWS_REGION=us-east-1 MEL_DATABASE_SSLMODE=disable \
   uv run --locked mel-worker run --input path/to/insights.jsonl \
   --output outputs/local-results.jsonl
 ```
 
-Both commands select the first three records by default; `--full` is explicit.
+Both commands now select the first 10 nonblank records by default; `--full` is explicit.
 See [local testing](LOCAL_TESTING.md) for setup and the verified Docker path.
 
 The first evaluation slice is implemented on this branch:
