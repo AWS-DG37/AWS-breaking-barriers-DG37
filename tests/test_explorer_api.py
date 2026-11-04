@@ -350,7 +350,7 @@ def test_the_rules_check_scores_a_version_against_the_golden_holdout():
     (key,) = versions(store, models=("test",))
     with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
         report = client.get(f"/api/configs/{key}/rules-check").json()
-    assert report["cases"] == 76  # The test half of the grouped split.
+    assert report["cases"] == 75  # The test half of the grouped split.
     assert report["decision_accuracy"] == 1.0
 
 

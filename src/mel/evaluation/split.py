@@ -20,7 +20,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
-VERSION = "golden-dev-test-v1"
+VERSION = "golden-dev-test-v2"
 SOURCE = "docs/participant-pack/data/golden_set.jsonl"
 SEED = 37
 TRIALS = 2000
@@ -29,6 +29,12 @@ TRIALS = 2000
 ORIGINAL_PROMPT_EXAMPLES = (
     "G-0131", "G-0032", "G-0019", "G-0003", "G-0045", "G-0004", "G-0018",
 )
+# Test rows whose results were used to tune a prompt or a judge. After assignment,
+# each one moves to dev with its whole group, so test stays untouched by tuning.
+TUNING_EXPOSURES = {
+    "G-0073": "its test-half judgment prompted relevance rubric v4 (the Hindi "
+               "'Do you need more help?' question)",
+}
 GROUPING = ("normalized_advice", "farmer_id", "conversation_id")
 STRATA = ("rule", "resolution_type", "conversation_language")
 
@@ -187,6 +193,12 @@ def read_rows(body: bytes) -> dict[str, dict]:
 def build(source_bytes: bytes, seed: int = SEED, trials: int = TRIALS) -> dict:
     rows = read_rows(source_bytes)
     sides = assign(rows, seed, trials)
+    exposures = []
+    for exposed, reason in sorted(TUNING_EXPOSURES.items()):
+        group = next(g for g in groups(rows) if exposed in g)
+        moved = [gid for gid in group if sides[gid] == "test"]
+        sides.update(dict.fromkeys(group, "dev"))
+        exposures.append({"golden_id": exposed, "moved_to_dev": moved, "reason": reason})
     examples, swaps = [], []
     for example in ORIGINAL_PROMPT_EXAMPLES:
         if sides[example] == "dev":
@@ -221,6 +233,7 @@ def build(source_bytes: bytes, seed: int = SEED, trials: int = TRIALS) -> dict:
         "prompt_example_ids": examples,
         "prompt_example_insight_ids": [rows[gid]["insight"]["insight_id"] for gid in examples],
         "prompt_example_swaps": swaps,
+        "tuning_exposures": exposures,
         "dev_ids": dev,
         "holdout_ids": test,
         "counts": {

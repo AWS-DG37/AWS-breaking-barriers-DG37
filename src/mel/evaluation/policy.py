@@ -175,6 +175,9 @@ def load_split(split_path: Path) -> tuple[dict, dict[str, dict], bytes]:
         source_rows[key]["insight"].get("insight_id") for key in examples
     }:
         raise ValueError("prompt insight IDs do not match source examples")
+    exposed = [x.get("golden_id") for x in split.get("tuning_exposures", [])]
+    if not set(exposed) <= set(dev):
+        raise ValueError("rows used for tuning must be in the dev half")
     method = split.get("method")
     if not isinstance(method, dict) or type(method.get("seed")) is not int:
         raise ValueError("split method must record its integer seed")

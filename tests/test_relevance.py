@@ -219,7 +219,9 @@ def test_the_committed_dev_calibration_matches_the_committed_rubric_and_split():
     relevance.require_calibration(
         report, split_path=SPLIT, rubric=RUBRIC, judge_model=report["judge_model"],
     )
-    assert report["dev_survey_rows"] == 47 and report["failed_calls"] == 0
+    manifest, _, _ = load_split(SPLIT)
+    assert report["dev_survey_rows"] == manifest["counts"]["dev"]["survey"]
+    assert report["failed_calls"] == 0
 
 
 def test_failed_judge_calls_still_count_their_usage(tmp_path, monkeypatch):

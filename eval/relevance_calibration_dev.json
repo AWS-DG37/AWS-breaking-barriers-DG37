@@ -1,32 +1,32 @@
 {
   "mode": "relevance_calibration",
   "part": "dev",
-  "split_version": "golden-dev-test-v1",
-  "split_sha256": "9d585b1ca9d70cc777baca824f7f307357e6623e397a2c5ae31778d81f83074f",
+  "split_version": "golden-dev-test-v2",
+  "split_sha256": "f575b9931ea4a5eef36d62582fd1f499c523b492bd489219d4bf79a051148270",
   "rubric_sha256": "c86dc0a829cf3750211dd3eb404413cb4bc46204dcfb21891df11bdaf4522d5c",
   "scorer_sha256": "6868a0ebb026ca4fcd63f5505edc121db5f5ae7da4c63da5c023b4070da9f143",
   "judge_model": "openai.gpt-6-luna",
   "threshold": 0.9,
   "passed": true,
-  "dev_rows": 74,
-  "dev_survey_rows": 47,
-  "controls": 424,
+  "dev_rows": 75,
+  "dev_survey_rows": 48,
+  "controls": 430,
   "failed_calls": 0,
   "agreement": {
     "advice_grounding": {
       "kind": "assessed",
-      "numerator": 188,
-      "denominator": 188
+      "numerator": 192,
+      "denominator": 192
     },
     "measures_adoption": {
       "kind": "assessed",
-      "numerator": 94,
-      "denominator": 94
+      "numerator": 96,
+      "denominator": 96
     },
     "measures_outcome": {
       "kind": "assessed",
-      "numerator": 94,
-      "denominator": 94
+      "numerator": 96,
+      "denominator": 96
     },
     "follow_up_routing": {
       "kind": "assessed",
@@ -35,35 +35,35 @@
     },
     "no_new_advice": {
       "kind": "assessed",
-      "numerator": 141,
-      "denominator": 141
+      "numerator": 144,
+      "denominator": 144
     },
     "no_personal_info": {
       "kind": "assessed",
-      "numerator": 94,
-      "denominator": 94
+      "numerator": 96,
+      "denominator": 96
     }
   },
   "by_control": {
     "generic_question": {
-      "agree": 141,
-      "checks": 141
+      "agree": 144,
+      "checks": 144
     },
     "help_question": {
-      "agree": 94,
-      "checks": 94
+      "agree": 96,
+      "checks": 96
     },
     "injected_new_advice": {
-      "agree": 47,
-      "checks": 47
+      "agree": 48,
+      "checks": 48
     },
     "injected_personal_info": {
-      "agree": 47,
-      "checks": 47
+      "agree": 48,
+      "checks": 48
     },
     "own_reference": {
-      "agree": 235,
-      "checks": 235
+      "agree": 240,
+      "checks": 240
     },
     "positive_routing": {
       "agree": 35,
@@ -82,8 +82,8 @@
       "checks": 26
     },
     "unrelated_reference": {
-      "agree": 47,
-      "checks": 47
+      "agree": 48,
+      "checks": 48
     },
     "wrong_code_routing": {
       "agree": 26,
@@ -97,13 +97,13 @@
       "criterion": "follow_up_routing",
       "expected": "met",
       "got": "not_met",
-      "rationale": "The “much worse” response is correctly routed as crop_or_animal_damaged, but the “2” response is not clearly a worse outcome (1 is defined as much worse and the scale is ambiguous), so this routing is not reliably limited to the specified trigger."
+      "rationale": "The “1” and “2” responses mean much worse/worse, but both carry crop_or_animal_damaged; the specified routing requires a “Worse” outcome, not a worse rating that is not explicitly identified as that answer."
     }
   ],
   "failures": [],
   "usage": {
-    "requests": 424,
-    "input_tokens": 727753,
-    "output_tokens": 103834
+    "requests": 430,
+    "input_tokens": 737795,
+    "output_tokens": 105422
   }
 }
