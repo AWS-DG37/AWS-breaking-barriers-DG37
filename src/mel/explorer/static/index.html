@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#007A27">
+  <title>FarmerChat MEL Console</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/survey-player.css">
+  <script type="module" src="/static/app.mjs"></script>
+</head>
+<body>
+  <a class="skip" href="#generate">Skip to content</a>
+  <header class="masthead">
+    <a class="brand" href="/" aria-label="FarmerChat explorer home"><span class="brand-parent">Digital Green</span><span>FarmerChat <small>MEL Console</small></span></a>
+    <nav class="tabs" aria-label="Console sections">
+      <a href="#generate" data-tab="generate">Generate</a>
+      <a href="#runs" data-tab="runs">Runs</a>
+      <a href="#compare" data-tab="compare">Compare</a>
+      <a href="#configure" data-tab="configure">Configure</a>
+    </nav>
+    <span class="masthead-status"><span id="health" class="health">Connecting to saved runs</span><button id="sign-out" class="quiet" hidden>Sign out</button></span>
+  </header>
+  <main id="generate-view" class="generate" tabindex="-1" hidden></main>
+  <main id="runs-view" class="generate" tabindex="-1" hidden></main>
+  <main id="configure-view" class="configure" tabindex="-1" hidden></main>
+  <div class="shell" id="compare-view" hidden>
+    <aside class="sidebar" aria-label="Comparisons">
+      <div class="sidebar-title"><h2>Comparisons</h2><button id="refresh" class="quiet">Refresh</button></div>
+      <p class="muted small">Saved evidence, ready to inspect.</p>
+      <div id="experiment-list" aria-live="polite"><p>Loading experiments…</p></div>
+      <button id="import" class="secondary wide">Import recorded run</button>
+      <button id="new" class="primary wide">New comparison</button>
+      <p class="small muted sidebar-note">Recorded runs replay saved outputs. Comparisons run saved versions and call their models. Neither sends surveys to farmers.</p>
+      <footer>Field Echo · Team 37<br>AWS Breaking Barriers 2026</footer>
+    </aside>
+    <main id="workspace" tabindex="-1">
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <section id="content" aria-label="Experiment workspace"><div class="empty"><h1>Follow an insight.<br>Understand every question.</h1><p>Choose a saved experiment to explore its decisions, survey questions and available evidence.</p></div></section>
+      <section id="composer" hidden aria-labelledby="form-title"></section>
+    </main>
+  </div>
+</body>
+</html>

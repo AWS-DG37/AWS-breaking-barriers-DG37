@@ -26,13 +26,32 @@ REGISTRY="${REPOSITORY%%/*}"
 IMAGE="${REPOSITORY}:${IMAGE_TAG}"
 aws ecr get-login-password --region "$AWS_REGION" |
   docker login --username AWS --password-stdin "$REGISTRY"
-docker build --platform linux/amd64 --tag "$IMAGE" .
+# Lambda accepts only single-platform image manifests, so skip provenance attestations.
+docker build --platform linux/amd64 --provenance=false --tag "$IMAGE" .
 docker push "$IMAGE"
 
 # S3 receives the SAM template. ECS images are stored in ECR, not packaged by sam build.
 sam deploy --region "$AWS_REGION" --stack-name "$STACK_NAME" \
   --template-file template.yaml --s3-bucket "$TEMPLATE_BUCKET" \
   --s3-prefix "$STACK_NAME" --force-upload --capabilities CAPABILITY_IAM \
+  --image-repository "$REPOSITORY" \
   --no-fail-on-empty-changeset \
   --parameter-overrides "ContainerImage=$IMAGE" "BedrockModelId=$BEDROCK_MODEL_ID" \
   "BedrockAllowedModelIds=$BEDROCK_ALLOWED_MODEL_IDS"
+
+# Publish the console UI, then refresh CloudFront. /api/* reaches the API through the
+# same distribution, so the UI needs no API address or sign-in settings.
+output() {
+  aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+    --query "Stacks[0].Outputs[?OutputKey==\`$1\`].OutputValue | [0]" --output text
+}
+# The image omits datasets; the console loads the participant pack from the data bucket.
+aws s3 cp docs/participant-pack/data/insights.jsonl \
+  "s3://$(output DataBucketName)/datasets/participant-pack/insights.jsonl"
+UI_BUCKET="$(output UiBucketName)"
+STATIC=src/mel/explorer/static
+aws s3 sync "$STATIC" "s3://$UI_BUCKET/static" --delete --exclude '*.test.mjs' --exclude index.html
+aws s3 cp "$STATIC/index.html" "s3://$UI_BUCKET/index.html"
+aws cloudfront create-invalidation --distribution-id "$(output UiDistributionId)" \
+  --paths '/*' --query 'Invalidation.Id' --output text
+echo "Console: $(output ConsoleUrl)"
