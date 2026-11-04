@@ -8,6 +8,7 @@ import fcntl
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -20,6 +21,48 @@ DIGEST = r"sha256:[0-9a-f]{64}"
 ROOT = Path("/opt/dg37")
 PROJECT = "dg37-explorer-cloud"
 AUTH_ENV = ("MEL_AUTH_DOMAIN", "MEL_AUTH_CLIENT_ID", "MEL_AUTH_ISSUER", "MEL_CONSOLE_URL")
+HOST_DEADLINE = None
+
+
+class ActivationInterrupted(RuntimeError):
+    pass
+
+
+def interrupt_activation(signum, frame):
+    raise ActivationInterrupted("activation interrupted")
+
+
+@dataclass
+class ActivationDeadline:
+    activate_by: float
+    recover_by: float
+    recovering: bool = False
+
+    @classmethod
+    def from_environment(cls):
+        now = time.time()
+        activation = float(os.environ.get("FIELDECHO_ACTIVATE_BY", now + 1320))
+        recovery = float(os.environ.get("FIELDECHO_RECOVER_BY", now + 1680))
+        if not 0 < recovery - activation <= 360 or recovery > now + 1680:
+            raise ValueError("invalid activation deadline")
+        offset = time.monotonic() - now
+        return cls(activation + offset, recovery + offset)
+
+    def remaining(self):
+        end = self.recover_by if self.recovering else self.activate_by
+        remaining = end - time.monotonic()
+        if remaining <= 0:
+            raise ActivationInterrupted("activation deadline exceeded")
+        return remaining
+
+    def arm(self):
+        signal.setitimer(signal.ITIMER_REAL, self.remaining())
+
+    def recover(self):
+        self.recovering = True
+
+    def resume(self):
+        self.recovering = False
 
 
 def require(pattern, value, name):
@@ -108,7 +151,12 @@ class HostState:
 def command(args, *, cwd=None, input=None):
     """Do not expose subprocess output: Docker/env/DB failures may contain credentials."""
     result = subprocess.run(
-        args, cwd=cwd, input=input, capture_output=True, text=True, timeout=1500
+        args,
+        cwd=cwd,
+        input=input,
+        capture_output=True,
+        text=True,
+        timeout=min(1500, HOST_DEADLINE.remaining()) if HOST_DEADLINE else 1500,
     )
     if result.returncode:
         raise RuntimeError("command failed: " + Path(args[0]).name)
@@ -320,6 +368,9 @@ class Host:
 
     def recover(self, state):
         if state.transition:
+            if HOST_DEADLINE:
+                HOST_DEADLINE.recover()
+                HOST_DEADLINE.arm()
             self.runtime.recover_cleanup(state.transition["candidate"])
             compose = state.transition["healthy_compose"]
             atomic_write(self.root / "compose.yaml", compose)
@@ -333,6 +384,8 @@ class Host:
 
     def activate(self, release):
         state = self.recover(self.read())
+        if HOST_DEADLINE:
+            HOST_DEADLINE.resume()
         if state.workflow != self.target.workflow:
             raise ValueError("workflow identity changed; operator migration required")
         candidate = dataclasses.asdict(release)
@@ -342,20 +395,31 @@ class Host:
             return self.report(state, "REFUSED_STALE")
         if candidate == state.deployed:
             self.runtime.smoke(candidate)
-            return self.report(state, "ALREADY_DEPLOYED")
+            result = self.report(state, "ALREADY_DEPLOYED")
+            self.publish_status(release.sha)
+            return result
         state.highest_sequence = release.sequence
         state.highest_release = candidate
         self.save(state)
         switched = False
         try:
+            if HOST_DEADLINE:
+                HOST_DEADLINE.arm()
             self.runtime.preflight(candidate)
             healthy = self.runtime.compose(state.deployed)
-            atomic_write(self.root / "compose.yaml", healthy)
+            next_compose = self.runtime.compose(candidate)
+            self.runtime.validate_compose(healthy, "healthy")
+            self.runtime.validate_compose(next_compose, "candidate")
+            original = self.root / "compose.original.yaml"
+            if not original.exists():
+                atomic_write(original, (self.root / "compose.yaml").read_text())
             state.transition = {"healthy_compose": healthy, "candidate": candidate}
             self.save(state)
             self.checkpoint("intent")
+            self.runtime.switch(healthy)
+            self.runtime.smoke(state.deployed)
+            atomic_write(self.root / "compose.yaml", healthy)
             self.runtime.rehearse_and_migrate(candidate, state.deployed)
-            next_compose = self.runtime.compose(candidate)
             switched = True
             self.runtime.switch(next_compose)
             self.checkpoint("switched")
@@ -370,14 +434,27 @@ class Host:
                 transition=None,
                 last_outcome="DEPLOYED",
             )
+            result = self.report(committed)
             self.save(committed)
-            return self.report(committed)
+            self.publish_status(release.sha)
+            return result
         except Exception:
             if state.transition:
                 self.recover(state)
             state.last_outcome = "FAILED_ROLLED_BACK" if switched else "FAILED_BEFORE_SWITCH"
             self.save(state)
             return self.report(state)
+        finally:
+            if HOST_DEADLINE:
+                signal.setitimer(signal.ITIMER_REAL, 0)
+
+    def publish_status(self, sha):
+        directory = self.root / "delivery"
+        directory.mkdir(mode=0o700, exist_ok=True)
+        temporary = directory / ".current"
+        temporary.unlink(missing_ok=True)
+        temporary.symlink_to("releases/" + sha)
+        os.replace(temporary, directory / "current")
 
     def report(self, state, outcome=None):
         return {
@@ -502,6 +579,30 @@ class DockerHost:
             != release["sha"]
         ):
             raise ValueError("artifact revision label mismatch")
+        app = self.current["services"]["explorer"]
+        if app.get("network_mode") != "host" or app.get("networks") or app.get("ports"):
+            raise ValueError("explorer must already use host networking without networks or ports")
+        probe = {
+            "services": {
+                "explorer": {
+                    "image": release["image"],
+                    "env_file": [str(self.root / "explorer.env")],
+                }
+            }
+        }
+        atomic_write(self.root / "compose.environment.json", json.dumps(probe))
+        file_env = json.loads(
+            self.compose_command("config", "--format", "json", file="compose.environment.json")
+        )["services"]["explorer"].get("environment", {})
+        effective = json.loads(self.compose_command("config", "--format", "json"))["services"][
+            "explorer"
+        ].get("environment", {})
+        if effective.get("MEL_DATABASE_HOST", "localhost") not in ("localhost", "127.0.0.1", "::1"):
+            raise ValueError("database must be reachable over host loopback")
+        if {k: v for k, v in effective.items() if k.startswith("MEL_")} != {
+            k: v for k, v in file_env.items() if k.startswith("MEL_")
+        }:
+            raise ValueError("Compose and explorer.env application settings differ")
         self.run_image(
             release["image"],
             "from mel.config import Settings; from pathlib import Path; "
@@ -515,6 +616,11 @@ class DockerHost:
 
     def compose(self, release):
         return json.dumps(render_compose(self.current, release["image"]), sort_keys=True)
+
+    def validate_compose(self, compose, name):
+        filename = "compose." + name + ".json"
+        atomic_write(self.root / filename, compose)
+        self.compose_command("config", "--quiet", file=filename)
 
     def switch(self, compose):
         atomic_write(self.root / "compose.activation.json", compose)
@@ -592,6 +698,8 @@ class DockerHost:
                     self.worker_present(),
                 )
                 return
+            except ActivationInterrupted:
+                raise
             except (RuntimeError, ValueError, KeyError):
                 time.sleep(2)
         raise ValueError("serving readiness failed")
@@ -697,6 +805,8 @@ finally: s.close()
 
 
 def main():
+    global HOST_DEADLINE
+    previous_signals = {}
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("deploy", "status", "host-activate", "host-status"))
     parser.add_argument("--target", type=Path, default=Path("deploy/target.json"))
@@ -712,6 +822,11 @@ def main():
             result = status(target)
         else:
             os.umask(0o077)
+            if args.action == "host-activate":
+                HOST_DEADLINE = ActivationDeadline.from_environment()
+                for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM):
+                    previous_signals[signum] = signal.signal(signum, interrupt_activation)
+                HOST_DEADLINE.arm()
             with (ROOT / "delivery.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 runtime = DockerHost(ROOT, target)
@@ -742,6 +857,12 @@ def main():
     except Exception:
         print("delivery failed; no credentials or subprocess output are emitted", file=sys.stderr)
         return 1
+    finally:
+        if HOST_DEADLINE:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            HOST_DEADLINE = None
+        for signum, handler in previous_signals.items():
+            signal.signal(signum, handler)
 
 
 if __name__ == "__main__":

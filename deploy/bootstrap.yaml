@@ -120,28 +120,33 @@ Resources:
                     #!/bin/bash
                     set -euo pipefail
                     umask 077
+                    export FIELDECHO_ACTIVATE_BY=$(( $(date +%s) + 1320 ))
+                    export FIELDECHO_RECOVER_BY=$(( FIELDECHO_ACTIVATE_BY + 360 ))
+                    bounded() {
+                      local remaining=$(( FIELDECHO_ACTIVATE_BY - $(date +%s) ))
+                      test "$remaining" -gt 0 || return 1
+                      timeout --signal=TERM --kill-after=10 "$remaining" "$@"
+                    }
                     cd /opt/dg37
                     exec 9>delivery-dispatch.lock
-                    flock -w 120 9
+                    bounded flock -w 120 9
                     if [ "$SSM_Action" = status ]; then
-                      test -f delivery/handler.py
-                      exec python3 -I delivery/handler.py host-status --target delivery/target.json
+                      test -f delivery/current/handler.py
+                      exec python3 -I delivery/current/handler.py host-status --target delivery/current/target.json
                     fi
                     registry='${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com'
                     image="$registry/dg37-explorer@$SSM_Digest"
-                    aws ecr get-login-password --region '${AWS::Region}' | docker login --username AWS --password-stdin "$registry" >/dev/null
-                    docker pull "$image" >/dev/null
-                    test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$SSM_Sha"
+                    bounded aws ecr get-login-password --region '${AWS::Region}' | bounded docker login --username AWS --password-stdin "$registry" >/dev/null
+                    bounded docker pull "$image" >/dev/null
+                    test "$(bounded docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$SSM_Sha"
                     release="delivery/releases/$SSM_Sha"
-                    mkdir -p "$release"
-                    container=$(docker create --entrypoint python "$image" --version)
-                    trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
-                    docker cp "$container:/app/deploy/fieldecho.py" "$release/handler.py"
-                    docker cp "$container:/app/deploy/target.json" "$release/target.json"
-                    docker rm "$container" >/dev/null
+                    bounded mkdir -p "$release"
+                    container=$(bounded docker create --entrypoint python "$image" --version)
+                    trap 'timeout --kill-after=2 10 docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+                    bounded docker cp "$container:/app/deploy/fieldecho.py" "$release/handler.py"
+                    bounded docker cp "$container:/app/deploy/target.json" "$release/target.json"
+                    bounded docker rm "$container" >/dev/null
                     trap - EXIT
-                    ln -sfn "releases/$SSM_Sha/handler.py" delivery/handler.py
-                    ln -sfn "releases/$SSM_Sha/target.json" delivery/target.json
                     exec python3 -I "$release/handler.py" host-activate --target "$release/target.json" --sha "$SSM_Sha" --digest "$SSM_Digest" --sequence "$SSM_Sequence"
 Outputs:
   DeployRoleArn:
