@@ -46,14 +46,12 @@ h1 span{color:var(--ink)}
 .overview{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:56px;align-items:center;padding:18px 0 28px}
 .overview h1{margin-top:0}.overview .intro{max-width:44ch}.overview .preview-context{font-size:14px;max-width:48ch;color:var(--muted);margin-top:28px;padding-top:20px;border-top:1px solid var(--line)}
 .phone-result{margin:0;max-width:380px;justify-self:center;width:100%;background:#f7f2e8;border-radius:16px;overflow:hidden}
-.phone-result img{display:block;width:100%;height:auto}.phone-result figcaption{font-size:12px;line-height:1.6;padding:0 20px 18px;color:var(--muted)}.phone-result figcaption span{display:block;margin-top:6px}
 @media(max-width:700px){.overview{grid-template-columns:1fr;gap:24px;padding:12px 0 28px}.overview .preview-context{margin-top:18px}.phone-result{max-width:360px}}
 </style>
 <link rel="stylesheet" href="explorer-preview/survey-player.css">
 <script type="module" src="explorer-preview/recorded-preview.mjs"></script>
 <style>
 .phone-result { padding:16px 10px; overflow:visible; }
-.phone-result .phone-field { width:100%; height:126px; }
 .recorded-picker { display:flex; flex-direction:column; gap:8px; font-size:13px; padding:0 8px; }
 .recorded-picker select { width:100%; font:inherit; padding:10px; background:white; border:1px solid #bdc9c0; border-radius:8px; }
 .recorded-context,.recorded-evidence { padding:0 8px; font-size:12px; line-height:1.6; overflow-wrap:anywhere; }

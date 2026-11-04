@@ -83,7 +83,7 @@ def check(url, screenshots=None):
                         "type": "survey-scale",
                         "prompt": "Pick a number",
                         "scale_min": 0,
-                        "scale_max": 100,
+                        "scale_max": 9,
                     },
                     {
                         "item_id": "confirm",
@@ -135,7 +135,7 @@ def check(url, screenshots=None):
                     return footer.bottom <= node.getBoundingClientRect().bottom;
                 }"""
             )
-            expect(phone.get_by_role("radio")).to_have_count(101)
+            expect(phone.get_by_role("radio")).to_have_count(10)
             assert phone.locator(".player-body").evaluate(
                 "node => node.scrollHeight > node.clientHeight"
             )
