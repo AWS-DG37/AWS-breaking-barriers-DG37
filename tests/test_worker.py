@@ -110,8 +110,9 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
     async def test_smoke_scenarios_run_offline(self):
         store = await self.run_smoke(full=True)
         self.assertEqual(store.saved, 10)
-        self.assertEqual(sum(r["status"] == "accepted" for r in store.records.values()), 6)
-        self.assertEqual(sum(r["status"] == "skipped" for r in store.records.values()), 4)
+        # R2 removed: the fixture's critical insight is surveyed, so 7 accepted and 3 skipped.
+        self.assertEqual(sum(r["status"] == "accepted" for r in store.records.values()), 7)
+        self.assertEqual(sum(r["status"] == "skipped" for r in store.records.values()), 3)
 
     async def test_default_and_resume_never_process_more_than_the_row_limit(self):
         with tempfile.TemporaryDirectory() as directory:

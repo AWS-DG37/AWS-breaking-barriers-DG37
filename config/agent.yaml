@@ -21,7 +21,7 @@ batch:
   input_cost_per_million: null  # Set actual model prices to enable estimated cost.
   output_cost_per_million: null
 decision:
-  human_call_severities: [critical]  # Golden R2: a person calls instead of a survey.
+  human_call_severities: [critical]  # Unused: rule R2 (human call instead of a survey) was removed. Kept so saved config versions still load.
   # pack: the participant pack's written "When to send" rules (rules.json).
   # golden_v1: the windows golden set v1 expects; they conflict with the written rules.
   window_policy: golden_v1

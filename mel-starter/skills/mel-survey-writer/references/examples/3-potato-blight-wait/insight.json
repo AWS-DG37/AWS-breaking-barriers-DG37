@@ -1,0 +1,31 @@
+{
+  "insight_id": "I-005330",
+  "farmer_id": "F-000245",
+  "conversation_id": "C-89017",
+  "created_at": "2027-01-06T08:05:00+05:30",
+  "conversation_language": "hi-IN",
+  "location": {
+    "country": "IN",
+    "state": "Bihar",
+    "district": "Nalanda"
+  },
+  "asset": {
+    "name": "potato",
+    "category": "crop",
+    "growth_stage": "vegetative"
+  },
+  "concern": "pest_disease",
+  "behavioral_intent": "symptom_reporting",
+  "decision_episode_type": "problem_resolution",
+  "severity": "medium",
+  "query_summary": "A few brown spots on lower potato leaves after three foggy days.",
+  "advice_summary": "This may be the start of late blight. Do not spray yet. Check the lower leaves every morning for 3 days. If the spots spread or white growth appears under the leaves, send a photo and ask again.",
+  "resolution_type": "wait_and_monitor",
+  "action_window_days": 3,
+  "verification": {
+    "needed": true,
+    "timing": "two_to_five_days",
+    "method": "repeat_photo"
+  },
+  "preferred_channel": "web"
+}

@@ -13,7 +13,6 @@ from mel.decision.rules import (
     CropAlreadyHarvested,
     DecisionEngine,
     JunkInsight,
-    NeedsHumanCall,
     NoSurveyResolution,
     VerificationNotNeeded,
     WindowAfterSeason,
@@ -42,7 +41,6 @@ def build_engine(
     return DecisionEngine(
         [
             JunkInsight(),
-            NeedsHumanCall(frozenset(policy.human_call_severities)),
             NoSurveyResolution(
                 "R3",
                 "generic_information",

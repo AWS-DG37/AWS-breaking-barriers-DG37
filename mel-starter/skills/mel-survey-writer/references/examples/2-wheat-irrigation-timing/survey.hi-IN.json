@@ -1,0 +1,59 @@
+{
+  "survey_id": "S-21044",
+  "farmer_id": "F-000187",
+  "source_insight_ids": [
+    "I-004871"
+  ],
+  "language": "hi-IN",
+  "send_window": {
+    "not_before": "2026-12-13T07:00:00+05:30",
+    "not_after": "2026-12-18T19:00:00+05:30"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-single-select",
+      "prompt": "क्या आपने गेहूँ में पहली सिंचाई कर दी?",
+      "options": [
+        {
+          "value": "on_time",
+          "label": "हाँ, समय पर"
+        },
+        {
+          "value": "late",
+          "label": "हाँ, पर देर से"
+        },
+        {
+          "value": "not_yet",
+          "label": "अभी नहीं"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "आपकी गेहूँ की फसल अब कैसी दिख रही है?",
+      "options": [
+        {
+          "value": "healthy",
+          "label": "हरी और स्वस्थ"
+        },
+        {
+          "value": "some_yellow",
+          "label": "कुछ पत्ते पीले"
+        },
+        {
+          "value": "many_yellow",
+          "label": "बहुत पत्ते पीले",
+          "follow_up": "crop_or_animal_damaged"
+        }
+      ]
+    }
+  ],
+  "rationale": "Irrigation timing advice with a 5-day window ending 13 December. Ask after the window closes, while the crop's response is still visible.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}

@@ -46,11 +46,6 @@ class DecisionRuleTests(unittest.TestCase):
         self.assertEqual((decision.rule, decision.reason_code), ("R1", "junk_insight"))
         self.assertIn("farmer_id", decision.explanation)
 
-    def test_critical_severity_is_r2_before_resolution_rules(self):
-        decision = self.decide(severity="critical", resolution_type="needs_more_context")
-        self.assertEqual((decision.rule, decision.survey), ("R2", False))
-        self.assertIsNone(decision.no_survey_code)
-
     def test_no_advice_resolutions_carry_the_pack_no_survey_code(self):
         info = self.decide(resolution_type="generic_information")
         waiting = self.decide(resolution_type="needs_more_context")
@@ -161,10 +156,22 @@ class WindowPolicyTests(unittest.TestCase):
 
 
 class GoldenDecisionTests(unittest.TestCase):
+    # R2 (critical severity -> human call, no survey) was removed on purpose, so the golden
+    # set's R2 cases are an intended difference. Every other case must still match exactly.
     @classmethod
     def setUpClass(cls):
-        engine = Bundle.load(Settings(bedrock_model_id="test-model")).decision_engine()
-        cls.report = score_decisions(engine, load_golden(GOLDEN)).to_dict()
+        cls.engine = Bundle.load(Settings(bedrock_model_id="test-model")).decision_engine()
+        cases = load_golden(GOLDEN)
+        cls.r2_cases = [c for c in cases if c.expected["rule"] == "R2"]
+        rest = [c for c in cases if c.expected["rule"] != "R2"]
+        cls.report = score_decisions(cls.engine, rest).to_dict()
+
+    def test_golden_r2_cases_go_through_the_normal_rules(self):
+        self.assertEqual(len(self.r2_cases), 6)
+        for case in self.r2_cases:
+            decision = self.engine.decide(case.insight)
+            self.assertNotEqual(decision.rule, "R2", case.golden_id)
+            self.assertNotEqual(decision.reason_code, "critical_needs_human_call", case.golden_id)
 
     def test_never_surveys_what_the_golden_set_declines(self):
         self.assertEqual(self.report["confusion"]["false_survey"], 0)

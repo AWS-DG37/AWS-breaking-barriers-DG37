@@ -125,13 +125,6 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((result.status, result.rule), ("skipped", "R3"))
         self.bundle.contracts.validate("no_survey", result.no_survey)
 
-    async def test_critical_severity_goes_to_a_person_without_model_call(self):
-        self.insight["severity"] = "critical"
-        result = await self.execute()
-        self.assertEqual((result.rule, result.reason), ("R2", "critical_needs_human_call"))
-        self.assertIsNone(result.no_survey)
-        self.assertEqual(result.attempts, 0)
-
     async def test_invalid_input_is_rejected_before_inference(self):
         del self.insight["farmer_id"]
         result = await self.execute()

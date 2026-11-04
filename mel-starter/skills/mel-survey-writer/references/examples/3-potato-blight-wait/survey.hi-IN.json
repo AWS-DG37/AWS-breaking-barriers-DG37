@@ -1,0 +1,69 @@
+{
+  "survey_id": "S-21310",
+  "farmer_id": "F-000245",
+  "source_insight_ids": [
+    "I-005330"
+  ],
+  "language": "hi-IN",
+  "send_window": {
+    "not_before": "2027-01-09T07:00:00+05:30",
+    "not_after": "2027-01-11T19:00:00+05:30"
+  },
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-confirm",
+      "prompt": "क्या आपने पिछले 3 दिनों में आलू के पत्ते देखे?",
+      "options": [
+        {
+          "value": "yes",
+          "label": "हाँ"
+        },
+        {
+          "value": "no",
+          "label": "नहीं"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "भूरे धब्बों का अब क्या हाल है?",
+      "options": [
+        {
+          "value": "no_new",
+          "label": "नए धब्बे नहीं"
+        },
+        {
+          "value": "same",
+          "label": "पहले जैसे ही"
+        },
+        {
+          "value": "spreading",
+          "label": "फैल रहे हैं",
+          "follow_up": "crop_or_animal_damaged"
+        },
+        {
+          "value": "white_growth",
+          "label": "सफ़ेद फफूंद दिखी",
+          "follow_up": "crop_or_animal_damaged"
+        }
+      ]
+    },
+    {
+      "item_id": "q3",
+      "type": "survey-scale",
+      "prompt": "सलाह कितनी काम की रही? 1 मतलब बिल्कुल नहीं, 5 मतलब बहुत काम की।",
+      "scale_min": 1,
+      "scale_max": 5,
+      "follow_up_at_or_below": 1,
+      "follow_up_reason": "advice_did_not_work"
+    }
+  ],
+  "rationale": "Wait-and-watch disease advice with a 3-day watch. Ask right after the watch ends: a spreading spot needs action within days.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}

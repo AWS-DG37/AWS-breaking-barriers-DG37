@@ -1,0 +1,125 @@
+{
+  "survey_by_resolution": {
+    "direct_action": {
+      "survey": true,
+      "asks": "Did the farmer do it, and did it work?"
+    },
+    "wait_and_monitor": {
+      "survey": true,
+      "asks": "Did the farmer watch, and is the problem growing?"
+    },
+    "do_not_act": {
+      "survey": true,
+      "asks": "Did the farmer hold off, and what happened?"
+    },
+    "plan_created": {
+      "survey": true,
+      "asks": "Did the farmer follow the plan's first step?"
+    },
+    "escalate_to_expert": {
+      "survey": true,
+      "asks": "Did the farmer reach the expert, and is the crop or animal better?"
+    },
+    "generic_information": {
+      "survey": false,
+      "asks": "Nothing. No action was advised, so there is nothing to follow up."
+    },
+    "needs_more_context": {
+      "survey": false,
+      "asks": "Nothing. No advice was given yet; the conversation is still open."
+    }
+  },
+  "send_window_days": {
+    "same_day": [
+      0,
+      1
+    ],
+    "next_day": [
+      1,
+      2
+    ],
+    "two_to_five_days": [
+      2,
+      5
+    ],
+    "three_to_ten_days": [
+      3,
+      10
+    ],
+    "seven_to_fourteen_days": [
+      7,
+      14
+    ],
+    "seasonal": [
+      21,
+      45
+    ],
+    "none": "from_action_window"
+  },
+  "window_rules": {
+    "none_start_after_action_window_days": 1,
+    "none_end_after_action_window_days": 7,
+    "action_window_days_if_null": 2,
+    "earliest_start_day": 1,
+    "start_not_before_action_window_end": true,
+    "min_width_days": 2,
+    "not_before_time": "07:00",
+    "not_after_time": "19:00",
+    "season_end": "2027-03-31"
+  },
+  "priority": {
+    "high_if_resolution": [
+      "escalate_to_expert"
+    ],
+    "high_if_severity": [
+      "high",
+      "critical"
+    ],
+    "high_if_behavioral_intent": [
+      "emergency"
+    ],
+    "low_if_resolution": [
+      "plan_created",
+      "do_not_act"
+    ],
+    "otherwise": "normal"
+  },
+  "channel_by_method": {
+    "push": "app",
+    "whatsapp": "whatsapp",
+    "ivr_callback": "voice",
+    "repeat_photo": "app",
+    "agent_followup": "voice",
+    "none": null
+  },
+  "channel_order_steps": [
+    "1. The farmer's preferred_channel.",
+    "2. The channel the verification method names, if different.",
+    "3. WhatsApp, if not already listed.",
+    "4. Voice, only for high priority, if not already listed."
+  ],
+  "wait_hours_by_priority": {
+    "high": 6,
+    "normal": 24,
+    "low": 48
+  },
+  "send_hours": {
+    "from": "07:00",
+    "to": "19:00"
+  },
+  "frequency_cap": {
+    "key": "mel:farmer:{farmer_id}",
+    "max_surveys": 1,
+    "window_days": 7,
+    "exempt_priority": [
+      "high"
+    ]
+  },
+  "expiry_days_after_window": 2,
+  "farmerchat_flow": {
+    "org_id": "org.farmerchat",
+    "flow_key": "mel_{survey_id_lower}",
+    "version": 1,
+    "campaign_name": "mel-hackathon-rabi-2026"
+  }
+}

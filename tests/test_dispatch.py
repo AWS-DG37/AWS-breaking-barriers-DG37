@@ -68,12 +68,13 @@ def test_the_estimate_counts_rule_decisions_and_model_calls_without_any_model():
     insights = parse_insights(Path("tests/fixtures/smoke_insights.jsonl").read_bytes())
     plan = estimate_batch(bundle, insights)
     assert plan["selected"] == 10
-    assert plan["surveys"] == 6
-    assert plan["skipped"] == {"R2": 1, "R3": 1, "R5": 1, "R7": 1}
+    # The fixture's critical insight is now surveyed (R2 removed), so 7 surveys, not 6.
+    assert plan["surveys"] == 7
+    assert plan["skipped"] == {"R3": 1, "R5": 1, "R7": 1}
     revisions = bundle.config.graph.max_revisions
     assert plan["model_calls"] == {
-        "min": 12,
-        "max": 12 * (1 + revisions) * bundle.config.graph.max_requests_per_call,
+        "min": 14,
+        "max": 14 * (1 + revisions) * bundle.config.graph.max_requests_per_call,
     }
     assert plan["cost_usd"] is None
 

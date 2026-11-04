@@ -92,23 +92,26 @@ def score(bundle, dataset):
     )
 
 
-def test_engine_covers_critical_cases_and_legacy_has_its_own_dataset(bundle, dataset):
+def test_critical_cases_follow_normal_rules_and_legacy_has_its_own_dataset(bundle, dataset):
+    # R2 (critical severity -> human call, no survey) was removed on purpose. The golden set
+    # still expects it, so a critical insight that passes the other rules is now a scored
+    # disagreement: the engine surveys it and records no human-call reason.
     report = score(bundle, dataset)
-    assert (report.eligibility.numerator, report.eligibility.denominator) == (3, 3)
+    assert (report.eligibility.numerator, report.eligibility.denominator) == (2, 3)
     assert report.confusion == {
-        "true_positive": 1, "true_negative": 2, "false_positive": 0, "false_negative": 0,
+        "true_positive": 1, "true_negative": 1, "false_positive": 1, "false_negative": 0,
     }
     assert (report.legacy.eligibility.numerator, report.legacy.eligibility.denominator) == (3, 4)
     assert report.legacy.source_cases == 4
-    assert report.per_rule["critical"].numerator == 1
+    assert report.per_rule["critical"].numerator == 0
     assert report.per_rule["critical"].denominator == 1
-    assert (report.reason_agreement.numerator, report.reason_agreement.denominator) == (2, 2)
+    assert (report.reason_agreement.numerator, report.reason_agreement.denominator) == (1, 2)
     assert {case.golden_id for case in report.cases} == {
         "G-eligible", "G-junk", "G-critical",
     }
     critical = next(c for c in report.cases if c.golden_id == "G-critical")
     assert critical.expected_reason == "critical_needs_human_call"
-    assert critical.predicted_reason == "critical_needs_human_call"
+    assert critical.predicted_reason is None
     assert critical.reason_agreement.kind == "assessed"
     assert report.not_assessed["language_quality"].kind == "not_assessed"
     assert report.not_assessed["relevance_grounding"].kind == "not_assessed"
@@ -249,7 +252,12 @@ def test_unknown_golden_reason_counts_as_a_disagreement(bundle, dataset):
     dataset.split.write_text(json.dumps(manifest))
     dataset.golden.write_text("".join(json.dumps(r) + "\n" for r in dataset.rows[1:]))
     report = score(bundle, dataset)
-    assert (report.reason_agreement.numerator, report.reason_agreement.denominator) == (1, 2)
+    # Both declined cases disagree: junk carries the unknown reason, and the critical case is
+    # now surveyed because R2 was removed.
+    assert (report.reason_agreement.numerator, report.reason_agreement.denominator) == (0, 2)
+    junk = next(c for c in report.cases if c.golden_id == "G-junk")
+    assert junk.expected_reason == "new_unreviewed_rule"
+    assert junk.reason_agreement.numerator == 0
 
 
 def test_scorer_never_constructs_an_aws_client(bundle, dataset, monkeypatch):

@@ -6,7 +6,7 @@ applies them in order; the first decision wins. Rules never call a model.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cached_property
@@ -52,24 +52,6 @@ class JunkInsight:
             survey=False,
             reason_code="junk_insight",
             explanation="; ".join(case.schema_errors) or "Marked junk",
-        )
-
-
-@dataclass(frozen=True)
-class NeedsHumanCall:
-    """R2: severity this high is a call for a person, not a tap survey."""
-
-    severities: Collection[str]
-    code: str = "R2"
-
-    def evaluate(self, case: Case) -> Decision | None:
-        if case.insight["severity"] not in self.severities:
-            return None
-        return Decision(
-            self.code,
-            survey=False,
-            reason_code="critical_needs_human_call",
-            explanation=f"Severity {case.insight['severity']} needs a human follow-up call",
         )
 
 

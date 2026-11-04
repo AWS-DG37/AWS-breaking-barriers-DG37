@@ -351,7 +351,9 @@ def test_the_rules_check_scores_a_version_against_the_golden_holdout():
     with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
         report = client.get(f"/api/configs/{key}/rules-check").json()
     assert report["cases"] == 75  # The test half of the grouped split.
-    assert report["decision_accuracy"] == 1.0
+    # R2 was removed on purpose: the test half's 2 critical cases are now surveyed while the
+    # golden set expects a human call, so 73 of 75 decisions agree.
+    assert report["decision_accuracy"] == round(73 / 75, 4)
 
 
 def test_schema_initialization_is_once_per_app_and_configs_share_a_connection():
