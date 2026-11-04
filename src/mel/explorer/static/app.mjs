@@ -111,10 +111,19 @@ function renderSurvey(outcome) {
   panel.append(el('p',{class:'small muted'},'Farmer-facing text. Select a question for its measurement evidence. Answers are shown for inspection only.'));
   const item=survey.items[state.question] || survey.items[0];
   panel.append(el('div',{class:'question-tabs',role:'group','aria-label':'Questions'},survey.items.map((q,i)=>el('button',{'aria-pressed':q===item,onClick:()=>{state.question=i;renderExperiment();}},`Question ${i+1}`))));
-  const preview=el('div',{class:'question'},el('p',{class:'small muted'},`${item.item_id} · ${item.type}`),el('h3',{lang:survey.language || undefined},item.prompt));
-  if(item.options) preview.append(el('ul',{class:'answers'},item.options.map(option=>el('li',{},option.label))));
+  panel.append(el('p',{class:'small muted question-record'},`${item.item_id} · ${item.type}`));
+  const language=survey.language || undefined;
+  const preview=el('div',{class:'question',lang:language},el('div',{class:'survey-progress'},el('span',{},language?.split('-')[0]==='hi'?'आपकी राय':'Your feedback'),el('span',{},`${survey.items.indexOf(item)+1} / ${survey.items.length}`)),el('h3',{},item.prompt));
+  if(item.options) preview.append(el('ul',{class:'answers',lang:language},item.options.map(option=>el('li',{},el('span',{'aria-hidden':true,class:'answer-marker'}),option.label))));
   else preview.append(el('p',{class:'scale'},`${displayValue(item.scale_min)} to ${displayValue(item.scale_max)}`));
-  panel.append(preview);
+  const phone=el('div',{class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview'},
+    el('div',{class:'phone-screen'},
+      el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
+      el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),el('span',{},'Digital Green')),
+      el('img',{class:'phone-field',src:'/static/assets/mustard-field.webp',alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768}),
+      preview,
+      el('div',{class:'phone-home','aria-hidden':true})));
+  panel.append(el('figure',{class:'phone-stage'},phone,el('figcaption',{},'Survey preview · answers are not submitted',el('span',{},'Illustrative field photo, unrelated to the selected case. ',el('a',{href:'https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4',target:'_blank',rel:'noreferrer'},'Abhi Verma / Unsplash')))));
   const evidence=(outcome.question_evidence || []).filter(e=>e.item_id===item.item_id);
   panel.append(el('div',{class:'evidence'},el('h3',{},'What this question measures'),evidence.length?evidence.map(e=>el('div',{},el('strong',{},e.measurement.replaceAll('_',' ')),el('p',{},e.explanation),el('p',{class:'small'},`Source fields · ${e.source_fields.join(', ') || 'Not recorded'}`))):el('p',{},'Question-level evidence not recorded.'),el('p',{class:'small muted'},'Diagnostic explanation supplied by the model. It is not independent validation.')));
   const {run,result}=selected();

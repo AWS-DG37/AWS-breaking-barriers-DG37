@@ -43,13 +43,21 @@ h1 span{color:var(--ink)}
 .branch:before{background:var(--coral)}
 .detail[data-stage=inputs]{border-top-color:var(--aqua)}
 .statement{background:#fff8eb}
+.overview{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:56px;align-items:center;padding:18px 0 28px}
+.overview h1{margin-top:0}.overview .intro{max-width:44ch}.overview .preview-context{font-size:14px;max-width:48ch;color:var(--muted);margin-top:28px;padding-top:20px;border-top:1px solid var(--line)}
+.phone-result{margin:0;max-width:380px;justify-self:center;width:100%;background:#f7f2e8;border-radius:16px;overflow:hidden}
+.phone-result img{display:block;width:100%;height:auto}.phone-result figcaption{font-size:12px;line-height:1.6;padding:0 20px 18px;color:var(--muted)}.phone-result figcaption span{display:block;margin-top:6px}
+@media(max-width:700px){.overview{grid-template-columns:1fr;gap:24px;padding:12px 0 28px}.overview .preview-context{margin-top:18px}.phone-result{max-width:360px}}
 </style>
 </head>
 <body>
 <header><div class="identity">Digital Green <small>FarmerChat follow-up surveys</small></div><div class="ref">AWS-breaking-barriers-DG37<br>Agreed architecture · 3 November 2026</div></header>
 <main>
+<div class="overview"><div>
 <h1>Follow an insight.<br><span>Explain every question.</span></h1>
 <p class="intro">One pipeline turns conversation insights into short surveys. Saved decisions and independent evaluation let the team show where a change improves quality, and where it does not.</p>
+<p class="preview-context">The explorer connects the farmer-facing question to the insight, rules and model that produced it. Select a question to inspect its measurement purpose, then compare the same case across candidates.</p>
+</div><figure class="phone-result"><img src="explorer-preview/phone-preview.webp" width="760" height="1476" alt="FarmerChat phone preview with a mustard-field photo and a recorded Hindi question asking whether recommended pesticide was applied, with four equally styled answers."><figcaption><strong>One recorded question, in context.</strong> OpenAI Luna · Hindi · synthetic insight I-004512. Captured from the pipeline explorer; answers are not submitted.<span>Illustrative field photography by <a href="https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4">Abhi Verma / Unsplash</a>. The pictured field and person are unrelated to this case.</span></figcaption></figure></div>
 <nav class="tabs" aria-label="Architecture views" role="tablist">
 <button type="button" role="tab" id="tab-flow" aria-controls="flow-panel" aria-selected="true">The pipeline</button>
 <button type="button" role="tab" id="tab-seams" aria-controls="seams-panel" aria-selected="false">Where the team can change it</button>
