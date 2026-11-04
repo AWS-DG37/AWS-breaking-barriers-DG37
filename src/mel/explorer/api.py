@@ -28,7 +28,8 @@ from mel.experiments import (
     select_rules,
     validate_assessment,
 )
-from mel.jobs import BatchJobSpec
+from mel.explorer import auth
+from mel.jobs import BatchJobSpec, dispatch
 from mel.models import Outcome
 from mel.store import Store
 
@@ -157,10 +158,14 @@ def create_app(
     catalog_loader=discover_models,
     demo_path: Path | None = None,
     live_enabled: bool = True,
+    dispatcher=dispatch,
+    auth_verifier=None,
+    auth_exchange=None,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
     app = FastAPI(title="FarmerChat MEL console")
+    auth.install(app, settings, verifier=auth_verifier, exchange=auth_exchange)
 
     def database():
         db = None
@@ -172,6 +177,19 @@ def create_app(
             if db is not None:
                 db.close()
             raise HTTPException(503, f"Database unavailable ({type(error).__name__})") from None
+
+    def queue(db, kind: str, spec: dict) -> dict:
+        """Create a job and start its runner. A runner that cannot start fails the job,
+        so nothing waits in the queue for a task that will never come."""
+        job = db.create_job(str(uuid4()), kind, spec)
+        try:
+            dispatcher(settings, job["job_id"])
+        except Exception as error:
+            db.finish_job(job["job_id"], "failed", f"Dispatch failed: {type(error).__name__}")
+            raise HTTPException(
+                502, f"Job runner could not start ({type(error).__name__})"
+            ) from None
+        return job
 
     def database_call(operation):
         db = database()
@@ -328,7 +346,7 @@ def create_app(
             spec = BatchJobSpec(
                 dataset_id=value.dataset_id, config_id=config_id, selection=value.selection
             )
-            return db.create_job(str(uuid4()), "batch", spec.model_dump(mode="json"))
+            return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)
 
@@ -377,7 +395,7 @@ def create_app(
                 raise HTTPException(422, "Unknown or invalid configured ruleset") from None
             key = str(uuid4())
             db.create_experiment(key, spec.model_dump(mode="json"))
-            job = db.create_job(str(uuid4()), "experiment", {"experiment_id": key})
+            job = queue(db, "experiment", {"experiment_id": key})
             return {"experiment_id": key, "job_id": job["job_id"], "status": "queued"}
 
         return database_call(enqueue)

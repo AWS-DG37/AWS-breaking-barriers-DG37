@@ -219,6 +219,11 @@ details[open] summary {
   letter-spacing:.02em;
   margin-top:4px;
 }
+.masthead-status {
+  display:flex;
+  align-items:center;
+  gap:16px;
+}
 .health {
   font-size:12px;
   color:var(--muted);

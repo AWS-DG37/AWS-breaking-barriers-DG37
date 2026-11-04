@@ -273,8 +273,9 @@ uv run python -m unittest discover -s tests -p test_worker.py -v
 Runs are tied to saved **configuration versions**: the resolved config, prompts, rules,
 crop calendar and schemas, stored immutably in `agent_configs`. Saving an unchanged
 definition returns the existing version. One version is active; batch jobs and
-experiments use it unless told otherwise. When no version exists yet, the first
-request seeds one from `config/agent.yaml` and activates it. `mel-worker run` also
+experiments use it unless told otherwise. Until a version is activated, the first
+request activates `config/agent.yaml` (reusing its version if one was already saved).
+`mel-worker run` also
 saves its configuration as a version, so every run records a `config_id`.
 
 ```bash

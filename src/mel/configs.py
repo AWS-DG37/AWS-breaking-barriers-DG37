@@ -7,14 +7,13 @@ from mel.config import Settings
 
 
 def active_config(store, settings: Settings) -> tuple[str, Bundle]:
-    """The active version. An empty registry is seeded once from the YAML configuration,
-    which becomes the first active version; afterwards YAML is only an import source."""
-    if store.active_config_id() is None and store.config_count() == 0:
-        key = store.save_config(Bundle.load(settings).definition, note="Seeded from YAML")
-        store.activate_config(key)
+    """The active version. Until one is activated, the YAML configuration is saved (or
+    matched to its existing version) and activated; afterwards YAML is only an import
+    source. Activation only ever switches versions, so this happens once per database."""
     key = store.active_config_id()
     if key is None:
-        raise ValueError("No active configuration version; activate one first")
+        key = store.save_config(Bundle.load(settings).definition, note="Seeded from YAML")
+        store.activate_config(key)
     return key, config_bundle(store, key)
 
 

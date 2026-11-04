@@ -25,6 +25,36 @@ from mel.worker import execute_run
 logger = logging.getLogger("mel.jobs")
 
 
+def dispatch(settings: Settings, job_id: str) -> None:
+    """Start a runner for one queued job when a job cluster is configured. Otherwise
+    a polling runner claims it; the job row is the same either way."""
+    if settings.job_cluster is None:
+        return
+    import boto3
+
+    response = boto3.client("ecs", region_name=settings.aws_region).run_task(
+        cluster=settings.job_cluster,
+        taskDefinition=settings.job_task_definition,
+        launchType="FARGATE",
+        count=1,
+        networkConfiguration={
+            "awsvpcConfiguration": {
+                "subnets": settings.job_subnets,
+                "securityGroups": settings.job_security_groups,
+                "assignPublicIp": "ENABLED",
+            }
+        },
+        overrides={
+            "containerOverrides": [
+                {"name": settings.job_container, "command": ["jobs", "--job-id", job_id]}
+            ]
+        },
+        startedBy=f"job-{job_id}"[:36],
+    )
+    if response.get("failures"):
+        raise RuntimeError(f"RunTask failed: {response['failures']}")
+
+
 class BatchJobSpec(StrictModel):
     """Generate surveys for a dataset selection with one configuration version."""
 

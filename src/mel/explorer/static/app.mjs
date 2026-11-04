@@ -1,4 +1,5 @@
 import {el} from './dom.mjs';
+import {signIn, signedIn, signOut} from './auth.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
 
@@ -12,6 +13,7 @@ const badge=value=>el('span',{class:`badge ${['failed','rejected','completed_wit
 function notice(message, error=false) { $('notice').hidden=!message; $('notice').className=error?'notice error':'notice'; $('notice').textContent=message; }
 async function api(path, options={}) {
   const response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json',...options.headers}});
+  if (response.status===401) return signIn();
   const data=await response.json().catch(()=>({detail:`Server returned ${response.status}.`}));
   if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail || data));
   return data;
@@ -222,6 +224,10 @@ $('new').addEventListener('click',renderComposer);
 $('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
 $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 async function boot() {
+  try {
+    const session=await api('/auth/session');
+    if (session.auth) { signedIn(); $('sign-out').hidden=false; }
+  } catch(error) { $('health').textContent='Sign-in unavailable'; notice(error.message,true); return; }
   const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));
   const results=await Promise.allSettled([api('/health'),api('/config'),listExperiments()]);
   const [health,config,experiments]=results;
@@ -233,3 +239,4 @@ async function boot() {
 }
 boot();
 window.addEventListener('pagehide',()=>clearTimeout(poll));
+$('sign-out').addEventListener('click',signOut);

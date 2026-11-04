@@ -88,6 +88,25 @@ class Settings(BaseSettings):
     database_secret_arn: str | None = None
     database_sslmode: Literal["disable", "require", "verify-full"] = "verify-full"
     database_sslrootcert: str | None = None
+    # Hosted deployments start one Fargate task per queued job. Unset, jobs wait for a
+    # polling runner (`mel-worker jobs`), as in local development.
+    job_cluster: str | None = None
+    job_task_definition: str | None = None
+    job_container: str = "worker"
+    job_subnets: list[str] = []
+    job_security_groups: list[str] = []
+    # Hosted sign-in (Cognito). All four together, or none for an open local console.
+    auth_domain: str | None = None  # https://<prefix>.auth.<region>.amazoncognito.com
+    auth_client_id: str | None = None
+    auth_issuer: str | None = None  # https://cognito-idp.<region>.amazonaws.com/<pool id>
+    console_url: str | None = None  # https://<distribution>.cloudfront.net, no trailing slash
+
+    @model_validator(mode="after")
+    def complete_sign_in(self):
+        fields = (self.auth_domain, self.auth_client_id, self.auth_issuer, self.console_url)
+        if any(fields) and not all(fields):
+            raise ValueError("set all of auth_domain, auth_client_id, auth_issuer, console_url")
+        return self
 
 
 def load_config(path: Path, model_override: str | None = None) -> AgentConfig:

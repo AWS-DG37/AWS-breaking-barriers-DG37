@@ -29,9 +29,6 @@ class MemoryConfigs:
     def config(self, key):
         return self.configs.get(key)
 
-    def config_count(self):
-        return len(self.configs)
-
     def active_config_id(self):
         return self.active
 

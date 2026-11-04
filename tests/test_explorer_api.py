@@ -29,6 +29,9 @@ class Store(MemoryConfigs):
         self.jobs.append((kind, spec))
         return {"job_id": key, "kind": kind, "spec": spec, "status": "queued"}
 
+    def finish_job(self, key, status, error=None):
+        self.finished = (key, status, error)
+
     def list_experiments(self):
         return []
 
@@ -211,3 +214,37 @@ def test_recorded_import_preserves_actual_relevance_and_absent_history(tmp_path)
     assert outcome["review"]["relevance_score"] == 0.4
     assert outcome["events"] == []
     assert not outcome["usage_complete"]
+
+
+def test_queued_jobs_are_dispatched_and_a_failed_dispatch_fails_the_job():
+    store = Store()
+    settings = Settings(bedrock_model_id="test")
+    started = []
+
+    def dispatcher(_, job_id):
+        started.append(job_id)
+
+    def broken(_, job_id):
+        raise RuntimeError("no capacity")
+
+    spec = specification().model_dump(mode="json")
+    app = create_app(settings=settings, store_factory=lambda _: store, dispatcher=dispatcher)
+    with TestClient(app) as client:
+        job_id = client.post("/api/experiments", json=spec).json()["job_id"]
+    assert started == [job_id]
+    app = create_app(settings=settings, store_factory=lambda _: store, dispatcher=broken)
+    with TestClient(app) as client:
+        response = client.post("/api/experiments", json=spec)
+    assert response.status_code == 502
+    assert store.finished[1:] == ("failed", "Dispatch failed: RuntimeError")
+
+
+def test_an_existing_draft_of_the_yaml_version_is_activated_not_duplicated():
+    from mel.bundle import Bundle
+
+    store = Store()
+    settings = Settings(bedrock_model_id="test")
+    draft = store.save_config(Bundle.load(settings).definition, note="Saved by mel-worker run")
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
+        assert client.get("/api/config").json()["active_config_id"] == draft
+    assert list(store.configs) == [draft]

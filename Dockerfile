@@ -1,4 +1,7 @@
 FROM python:3.12-slim
+# Lambda runs this same image as the console API; the adapter extension forwards Lambda
+# events to the HTTP server and is inert under ECS.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
 WORKDIR /app
 COPY pyproject.toml ./

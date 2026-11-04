@@ -343,10 +343,6 @@ class Store:
             ).fetchall()
         return [_config_summary(row[:6], {"config": row[6]}) for row in rows]
 
-    def config_count(self) -> int:
-        with self.lock:
-            return self.connection.execute("SELECT count(*) FROM agent_configs").fetchone()[0]
-
     def active_config_id(self) -> str | None:
         with self.lock:
             row = self.connection.execute(

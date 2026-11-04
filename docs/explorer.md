@@ -75,10 +75,29 @@ start more runners for more concurrency. Each candidate is saved as a configurat
 version derived from the active one. Comparison results never enter the scheduler
 handoff queue.
 
-The API defaults to loopback and has no authentication. Keep it local. The existing
-Fargate stack runs the batch worker; it does not deploy this web API. Its IAM policy
-currently authorizes Mantle inference only. Configure appropriate native Converse
-permissions before using Converse candidates in a deployed worker.
+A local API defaults to loopback and has no sign-in. Keep it local.
+
+## The hosted console
+
+`scripts/deploy.sh` also deploys the console: one CloudFront distribution serves the
+UI from a private S3 bucket and `/api/*` from API Gateway, which invokes this same
+image as a Lambda function in a private subnet. The browser therefore talks to one
+origin; there is no CORS. Each queued job starts its own Fargate task
+(`mel-worker jobs --job-id <id>`).
+
+Sign-in runs on the server (`src/mel/explorer/auth.py`). `/api/auth/login` sends the
+browser to Cognito with PKCE; `/api/auth/callback` exchanges the code and sets an
+HttpOnly, Secure, `SameSite=Strict` session cookie holding the access token, which is
+checked against Cognito's signing keys on every other `/api` request. The page never
+handles a token. Administrators invite users; there is no self sign-up:
+
+```bash
+AWS_PROFILE=workshop bash scripts/add_console_user.sh person@example.org
+```
+
+The worker's IAM policy authorizes Mantle inference only. Configure native Converse
+permissions before using Converse candidates in a deployed worker. The image omits the
+pack's insight file, so upload datasets with `POST /api/datasets` there.
 
 ## Change a team-owned component
 

@@ -1,0 +1,58 @@
+"""Job dispatch: one Fargate task per job when a cluster is configured."""
+
+import boto3
+import pytest
+
+from mel.config import Settings
+from mel.jobs import dispatch
+
+
+class Ecs:
+    def __init__(self, failures=()):
+        self.calls = []
+        self.failures = list(failures)
+
+    def run_task(self, **request):
+        self.calls.append(request)
+        return {"tasks": [{}], "failures": self.failures}
+
+
+def test_without_a_cluster_dispatch_leaves_the_job_for_a_polling_runner(monkeypatch):
+    monkeypatch.setattr(boto3, "client", lambda *a, **k: pytest.fail("no AWS call expected"))
+    dispatch(Settings(), "job-1")
+
+
+def test_dispatch_runs_the_worker_task_for_exactly_that_job(monkeypatch):
+    ecs = Ecs()
+    monkeypatch.setattr(boto3, "client", lambda service, **_: ecs)
+    settings = Settings(
+        job_cluster="cluster",
+        job_task_definition="task:3",
+        job_subnets=["subnet-1"],
+        job_security_groups=["sg-1"],
+    )
+    dispatch(settings, "job-1")
+    (request,) = ecs.calls
+    assert request["taskDefinition"] == "task:3"
+    assert request["overrides"]["containerOverrides"] == [
+        {"name": "worker", "command": ["jobs", "--job-id", "job-1"]}
+    ]
+    network = request["networkConfiguration"]["awsvpcConfiguration"]
+    assert network == {
+        "subnets": ["subnet-1"],
+        "securityGroups": ["sg-1"],
+        "assignPublicIp": "ENABLED",
+    }
+
+
+def test_a_run_task_failure_is_raised(monkeypatch):
+    monkeypatch.setattr(boto3, "client", lambda service, **_: Ecs([{"reason": "RESOURCE:CPU"}]))
+    with pytest.raises(RuntimeError, match="RESOURCE:CPU"):
+        dispatch(Settings(job_cluster="c", job_task_definition="t"), "job-1")
+
+
+def test_job_subnets_are_read_from_json_environment_variables(monkeypatch):
+    monkeypatch.setenv("MEL_JOB_SUBNETS", '["subnet-a"]')
+    monkeypatch.setenv("MEL_JOB_SECURITY_GROUPS", '["sg-a"]')
+    settings = Settings()
+    assert (settings.job_subnets, settings.job_security_groups) == (["subnet-a"], ["sg-a"])
