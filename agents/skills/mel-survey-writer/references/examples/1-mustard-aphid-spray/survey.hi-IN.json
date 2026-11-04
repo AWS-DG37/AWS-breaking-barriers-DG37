@@ -1,0 +1,76 @@
+{
+  "survey_id": "S-20931",
+  "farmer_id": "F-000123",
+  "source_insight_ids": [
+    "I-004512"
+  ],
+  "language": "hi-IN",
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-confirm",
+      "prompt": "क्या आपने सरसों पर माहू (छोटे हरे कीड़े) के लिए छिड़काव किया?",
+      "options": [
+        {
+          "value": "yes",
+          "label": "हाँ"
+        },
+        {
+          "value": "no",
+          "label": "नहीं"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "क्या छिड़काव की दवा आसानी से मिल गई?",
+      "options": [
+        {
+          "value": "easy",
+          "label": "हाँ, आसानी से"
+        },
+        {
+          "value": "hard",
+          "label": "हाँ, मुश्किल से"
+        },
+        {
+          "value": "not_found",
+          "label": "नहीं मिली",
+          "follow_up": "could_not_get_input"
+        }
+      ]
+    },
+    {
+      "item_id": "q3",
+      "type": "survey-single-select",
+      "prompt": "अब पौधों पर ये कीड़े कितने हैं?",
+      "options": [
+        {
+          "value": "almost_none",
+          "label": "लगभग नहीं"
+        },
+        {
+          "value": "fewer",
+          "label": "पहले से कम"
+        },
+        {
+          "value": "same",
+          "label": "पहले जितने",
+          "follow_up": "advice_did_not_work"
+        },
+        {
+          "value": "more",
+          "label": "पहले से ज़्यादा",
+          "follow_up": "advice_did_not_work"
+        }
+      ]
+    }
+  ],
+  "rationale": "Direct-action pest advice. Ask whether the farmer sprayed, whether the spray was easy to get, and whether the aphids went down; no spray available or more insects route to follow-up.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}

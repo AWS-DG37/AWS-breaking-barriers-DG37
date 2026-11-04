@@ -1,0 +1,69 @@
+{
+  "items": [
+    {
+      "type": "survey-single-select",
+      "prompt": "क्या आपने अनुशंसित कीटनाशक का छिड़काव किया?",
+      "item_id": "q1",
+      "options": [
+        {
+          "label": "हाँ",
+          "value": "yes"
+        },
+        {
+          "label": "अभी नहीं",
+          "value": "not_yet"
+        },
+        {
+          "label": "नहीं",
+          "value": "no"
+        },
+        {
+          "label": "कीटनाशक नहीं मिला",
+          "value": "could_not_get_input",
+          "follow_up": "could_not_get_input"
+        }
+      ]
+    },
+    {
+      "type": "survey-single-select",
+      "prompt": "सरसों के फूलों और तनों पर हरे कीड़ों की स्थिति कैसी है?",
+      "item_id": "q2",
+      "options": [
+        {
+          "label": "कम हुए",
+          "value": "improved"
+        },
+        {
+          "label": "वैसे ही हैं",
+          "value": "same"
+        },
+        {
+          "label": "बढ़ गए",
+          "value": "worsened",
+          "follow_up": "crop_or_animal_damaged"
+        },
+        {
+          "label": "कह नहीं सकते",
+          "value": "cannot_tell"
+        }
+      ]
+    }
+  ],
+  "language": "hi-IN",
+  "farmer_id": "F-000123",
+  "rationale": "पहला प्रश्न अनुशंसित छिड़काव को मापता है। दूसरा प्रश्न छिड़काव किया हो या नहीं, कीटों की मौजूदा स्थिति पूछता है; इससे गैर-छिड़काव करने वाले किसान भी उत्तर दे सकते हैं।",
+  "self_eval": {
+    "schema_valid": true,
+    "relevance_score": 0.88,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  },
+  "survey_id": "S-0000000001",
+  "send_window": {
+    "not_after": "2026-12-09T19:00:00+05:30",
+    "not_before": "2026-12-06T07:00:00+05:30"
+  },
+  "source_insight_ids": [
+    "I-004512"
+  ]
+}
