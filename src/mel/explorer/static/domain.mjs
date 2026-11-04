@@ -21,6 +21,19 @@ export function journeyVisits(events = []) {
   return visits;
 }
 
+// One plain sentence per outcome for a run's counts; zero counts are left out.
+export function summarizeCounts(counts = {}) {
+  const n = key => counts?.[key] || 0;
+  const s = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+  const clauses = [
+    n('accepted') && `${s(n('accepted'), 'survey is', 'surveys are')} ready to send.`,
+    n('skipped') && `The rules skipped ${s(n('skipped'), 'insight', 'insights')}.`,
+    n('rejected') && `The reviewer rejected ${s(n('rejected'), 'draft', 'drafts')}.`,
+    n('failed') && `${s(n('failed'), 'insight', 'insights')} failed.`,
+  ].filter(Boolean);
+  return clauses.length ? clauses.join(' ') : 'No results yet.';
+}
+
 // Value at a dotted path, e.g. read(definition, 'config.generation.model_id').
 export const read = (value, path) => path.split('.').reduce((node, key) => node?.[key], value);
 

@@ -8,6 +8,7 @@ class Element {
   constructor(tag) { this.tagName=tag; this.children=[]; this.attrs={}; this.dataset={}; this.listeners={}; }
   setAttribute(key,value) { this.attrs[key]=value; if(key==='value') this.value=value; if(key.startsWith('data-')) this.dataset[key.slice(5)]=value; }
   getAttribute(key) { return this.attrs[key]; }
+  removeAttribute(key) { delete this.attrs[key]; if(key.startsWith('data-')) delete this.dataset[key.slice(5)]; }
   append(...nodes) { for(const n of nodes) { n.parentElement=this; this.children.push(n); } }
   replaceChildren(...nodes) { this.children=[]; this.append(...nodes); }
   addEventListener(type,fn) { this.listeners[type]=fn; }
@@ -23,10 +24,13 @@ class Element {
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
 }
 globalThis.Node=Element;
-globalThis.document={createElement:tag=>new Element(tag),createTextNode:text=>{const node=new Element('#text');node.textContent=text;return node;}};
+globalThis.document={documentElement:new Element('html'),createElement:tag=>new Element(tag),createTextNode:text=>{const node=new Element('#text');node.textContent=text;return node;}};
+const stored=new Map();
+globalThis.localStorage={getItem:key=>stored.get(key) ?? null,setItem:(key,value)=>stored.set(key,String(value))};
+const handlers={};
 globalThis.location={hash:'',replace(hash){this.hash=hash;}};
 globalThis.window={addEventListener(){}};
-const {showGenerate,leaveGenerate}=await import('./generate.mjs');
+const {showGenerate,showRuns,leaveGenerate}=await import('./generate.mjs');
 const {showConfigure,leaveConfigure}=await import('./configure.mjs');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
@@ -99,7 +103,7 @@ test('selecting insights loads only detail and ignores an older detail response'
 });
 
 test('leaving Compare during a delayed response cannot restart polling or change the route',async()=>{
-  const pending=deferred(), nodes=new Map(), handlers={};
+  const pending=deferred(), nodes=new Map();
   const get=id=>{if(!nodes.has(id)) nodes.set(id,new Element('div'));return nodes.get(id);};
   globalThis.document.getElementById=get;
   globalThis.document.querySelectorAll=()=>[];
@@ -123,6 +127,35 @@ test('leaving Compare during a delayed response cannot restart polling or change
   assert.doesNotMatch(get('content').textContent,/Old comparison/);
   assert.equal(get('notice').textContent,'');
   // No active poll timer remains to keep this test process alive.
+});
+
+test('an active outcome filter keeps its controls visible at every detail level',async()=>{
+  const root=new Element('main');
+  globalThis.fetch=async url=>{
+    if(url==='/api/runs/f') return response({run_id:'f',status:'completed',counts:{skipped:1,failed:1}});
+    if(url.startsWith('/api/runs/f/results?')) return response({results:[{insight_id:'a',status:'skipped',insight:{},rule:'R1'}]});
+    if(url==='/api/runs/f/facets') return response({crops:{},concerns:{},rules:{}});
+    throw new Error(url);
+  };
+  const settle=async()=>{for(let i=0;i<5;i++) await tick();};
+  showRuns(root,'#runs/run/f'); await settle();
+  const metrics=()=>root.querySelector('.gen-metrics');
+  assert.equal(metrics().getAttribute('data-level'),'2');
+  metrics().querySelectorAll('button')[1].listeners.click(); await settle();
+  assert.equal(metrics().getAttribute('data-level'),undefined);
+  metrics().querySelectorAll('button')[1].listeners.click(); await settle();
+  assert.equal(metrics().getAttribute('data-level'),'2');
+  leaveGenerate();
+});
+
+test('route applies the section floor to the detail level and drops it on the way back',async()=>{
+  stored.set('mel.detail','1');
+  globalThis.fetch=async url=>response({'/api/configs':{configs:[]},'/api/runs':{runs:[]},'/api/jobs':{jobs:[]}}[url] ?? {});
+  location.hash='#configure';handlers.hashchange();await tick();
+  assert.equal(document.documentElement.dataset.detail,'3');
+  location.hash='#runs';handlers.hashchange();await tick();
+  assert.equal(document.documentElement.dataset.detail,'1');
+  assert.equal(stored.get('mel.detail'),'1');
 });
 
 test('Generate renders while estimates load and a changed selection invalidates the old estimate',async()=>{

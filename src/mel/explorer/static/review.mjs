@@ -162,7 +162,7 @@ function improveForm(list,{configs,active_config_id:active},settings) {
 
 function history(list) {
   if (!list.improvements.length) return null;
-  return el('section',{class:'cfg-tests'},el('h2',{},'Improvement runs'),list.improvements.map(i=>el('a',{class:'gen-run-link',href:`#review/improvement/${i.improvement_id}`},
+  return el('section',{class:'cfg-tests','data-level':2},el('h2',{},'Improvement runs'),list.improvements.map(i=>el('a',{class:'gen-run-link',href:`#review/improvement/${i.improvement_id}`},
     el('span',{class:'gen-run-title'},el('strong',{},`${plural(i.spec.rounds,'round')} · ${i.spec.improver.model_id}`),badge(i.status)),
     el('span',{class:'small muted'},i.verdict?`Best ${pct(i.verdict.best.score)} vs comparison ${pct(i.verdict.compare.score)} · ${i.verdict.improved?'improved':'no improvement'} · ${when(i.created_at)}`:when(i.created_at)))));
 }
@@ -201,7 +201,7 @@ async function renderImprovement(id,refresh=false) {
 
 function verdict(v,name,bestId) {
   const better=v.improved;
-  return el('section',{class:'cfg-check'},el('h2',{},better?'The revision scores higher':'No improvement over the comparison'),
+  return el('section',{class:'cfg-check','data-level':2},el('h2',{},better?'The revision scores higher':'No improvement over the comparison'),
     el('div',{class:'gen-split'},
       el('div',{class:'metric'},el('span',{},`Best · ${name(v.best.config_id)}`),el('strong',{},pct(v.best.score))),
       el('div',{class:'metric'},el('span',{},`Comparison · ${name(v.compare.config_id)}`),el('strong',{},pct(v.compare.score))),
@@ -228,7 +228,7 @@ function roundView(r,name) {
     el('p',{},p.summary),
     evaluationLine(r.evaluations[0],name),
     el('p',{class:'small muted'},`Previous best ${pct(r.parent_score)}`),
-    ...p.prompt_edits.map(edit=>el('details',{},el('summary',{},`${edit.prompt==='generate'?'Generation':'Review'} prompt edit · ${edit.reason}`),
+    ...p.prompt_edits.map(edit=>el('details',{'data-level':3},el('summary',{},`${edit.prompt==='generate'?'Generation':'Review'} prompt edit · ${edit.reason}`),
       el('div',{class:'cfg-diff'},lineDiff(edit.find,edit.replace).map(l=>el('div',{class:`diff-line ${l.op==='+'?'diff-add':l.op==='-'?'diff-del':''}`},`${l.op} ${l.text}`))))),
     p.setting_changes.length?el('ul',{class:'cfg-changes'},p.setting_changes.map(c=>el('li',{},el('strong',{},`${c.path.replaceAll('.',' › ').replaceAll('_',' ')} → ${c.value ?? 'unset'}`),` · ${c.reason}`))):null);
 }
@@ -239,7 +239,7 @@ function judgementTable(items,rounds) {
     const j=e.judgements.find(x=>x.item_id===item.item_id);
     return el('td',{title:j?.reason || ''},j?pct(j.score):'—');
   };
-  return el('section',{class:'cfg-tests'},el('h2',{},'Judge scores per comment'),
+  return el('section',{class:'cfg-tests','data-level':3},el('h2',{},'Judge scores per comment'),
     el('p',{class:'small muted'},'A model’s judgement of whether each new survey addresses the comment. Hover a score for its reason.'),
     el('div',{class:'table-scroll'},el('table',{class:'gen-table'},
       el('thead',{},el('tr',{},el('th',{},'Comment'),evaluations.map(e=>el('th',{},e.label)))),

@@ -8,6 +8,7 @@ import {showReview, leaveReview, addToReviewList} from './review.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 import {insightJourney} from './journey.mjs';
+import {apply as applyDetail, atLevel, mountDial} from './detail.mjs';
 const requests=requestScope();
 const api=(path,options)=>requests.api(path,options);
 
@@ -19,7 +20,8 @@ const text=(value)=>typeof value === 'object' ? JSON.stringify(value,null,2) : d
 const raw=value=>el('pre',{},text(value));
 const badge=value=>el('span',{class:`badge ${['failed','rejected','completed_with_errors'].includes(value)?'warning':''}`},value?.replaceAll('_',' ') || 'Unknown');
 function notice(message, error=false) { $('notice').hidden=!message; $('notice').className=error?'notice error':'notice'; $('notice').textContent=message; }
-const disclosure=(label,value,open=false)=>el('details',open?{open:true}:{},el('summary',{},label),raw(value));
+const disclosure=(label,value,attrs={})=>el('details',attrs,el('summary',{},label),raw(value));
+const EVERYTHING={'data-level':3};
 function picker(label,options,value,change) {
   return el('label',{},label,el('select',{'aria-label':label,onChange:event=>change(event.target.value)},options.map(([id,title])=>el('option',{value:id,selected:String(id)===String(value)},title))));
 }
@@ -68,7 +70,7 @@ function renderExperiment() {
       el('div',{},el('h2',{},d.job?.status==='failed'?'The comparison did not start':'Starting the comparison'),
         el('p',{class:'muted'},d.job?.status==='failed'?(d.job.error || 'The job failed before any version ran.'):'Hosted comparisons start a worker task, which takes about a minute. Each version then runs every insight in turn.'),
         el('ul',{},(d.spec.candidates || []).map(c=>el('li',{},c.label))))));
-    sections.push(disclosure('Comparison inputs',d.spec));
+    sections.push(disclosure('Comparison inputs',d.spec,EVERYTHING));
     $('content').replaceChildren(...sections);
     return;
   }
@@ -79,7 +81,7 @@ function renderExperiment() {
     sections.push(el('div',{class:'inspect-grid'},renderInspector(result,outcome),renderSurvey(outcome)));
   } else sections.push(el('div',{class:'empty-note'},['queued','running'].includes(d.status)?'Waiting for persisted results. This view refreshes while execution is active.':'No result records are available for this candidate.'));
   sections.push(renderComparison(d));
-  sections.push(disclosure('Experiment inputs and configuration',d.spec),disclosure('Run manifest',run?.manifest ?? 'Not recorded'));
+  sections.push(disclosure('Experiment inputs and configuration',d.spec,EVERYTHING),disclosure('Run manifest',run?.manifest ?? 'Not recorded',EVERYTHING));
   $('content').replaceChildren(...sections);
 }
 function renderProgress(d) {
@@ -106,7 +108,7 @@ function renderInspector(result,outcome) {
   const panel=el('section',{class:'inspector'},el('h2',{},'Stage evidence'));
   if(!event) panel.append(el('p',{class:'muted'},'No event was recorded for this step.'));
   else {
-    panel.append(picker('Recorded event',events.map((e,i)=>[i,`#${e.sequence} · ${e.source} · attempt ${e.attempt}`]),state.event,value=>{state.event=Number(value);renderExperiment();}),el('p',{class:'small muted'},`${event.stage} · ${event.source} evidence · ${event.created_at || 'Time not recorded'}`));
+    panel.append(atLevel(picker('Recorded event',events.map((e,i)=>[i,`#${e.sequence} · ${e.source} · attempt ${e.attempt}`]),state.event,value=>{state.event=Number(value);renderExperiment();}),3),el('p',{class:'small muted','data-level':3},`${event.stage} · ${event.source} evidence · ${event.created_at || 'Time not recorded'}`));
     const data=event.data;
     if('eligible' in data) panel.append(el('h3',{},data.eligible?'Eligible for a survey':'Survey not required'),el('p',{},data.reason || 'The insight passed the configured eligibility rules.'));
     if('valid' in data) panel.append(el('h3',{},`${data.target} schema ${data.valid?'passed':'failed'}`),...(data.errors || []).map(issue=>el('p',{class:'missing'},text(issue))));
@@ -116,10 +118,10 @@ function renderInspector(result,outcome) {
     if(data.context) panel.append(el('h3',{},'Context and provenance'),el('p',{},`${data.context.profile?'Farmer profile matched':'No farmer profile matched'} · ${(data.context.crop_calendar || []).length} calendar rows`),...(data.context.conflicts || []).map(issue=>el('p',{class:'missing'},issue)));
     if(data.status) panel.append(el('h3',{},`Ruling · ${data.status}`),el('p',{},data.reason || 'The saved result satisfied the configured acceptance gates.'));
     if(data.error_type) panel.append(el('h3',{},'Execution failed'),el('p',{class:'missing'},data.error_type));
-    panel.append(disclosure('Full recorded event',event.data));
+    panel.append(disclosure('Full recorded event',event.data,EVERYTHING));
   }
-  panel.append(disclosure('Original insight',result.input),disclosure('Final outcome',outcome));
-  if(outcome.review) panel.append(el('h3',{},'Survey-wide model review'),el('p',{class:'small muted'},'Model judgment across the survey. This is not an independent question-quality score.'),raw(outcome.review));
+  panel.append(disclosure('Original insight',result.input,EVERYTHING),disclosure('Final outcome',outcome,EVERYTHING));
+  if(outcome.review) panel.append(el('h3',EVERYTHING,'Survey-wide model review'),el('p',{class:'small muted',...EVERYTHING},'Model judgment across the survey. This is not an independent question-quality score.'),atLevel(raw(outcome.review),3));
   return panel;
 }
 function renderSurvey(outcome) {
@@ -164,9 +166,9 @@ function renderComparison(d) {
   section.append(picker('Reanalyze saved outputs',[['rules','Saved execution rules'],['golden','Current golden reference']],c?.reference || 'rules',value=>openExperiment(d.experiment_id,true,value)),el('p',{class:'small muted'},'Changing the analysis reference reuses saved outputs. It makes no model calls and does not change execution rules.'));
   if(!c?.rows?.length) {section.append(el('p',{},'Comparison is not available yet.')); return section;}
   const agreement=row=>{const cases=(c.cases || []).filter(item=>item.run_id===row.run_id);return `${cases.filter(item=>item.decision_agreement===true).length} matched · ${cases.filter(item=>item.assessment==='assessed').length}/${row.total} assessed`;};
-  const columns=[['Candidate',r=>r.label],['Cases',r=>r.total],['Accepted',r=>r.accepted],['Skipped',r=>r.skipped],['Rejected',r=>r.rejected],['Failed',r=>r.failed],['Missing',r=>r.missing],['Decision agreement',agreement],['Input tokens',r=>r.usage_complete?r.input_tokens:null],['Output tokens',r=>r.usage_complete?r.output_tokens:null],['Survey relevance',r=>r.mean_relevance]];
-  const header=el('thead',{},el('tr',{},columns.map(([label])=>el('th',{scope:'col'},label))));
-  const body=el('tbody',{},c.rows.map(row=>el('tr',{},columns.map(([,get],i)=>el(i===0?'th':'td',i===0?{scope:'row'}:{},displayValue(get(row)))))));
+  const columns=[['Candidate',r=>r.label],['Cases',r=>r.total],['Accepted',r=>r.accepted],['Skipped',r=>r.skipped],['Rejected',r=>r.rejected],['Failed',r=>r.failed],['Missing',r=>r.missing],['Decision agreement',agreement],['Input tokens',r=>r.usage_complete?r.input_tokens:null,3],['Output tokens',r=>r.usage_complete?r.output_tokens:null,3],['Survey relevance',r=>r.mean_relevance]];
+  const header=el('thead',{},el('tr',{},columns.map(([label,,level])=>el('th',{scope:'col','data-level':level},label))));
+  const body=el('tbody',{},c.rows.map(row=>el('tr',{},columns.map(([,get,level],i)=>el(i===0?'th':'td',i===0?{scope:'row'}:{'data-level':level},displayValue(get(row)))))));
   section.append(el('div',{class:'table-scroll',tabindex:0,'aria-label':'Candidate comparison'},el('table',{},header,body)),el('p',{class:'small muted'},'Survey relevance is a survey-wide model judgment. Missing scores and incomplete token usage are not zero. No overall quality score is inferred.'));
   for(const note of c.notes || []) section.append(el('p',{class:'small'},note));
   const {run,result}=selected();
@@ -175,9 +177,9 @@ function renderComparison(d) {
     const checks=diagnostic.deterministic_checks;
     section.append(el('h3',{},'Selected survey checks'),el('div',{class:'check-grid'},Object.entries(checks?.checks || {}).map(([key,value])=>el('span',{class:`check ${value?'pass':'fail'}`},`${value?'Pass':'Fail'} · ${key.replaceAll('_',' ')}`))),el('p',{class:'small muted'},checks?.assessment==='assessed'?checks.limitations:'Reference checks are not assessed for this result.'),disclosure('Case-level reference evidence',diagnostic));
   }
-  section.append(disclosure('Analysis reference version',c.reference_snapshot));
+  section.append(disclosure('Analysis reference version',c.reference_snapshot,EVERYTHING));
   const other=(d.assessments || []).filter(a=>a.scope!=='question');
-  section.append(disclosure(`Scoped survey and run assessments (${other.length})`,other.length?other:'No survey or run assessments recorded.'));
+  section.append(disclosure(`Scoped survey and run assessments (${other.length})`,other.length?other:'No survey or run assessments recorded.',EVERYTHING));
   return section;
 }
 // A comparison runs saved configuration versions over the same insights.
@@ -242,8 +244,8 @@ async function renderComposer() {
     el('div',{class:'launch'},
       el('p',{},state.config?.live_enabled?'This calls each version’s models. Results stay outside the scheduler handoff queue.':'Live execution is disabled by the server. Recorded comparisons remain available.'),
       el('button',{type:'submit',class:'primary',disabled:!state.config?.live_enabled},'Run comparison')));
-  const costEstimate=el('div',{role:'status'});
-  form.append(el('button',{type:'button',class:'secondary',onClick:async()=>{
+  const costEstimate=el('div',{role:'status','data-level':2});
+  form.append(el('button',{type:'button',class:'secondary','data-level':2,onClick:async()=>{
     try { const data=new FormData(form);const selection={limit:Number(data.get('limit'))};if(data.get('crop'))selection.crop=data.get('crop');
       const result=await api('/experiments/estimate',{method:'POST',body:JSON.stringify({name:data.get('name').trim() || 'Estimate',dataset_id:data.get('dataset'),selection,budget_usd:data.get('budget_usd'),candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value,config_id:row.querySelector('select').value}))})});
       costEstimate.replaceChildren(...result.candidates.map(c=>el('p',{},`${c.label}: about ${money(c.estimated_usd)}. ${c.note}`)));
@@ -266,6 +268,7 @@ function route() {
     clearTimeout(poll); ++state.request; requests.renew();
     activeTab=tab;
   }
+  applyDetail(tab);
   for (const name of ['generate','runs','compare','review','configure']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
   if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
@@ -300,6 +303,7 @@ async function bootCompare(id) {
   else if(state.experiments.length) await openExperiment(state.experiments[0].experiment_id);
   else $('content').replaceChildren(el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or create a new comparison.'));
 }
+mountDial($('detail-dial'));
 boot();
 window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();});
 $('sign-out').addEventListener('click',signOut);
