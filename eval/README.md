@@ -202,6 +202,8 @@ Calibration builds known-answer controls from dev rows only:
 - a generic app question (not grounded, no adoption, no outcome);
 - the own reference plus an injected new-advice question, or plus an injected
   personal-information question;
+- the own reference plus the Hindi "Do you need more help?" question (grounded, no
+  new advice);
 - `crop_or_animal_damaged` on "Worse" and `could_not_reach_expert` on "Could not
   reach" (correct routing, as the generator prompt requires);
   `advice_did_not_work` on "Worse", or any code on "Better" or "All steps" (wrong
@@ -210,22 +212,22 @@ Calibration builds known-answer controls from dev rows only:
 The report gives agreement as counts per criterion and lists each disagreement
 with the judge's rationale. Calibration passes when every criterion reaches 90%
 agreement and no call fails. If it fails, edit the rubric and calibrate again on
-dev. Omit `--max-cases` to use all 47 dev survey rows (up to ten controls each).
+dev. Omit `--max-cases` to use all 47 dev survey rows (up to eleven controls each).
 
 ### Calibration result and improvement iteration, 4 November 2026
 
 Judge `openai.gpt-6-luna` (the config's review model) in `us-east-1`, dev half only.
 Each cell is agreement with the known-answer controls.
 
-| Criterion | v1, 10 rows | v2, 10 rows | v2, 47 rows | v3, 47 rows | v3 + scales, 47 rows |
-| --- | --- | --- | --- | --- | --- |
-| advice_grounding | 30/30 | 30/30 | 141/141 | 141/141 | 141/141 |
-| measures_adoption | **18/20** | 20/20 | 94/94 | 94/94 | 94/94 |
-| measures_outcome | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| follow_up_routing | 18/18 | 17/18 | **87/90** | 90/90 | 142/142 |
-| no_new_advice | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| no_personal_info | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 |
-| Calls (failed) | 68 (0) | 68 (0) | 325 (0) | 325 (0) | 377 (0) |
+| Criterion | v1, 10 rows | v2, 10 rows | v2, 47 rows | v3, 47 rows | v3 + scales, 47 rows | v4, 47 rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| advice_grounding | 30/30 | 30/30 | 141/141 | 141/141 | 141/141 | 188/188 |
+| measures_adoption | **18/20** | 20/20 | 94/94 | 94/94 | 94/94 | 94/94 |
+| measures_outcome | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 94/94 |
+| follow_up_routing | 18/18 | 17/18 | **87/90** | 90/90 | 142/142 | 141/142 |
+| no_new_advice | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 141/141 |
+| no_personal_info | 20/20 | 20/20 | 94/94 | 94/94 | 94/94 | 94/94 |
+| Calls (failed) | 68 (0) | 68 (0) | 325 (0) | 325 (0) | 377 (0) | 424 (0) |
 
 - v1 to v2: the judge said that "Have you seen new drying patches? Yes / No / Did
   not check" does not show the farmer checked (G-0013, G-0015). The rubric now says
@@ -239,10 +241,52 @@ Each cell is agreement with the known-answer controls.
   carry its `follow_up_reason`. Two new controls turn each Better/Same/Worse
   question into a 1-5 scale: routed at 1-2 (correct) and at 1-5 (wrong). The rubric
   did not change.
+- v3 + scales to v4: on the first test-half score, the judge called the Hindi "Do you
+  need more help?" question generic (G-0073), although the golden wait-and-monitor
+  references ask it. The fix was made on dev only (see below). The grounding
+  criterion now says that this question counts, and a new control appends it in
+  Hindi. The one v4 miss is debatable: on G-0114 the judge said that step 2 of a
+  1-5 scale is not clearly worse.
 
 The controls are synthetic. Perfect agreement shows that the judge applies the
 rubric to clear cases, not that it agrees with human MEL reviewers on real surveys.
-`relevance_calibration_dev.json` is the v3 + scales report. It records the rubric,
+
+### Real dev surveys, v3 and v4
+
+The synthetic controls are English references, so they missed a judgment that only
+real Hindi surveys showed. Real generated surveys for the 74 dev rows (47 surveys,
+same config, same model) give a second dev check:
+
+| Dev surveys | v3 rubric | v4 rubric |
+| --- | --- | --- |
+| Core pass | 45/47 | 47/47 |
+| advice_grounding | 45/47 | 47/47 |
+| Other criteria | unchanged | unchanged |
+
+In v3, 12 dev surveys asked "क्या आपको और मदद चाहिए?" and the judge marked 2 of
+them not grounded (G-0071, G-0124). In v4 all 12 are grounded.
+
+### Test-half result
+
+The same 48 test surveys (config `luna-golden-patterns-v9`, 76 test rows: 39
+accepted, 9 rejected, 28 skipped, matching the golden decisions exactly), judged
+once per rubric version. The rubric was changed on dev only, between the two scores.
+
+| Test surveys | v3 + scales | v4 |
+| --- | --- | --- |
+| Core pass | 47/48 | 48/48 |
+| advice_grounding | 47/48 | 48/48 |
+| measures_adoption | 48/48 | 48/48 |
+| measures_outcome | 48/48 | 48/48 |
+| follow_up_routing | 42/42 | 42/42 |
+| no_new_advice | 48/48 | 48/48 |
+| no_personal_info | 48/48 | 48/48 |
+
+The judge also passes all 9 drafts that the reviewer rejected, so the two models
+apply different bars. Human MEL review of those 9 and of a sample of the rest is
+the next check (issue #9).
+
+`relevance_calibration_dev.json` is the v4 report. It records the rubric,
 split and judge code hashes. A test fails if any of them changes without a new
 calibration, and `--part test` refuses a stale report.
 

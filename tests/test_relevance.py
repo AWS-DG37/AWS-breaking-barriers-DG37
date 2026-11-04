@@ -26,7 +26,8 @@ async def oracle(message: str) -> relevance.RelevanceJudgment:
     questions = [item["question"] for item in body["survey"]]
     reference = {item["question"] for item in body["reference"] or []}
     generic = questions == [relevance.GENERIC_ITEM["prompt"]]
-    injected = {relevance.NEW_ADVICE_ITEM["prompt"], relevance.PERSONAL_ITEM["prompt"]}
+    injected = {relevance.NEW_ADVICE_ITEM["prompt"], relevance.PERSONAL_ITEM["prompt"],
+                relevance.HELP_ITEM["prompt"]}
     grounded = not generic and set(questions) - injected <= reference
     routes = [
         (o["label"], o["follow_up"]) for item in body["survey"]
@@ -92,7 +93,7 @@ def test_controls_use_dev_rows_only_and_cover_every_criterion():
     assert {c["control"] for c in cases} >= {
         "own_reference", "unrelated_reference", "generic_question", "positive_routing",
         "problem_routing", "wrong_code_routing", "injected_new_advice",
-        "injected_personal_info", "scale_routing", "scale_wrong_routing",
+        "injected_personal_info", "scale_routing", "scale_wrong_routing", "help_question",
     }
 
 
