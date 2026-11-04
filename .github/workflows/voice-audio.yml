@@ -18,6 +18,7 @@ on:
 permissions:
   contents: write # commit the clips
   pages: write # rebuild the site after that commit
+  actions: write # dispatch delivery after the workflow-token push
 
 concurrency:
   group: voice-audio
@@ -53,6 +54,15 @@ jobs:
             git commit -m "Record voice clips for the demo surveys"
             git pull --rebase origin main
             git push origin HEAD:main
+          fi
+      - name: Request main delivery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # A rerun checks out the published clips, so compare against the original run
+        # SHA to repair a dispatch that failed after the push already succeeded.
+        run: |
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            gh workflow run main.yml --ref main
           fi
       # A push made with the workflow token does not start a Pages build. Ask for one on
       # every run, even after a failed step, so a rerun also repairs a failed request.

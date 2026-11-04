@@ -3,10 +3,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: ${{ github.event_name == 'push' && 'fieldecho-main' || format('fieldecho-pr-{0}', github.ref) }}
+  group: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && 'fieldecho-main' || format('fieldecho-pr-{0}', github.ref) }}
   cancel-in-progress: false
 jobs:
   check:
@@ -60,16 +61,16 @@ jobs:
             fieldecho:tested --host 127.0.0.1 --port 8879 --no-live
           uv run pytest -q tests/test_fieldecho_browser.py
       - name: Save the tested image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         run: docker save fieldecho:tested -o /tmp/fieldecho-image.tar
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         with:
           name: tested-image
           path: /tmp/fieldecho-image.tar
           retention-days: 1
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: check
     runs-on: ubuntu-24.04
     timeout-minutes: 40

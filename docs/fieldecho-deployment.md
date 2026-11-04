@@ -1,11 +1,19 @@
 # Field Echo delivery to the existing EC2 host
 
-A push to `main` runs credentialless application checks, real PostgreSQL 16 tests,
-Node tests and a Chromium smoke of an amd64 image built from the complete checkout.
-Only that event can obtain AWS credentials and publish an immutable exact-SHA tag.
+A push or `workflow_dispatch` on `main` runs credentialless application checks,
+real PostgreSQL 16 tests, Node tests and a Chromium smoke of an amd64 image built
+from the complete checkout. Only those events on `refs/heads/main` can obtain AWS
+credentials and publish an immutable exact-SHA tag.
 The release command resolves its digest, checks that the SHA still heads `main`,
 and dispatches the fixed, version-pinned SSM document. Pull requests get checks
-without deployment credentials. There is no manual feature-ref trigger.
+without deployment credentials. Feature-ref dispatches get checks without image
+upload or deployment credentials. Main pushes and dispatches share one concurrency group.
+
+The voice clip workflow pushes generated clips with `GITHUB_TOKEN`, which does not
+start a push-triggered delivery run. After its commit step succeeds, it requests
+`gh workflow run main.yml --ref main` when the checked-out HEAD differs from the
+original voice run's SHA. This also retries a failed dispatch when a rerun finds
+clips already published. An unchanged initial run does not request another delivery.
 
 The committed [`deploy/target.json`](../deploy/target.json) is the nonsecret delivery
 target. Current infrastructure remains account `047640882913`, region `us-east-1`,
