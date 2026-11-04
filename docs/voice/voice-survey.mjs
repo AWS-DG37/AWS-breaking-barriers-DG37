@@ -30,7 +30,7 @@ const $ = id => document.getElementById(id);
 // speech counts playbacks. A finished or failed clip whose number is no longer current was
 // cut off by a tap, a page change or Stop, and must not start the repeat timer.
 // load counts survey loads the same way: only the latest choice may install its survey.
-const state = {lang: 'en', generated: [], survey: null, session: null, index: 0, done: false, finishStatus: undefined,
+const state = {lang: 'en', generated: [], survey: null, session: null, index: 0, done: false,
   voiceOn: false, speech: 0, load: 0, audio: null, timer: null, repeats: 0, mode: 'off', caption: ''};
 
 function h(tag, attrs = {}, ...children) {
@@ -163,7 +163,7 @@ async function loadSurvey(load) {
   document.querySelector('.lang').disabled = Boolean(generated);
   $('provenance').textContent = note;
   state.session = createSession(state.survey);
-  Object.assign(state, {index: 0, done: false, finishStatus: undefined, repeats: 0});
+  Object.assign(state, {index: 0, done: false, repeats: 0});
   markShown(state.session, currentItem().item_id);
   document.documentElement.lang = state.survey.language;
   render();
@@ -178,12 +178,12 @@ function goTo(index) {
   readQuestion();
 }
 
-async function finish(status) {
+async function finish() {
   silence();
-  Object.assign(state, {done: true, finishStatus: status});
+  state.done = true;
   render();
   if (!state.voiceOn) return;
-  const record = finishSurvey(state.session, {status});
+  const record = finishSurvey(state.session);
   const lines = spokenLines(state.survey);
   await speak(record.needs_follow_up ? lines.closing_if_follow_up : lines.closing);
   Object.assign(state, {mode: 'off', caption: ''});
@@ -205,7 +205,7 @@ function renderCard() {
   const c = copy();
   const card = $('card');
   if (state.done) {
-    const record = finishSurvey(state.session, {status: state.finishStatus});
+    const record = finishSurvey(state.session);
     const lines = spokenLines(state.survey);
     card.replaceChildren(h('h2', {tabindex: -1}, c.thanks),
       h('p', {}, record.needs_follow_up ? lines.closing_if_follow_up : lines.closing));
@@ -228,7 +228,7 @@ function renderCard() {
     h('div', {class: 'nav'},
       h('button', {type: 'button', class: 'back', disabled: state.index === 0, onClick: () => goTo(state.index - 1)}, c.back),
       h('button', {type: 'button', class: 'next', disabled: !chosen,
-        onClick: () => (last ? finish('completed') : goTo(state.index + 1))}, last ? c.finish : c.next)),
+        onClick: () => (last ? finish() : goTo(state.index + 1))}, last ? c.finish : c.next)),
   ].filter(Boolean));
   $('progress').textContent = c.progress(state.index + 1, state.survey.items.length);
 }
@@ -244,10 +244,12 @@ function renderVoice() {
 }
 
 function renderRecord() {
-  const record = finishSurvey(state.session, {status: state.finishStatus});
+  const record = finishSurvey(state.session);
   $('record').textContent = JSON.stringify(record, null, 2);
-  $('record-status').textContent = state.done ? record.status : 'in progress';
+  $('record-status').textContent = state.done ? record.status : 'draft';
   $('record-status').dataset.status = state.done ? record.status : '';
+  $('record-note').textContent = state.done ? 'Sent when the farmer pressed Finish.'
+    : 'Draft: the record FarmerChat would get if the farmer closed the sheet now.';
 }
 
 function render() {

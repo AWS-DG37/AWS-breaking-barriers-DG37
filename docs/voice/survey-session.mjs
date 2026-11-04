@@ -121,16 +121,19 @@ export function istTime(date) {
   return new Date(date.getTime() + 330 * 60_000).toISOString().slice(0, 19) + '+05:30';
 }
 
-// Build the answer record. Pass status 'declined' when the farmer closes the survey early.
-export function finishSurvey(session, {status, now = new Date()} = {}) {
+// Build the web answer record for the sheet as it stands, as if the farmer closed it now.
+// Codes follow the participant pack's rules/outcome_codes.json for the web channel: no answer
+// is sheet_dismissed (give up), some answers is sheet_closed_partway, all is finished.
+export function finishSurvey(session, {now = new Date()} = {}) {
   const {survey} = session;
   const entries = survey.items.map(item => session.items[item.item_id]);
   const answered = entries.filter(e => e.result === 'answered');
   const reasons = [...new Set(answered.map(e => e.follow_up).filter(Boolean))];
   const complete = answered.length === entries.length;
+  const dismissed = answered.length === 0;
   let outcome = complete ? 'completed' : 'partial';
   if (reasons.length) outcome = 'negative_outcome';
-  else if (!answered.length) outcome = 'declined';
+  else if (dismissed) outcome = 'declined';
   return {
     response_key: `${survey.survey_id}-web-${now.getTime()}`,
     survey_id: survey.survey_id,
@@ -139,7 +142,7 @@ export function finishSurvey(session, {status, now = new Date()} = {}) {
     channel: 'web',
     language: survey.language,
     status: outcome,
-    failure_code: outcome === 'declined' ? 'farmer_declined' : null,
+    failure_code: dismissed ? 'sheet_dismissed' : null,
     answers: Object.fromEntries(answered.map(e => [e.item.item_id, e.value])),
     items: entries.map(e => ({
       item_id: e.item.item_id, item_type: e.item.type, result: e.result, value: e.value,
@@ -153,9 +156,9 @@ export function finishSurvey(session, {status, now = new Date()} = {}) {
     },
     recorded_at: istTime(now),
     answered_by: survey.farmer_id,
-    sheet_outcome: complete ? 'finished' : 'closed_partway',
-    raw_event: status === 'declined' ? 'declined_by_voice' : null,
-    retry_decision: 'none',
+    sheet_outcome: complete ? 'finished' : dismissed ? 'dismissed' : 'closed_partway',
+    raw_event: dismissed ? 'sheet closed with no answer' : null,
+    retry_decision: dismissed ? 'give_up' : 'none',
     retry_after_minutes: null,
     counts_toward_cap: true,
     farmerchat_reply: null,

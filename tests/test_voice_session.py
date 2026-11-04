@@ -145,11 +145,43 @@ def test_a_tap_on_screen_is_recorded_as_a_sheet_tap_in_hindi():
     assert record["items"][0]["input_kind"] == "sheet_tap"
 
 
-def test_a_farmer_who_declines_before_answering_gets_a_declined_record():
-    record = run("2-wheat-irrigation-timing", "en-IN", [], {"status": "declined"})["record"]
+def test_a_sheet_closed_with_no_answer_is_recorded_as_dismissed():
+    record = run("2-wheat-irrigation-timing", "en-IN", [{"shown": "q1"}])["record"]
     assert_valid(record)
-    assert (record["status"], record["failure_code"]) == ("declined", "farmer_declined")
+    assert (record["status"], record["failure_code"]) == ("declined", "sheet_dismissed")
+    assert (record["sheet_outcome"], record["retry_decision"]) == ("dismissed", "give_up")
     assert record["answers"] == {}
+
+
+OUTCOMES = json.loads((ROOT / "docs/participant-pack/json/rules/outcome_codes.json").read_text())
+
+
+def test_every_web_record_follows_the_pack_outcome_rules():
+    cases = {
+        "dismissed": [{"shown": "q1"}],
+        "partway": [{"item_id": "q1", "value": "yes", "heard": "Yes"}],
+        "finished": [
+            {"item_id": "q1", "value": "yes", "heard": "Yes"},
+            {"item_id": "q2", "value": "easy", "heard": "Yes, easily"},
+            {"item_id": "q3", "value": "fewer", "heard": "Fewer than before"},
+        ],
+    }
+    for name, steps in cases.items():
+        record = run("1-mustard-aphid-spray", "en-IN", steps)["record"]
+        assert_valid(record)
+        assert record["channel"] == "web"
+        code = record["failure_code"]
+        if code:
+            rule = OUTCOMES["failures"][code]
+            assert "web" in rule["channels"], (name, code)
+        elif record["sheet_outcome"] == "closed_partway":
+            rule = OUTCOMES["sheet_cases"]["sheet_closed_partway"]
+        else:
+            rule = {"retry_decision": "none", "counts_toward_cap": True}
+        assert record["retry_decision"] == rule["retry_decision"], name
+        assert record["counts_toward_cap"] == rule["counts_toward_cap"], name
+        if "status" in rule:
+            assert record["status"] == rule["status"], name
 
 
 def test_every_spoken_question_reads_its_prompt_and_every_choice():
