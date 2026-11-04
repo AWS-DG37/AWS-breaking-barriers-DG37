@@ -1,0 +1,55 @@
+{
+  "survey_id": "S-21044",
+  "farmer_id": "F-000187",
+  "source_insight_ids": [
+    "I-004871"
+  ],
+  "language": "hi-IN",
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-single-select",
+      "prompt": "क्या आपने गेहूँ में पहली सिंचाई कर दी?",
+      "options": [
+        {
+          "value": "on_time",
+          "label": "हाँ, समय पर"
+        },
+        {
+          "value": "late",
+          "label": "हाँ, पर देर से"
+        },
+        {
+          "value": "not_yet",
+          "label": "अभी नहीं"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-single-select",
+      "prompt": "आपकी गेहूँ की फसल अब कैसी दिख रही है?",
+      "options": [
+        {
+          "value": "healthy",
+          "label": "हरी और स्वस्थ"
+        },
+        {
+          "value": "some_yellow",
+          "label": "कुछ पत्ते पीले"
+        },
+        {
+          "value": "many_yellow",
+          "label": "बहुत पत्ते पीले",
+          "follow_up": "crop_or_animal_damaged"
+        }
+      ]
+    }
+  ],
+  "rationale": "Irrigation advice. Ask whether the first irrigation was given as advised, then how the crop looks, so yellow leaves route to follow-up.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "survey_id": "S-20877",
+  "farmer_id": "F-000402",
+  "source_insight_ids": [
+    "I-004420"
+  ],
+  "language": "hi-IN",
+  "items": [
+    {
+      "item_id": "q1",
+      "type": "survey-single-select",
+      "prompt": "आपने गेहूँ का कौन सा बीज बोया?",
+      "options": [
+        {
+          "value": "suggested",
+          "label": "सुझाई गई किस्म"
+        },
+        {
+          "value": "other",
+          "label": "कोई दूसरी किस्म"
+        },
+        {
+          "value": "not_sown",
+          "label": "अभी नहीं बोया"
+        }
+      ]
+    },
+    {
+      "item_id": "q2",
+      "type": "survey-scale",
+      "prompt": "अच्छा बीज मिलना कितना आसान था? 1 मतलब बहुत मुश्किल, 5 मतलब बहुत आसान।",
+      "scale_min": 1,
+      "scale_max": 5,
+      "follow_up_at_or_below": 1,
+      "follow_up_reason": "could_not_get_input"
+    }
+  ],
+  "rationale": "Variety plan. Ask which seed was sown, then how easy good seed was to find, so not finding seed routes to follow-up.",
+  "self_eval": {
+    "schema_valid": true,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  }
+}
