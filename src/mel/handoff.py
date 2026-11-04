@@ -6,7 +6,7 @@ This constructs the handoff only. A downstream scheduler enforces it at dispatch
 from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
-from mel.clock import IST
+from mel.clock import parse_ist
 
 
 def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
@@ -33,7 +33,7 @@ def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
     flow = rules["farmerchat_flow"]
     return {
         "handoff_id": survey["survey_id"].replace("S-", "H-", 1),
-        "created_at": now.astimezone(IST).replace(microsecond=0).isoformat(),
+        "created_at": parse_ist(now).replace(microsecond=0).isoformat(),
         "survey": survey,
         "send_window": survey["send_window"],
         "send_hours": rules["send_hours"],

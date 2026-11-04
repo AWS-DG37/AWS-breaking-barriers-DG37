@@ -5,6 +5,7 @@ short DB operations through this connection; model calls remain concurrent.
 """
 
 import json
+from datetime import datetime
 from hashlib import sha256
 from pathlib import Path
 from threading import RLock
@@ -14,6 +15,7 @@ from uuid import uuid4
 import boto3
 
 from mel.bundle import definition_sha256
+from mel.clock import parse_ist
 from mel.config import Settings
 from mel.datasets import InsightFilter, index_columns
 from mel.models import Outcome
@@ -190,6 +192,94 @@ class Store:
                     (run_id,),
                 ).fetchall()
             ]
+
+    def log_message(
+        self,
+        *,
+        farmer_id: str,
+        channel: str,
+        message_type: str,
+        status: str,
+        survey_id: str | None = None,
+        message_content: dict | None = None,
+        external_message_id: str | None = None,
+        sent_at: str | datetime | None = None,
+        delivered_at: str | datetime | None = None,
+        failed_at: str | datetime | None = None,
+    ) -> dict:
+        """Record one message event reported by an external sender.
+
+        Event times (`sent_at`/`delivered_at`/`failed_at`) come from the sender and are
+        optional; whichever are present are normalized to IST via parse_ist (naive values
+        are rejected). `created_at` is set by the database to now(). The method never
+        invents a send time and never reads it from the survey's send window; a message
+        with no reported send time is logged with sent_at NULL (only allowed for failures).
+
+        Idempotent on `external_message_id`: re-reporting the same platform id returns the
+        existing row unchanged instead of inserting a duplicate. This holds across separate
+        Store instances/processes: the insert uses ON CONFLICT DO NOTHING against the
+        partial unique index, so a concurrent duplicate neither creates a second row nor
+        raises a unique-violation; the losing caller re-reads and returns the existing row.
+        A call with external_message_id=None has no conflict target and always inserts.
+        """
+        from psycopg.types.json import Jsonb
+
+        new_id = str(uuid4())
+        with self.lock, self.connection.transaction():
+            inserted = self.connection.execute(
+                "INSERT INTO message_logs(id,farmer_id,survey_id,channel,message_type,status,"
+                "message_content,external_message_id,sent_at,delivered_at,failed_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT (external_message_id) WHERE external_message_id IS NOT NULL "
+                "DO NOTHING RETURNING id",
+                (
+                    new_id,
+                    farmer_id,
+                    survey_id,
+                    channel,
+                    message_type,
+                    status,
+                    Jsonb(message_content) if message_content is not None else None,
+                    external_message_id,
+                    _ist_or_none(sent_at),
+                    _ist_or_none(delivered_at),
+                    _ist_or_none(failed_at),
+                ),
+            ).fetchone()
+            if inserted is None:
+                # A row with this external_message_id already exists (possibly inserted
+                # concurrently by another process). Return it unchanged.
+                existing = self.connection.execute(
+                    "SELECT id FROM message_logs WHERE external_message_id=%s",
+                    (external_message_id,),
+                ).fetchone()
+                return self.message(str(existing[0]))
+        return self.message(new_id)
+
+    def message(self, message_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                f"SELECT {_MESSAGE_COLUMNS} FROM message_logs WHERE id=%s", (message_id,)
+            ).fetchone()
+        return _message_log(row) if row else None
+
+    def messages_for_farmer(self, farmer_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"SELECT {_MESSAGE_COLUMNS} FROM message_logs WHERE farmer_id=%s "
+                f"ORDER BY {_MESSAGE_EVENT_ORDER}",
+                (farmer_id,),
+            ).fetchall()
+        return [_message_log(row) for row in rows]
+
+    def messages_for_survey(self, survey_id: str) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"SELECT {_MESSAGE_COLUMNS} FROM message_logs WHERE survey_id=%s "
+                f"ORDER BY {_MESSAGE_EVENT_ORDER}",
+                (survey_id,),
+            ).fetchall()
+        return [_message_log(row) for row in rows]
 
     def finish(self, run_id: str, status: str) -> None:
         with self.lock:
@@ -667,6 +757,68 @@ class Store:
 
 def _iso(value) -> str | None:
     return value.isoformat() if value else None
+
+
+def _ist_or_none(value: str | datetime | None) -> datetime | None:
+    """Normalize an externally reported event time to IST, or pass through None.
+
+    Reuses parse_ist, so a naive timestamp is rejected rather than interpreted in the
+    machine's timezone, exactly as the timing pipeline treats insight timestamps."""
+    return None if value is None else parse_ist(value)
+
+
+def _ist_iso(value: datetime | None) -> str | None:
+    """Render a stored timestamptz in IST. PostgreSQL returns timestamptz in the
+    session timezone (UTC here); the stored instant is correct, but message logs
+    present every time in IST (+05:30), consistent with the rest of the pipeline."""
+    return None if value is None else parse_ist(value).isoformat()
+
+
+_MESSAGE_COLUMNS = (
+    "id,farmer_id,survey_id,channel,message_type,status,message_content,"
+    "external_message_id,sent_at,delivered_at,failed_at,created_at"
+)
+
+# Chronological event-time order: each event is ordered by the timestamp of its own
+# status (a delivered event by delivered_at, not its original sent_at), falling back to
+# created_at when that time is absent. created_at then id break ties deterministically.
+_MESSAGE_EVENT_ORDER = (
+    "coalesce("
+    "CASE status WHEN 'sent' THEN sent_at "
+    "WHEN 'delivered' THEN delivered_at "
+    "WHEN 'failed' THEN failed_at END, created_at), created_at, id"
+)
+
+
+def _message_log(row) -> dict:
+    (
+        id_,
+        farmer_id,
+        survey_id,
+        channel,
+        message_type,
+        status,
+        message_content,
+        external_message_id,
+        sent_at,
+        delivered_at,
+        failed_at,
+        created_at,
+    ) = row
+    return {
+        "id": str(id_),
+        "farmer_id": farmer_id,
+        "survey_id": survey_id,
+        "channel": channel,
+        "message_type": message_type,
+        "status": status,
+        "message_content": message_content,
+        "external_message_id": external_message_id,
+        "sent_at": _ist_iso(sent_at),
+        "delivered_at": _ist_iso(delivered_at),
+        "failed_at": _ist_iso(failed_at),
+        "created_at": _ist_iso(created_at),
+    }
 
 
 # Unset filter fields match every row; untyped NULL parameters need casts.
