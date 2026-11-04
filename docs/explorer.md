@@ -3,6 +3,8 @@
 The explorer compares saved survey runs and explicitly starts bounded Bedrock
 experiments. It shares the worker's graph, prompts, schemas, and PostgreSQL store.
 The [architecture walkthrough](architecture-walkthrough.html) explains the flow.
+Use the [agent-agnostic mac-mini handoff](handoffs/mac-mini-setup.md) to clone,
+start, and verify the full app on mac-mini, with the agreed visual direction.
 
 ## Start the recorded demo with Docker
 
