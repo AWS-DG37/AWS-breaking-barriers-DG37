@@ -1,10 +1,15 @@
 """Job dispatch: one Fargate task per job when a cluster is configured."""
 
+import json
+from pathlib import Path
+
 import boto3
 import pytest
 
+from mel.bundle import Bundle
 from mel.config import Settings
-from mel.jobs import dispatch
+from mel.datasets import parse_insights
+from mel.jobs import dispatch, estimate_batch
 
 
 class Ecs:
@@ -56,3 +61,26 @@ def test_job_subnets_are_read_from_json_environment_variables(monkeypatch):
     monkeypatch.setenv("MEL_JOB_SECURITY_GROUPS", '["sg-a"]')
     settings = Settings()
     assert (settings.job_subnets, settings.job_security_groups) == (["subnet-a"], ["sg-a"])
+
+
+def test_the_estimate_counts_rule_decisions_and_model_calls_without_any_model():
+    bundle = Bundle.load(Settings(bedrock_model_id="test"))
+    insights = parse_insights(Path("tests/fixtures/smoke_insights.jsonl").read_bytes())
+    plan = estimate_batch(bundle, insights)
+    assert plan["selected"] == 10
+    assert plan["surveys"] == 6
+    assert plan["skipped"] == {"R2": 1, "R3": 1, "R5": 1, "R7": 1}
+    revisions = bundle.config.graph.max_revisions
+    assert plan["model_calls"] == {"min": 12, "max": 12 * (1 + revisions)}
+    assert plan["cost_usd"] is None
+
+
+def test_the_estimate_prices_tokens_when_the_configuration_has_prices():
+    bundle = Bundle.load(Settings(bedrock_model_id="test"))
+    bundle.config.batch.input_cost_per_million = 1.0
+    bundle.config.batch.output_cost_per_million = 10.0
+    scenario = Path("docs/participant-pack/json/scenarios/1-mustard-aphid-spray/insight.json")
+    insight = json.loads(scenario.read_text())
+    plan = estimate_batch(bundle, [insight])
+    assert plan["surveys"] == 1
+    assert plan["cost_usd"] == round((6600 * 1.0 + 400 * 10.0) / 1_000_000, 2)

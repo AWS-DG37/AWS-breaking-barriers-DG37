@@ -32,6 +32,10 @@ class Store(MemoryConfigs):
     def finish_job(self, key, status, error=None):
         self.finished = (key, status, error)
 
+    def import_dataset(self, name, rows, digest):
+        self.imported = (name, len(rows), digest)
+        return {"dataset_id": "d-1", "name": name, "row_count": len(rows), "created": True}
+
     def list_experiments(self):
         return []
 
@@ -248,3 +252,22 @@ def test_an_existing_draft_of_the_yaml_version_is_activated_not_duplicated():
     with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
         assert client.get("/api/config").json()["active_config_id"] == draft
     assert list(store.configs) == [draft]
+
+
+def test_the_pack_is_imported_from_its_configured_uri(tmp_path):
+    pack = tmp_path / "insights.jsonl"
+    pack.write_text('{"insight_id": "I-1"}\n{"insight_id": "I-2"}\n')
+    store = Store()
+    settings = Settings(bedrock_model_id="test", pack_uri=str(pack))
+    with TestClient(create_app(settings=settings, store_factory=lambda _: store)) as client:
+        response = client.post("/api/datasets/import-pack")
+    assert response.status_code == 201
+    assert store.imported[:2] == ("Participant pack", 2)
+
+
+def test_an_unreachable_pack_is_reported_not_crashed(tmp_path):
+    settings = Settings(bedrock_model_id="test", pack_uri=str(tmp_path / "missing.jsonl"))
+    with TestClient(create_app(settings=settings, store_factory=lambda _: Store())) as client:
+        response = client.post("/api/datasets/import-pack")
+    assert response.status_code == 503
+    assert "Participant pack unavailable" in response.json()["detail"]

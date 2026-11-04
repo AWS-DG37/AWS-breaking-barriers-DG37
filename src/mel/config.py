@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     database_secret_arn: str | None = None
     database_sslmode: Literal["disable", "require", "verify-full"] = "verify-full"
     database_sslrootcert: str | None = None
+    # The participant pack's insights: a repository path locally, an s3:// URI when hosted
+    # (the image omits datasets).
+    pack_uri: str = "docs/participant-pack/data/insights.jsonl"
     # Hosted deployments start one Fargate task per queued job. Unset, jobs wait for a
     # polling runner (`mel-worker jobs`), as in local development.
     job_cluster: str | None = None

@@ -147,3 +147,31 @@ def test_experiment_job_saves_each_candidate_as_a_child_of_the_active_version(da
         assert version["parent_id"] == base
         assert version["generation_model"] in {"test-a", "test-b"}
     assert database.experiment_detail(key)["status"] == "completed"
+
+
+def test_facets_counts_and_the_runs_view_describe_a_batch(database):
+    config_id = active(database)
+    dataset = smoke_dataset(database)
+    key = dataset["dataset_id"]
+    facets = database.dataset_facets(key)
+    assert {"value": "wheat", "count": 5} in facets["crop"]
+    assert facets["created"] == {"from": "2026-11-15", "to": "2027-03-20"}
+    assert database.count_insights(key, InsightFilter(crop="wheat", limit=2)) == 5
+    spec = BatchJobSpec(dataset_id=key, config_id=config_id, selection=InsightFilter(limit=4))
+    job = database.create_job(str(uuid4()), "batch", spec.model_dump(mode="json"))
+    asyncio.run(run_queue(database, SETTINGS, job_id=job["job_id"], agent_factory=agents))
+    (run,) = database.job(job["job_id"])["runs"]
+    summary = database.run_summary(run["run_id"])
+    assert summary["job_id"] == job["job_id"] and summary["progress"] == {"done": 4, "total": 4}
+    assert sum(summary["counts"].values()) == 4
+    assert run["run_id"] in {r["run_id"] for r in database.list_runs()}
+    rows = database.run_results(run["run_id"])
+    assert len(rows) == 4
+    accepted = [r for r in rows if r["status"] == "accepted"]
+    assert accepted and all(r["first_question"] and r["questions"] >= 1 for r in accepted)
+    skipped = database.run_results(run["run_id"], status="skipped")
+    assert all(r["rule"] and r["rule"] != "R8" for r in skipped)
+    assert database.run_results(run["run_id"], offset=3, limit=5)[0] == rows[3]
+    one = database.run_result(run["run_id"], rows[0]["insight_id"])
+    assert one["outcome"]["insight_id"] == rows[0]["insight_id"]
+    assert database.run_result(run["run_id"], "missing") is None

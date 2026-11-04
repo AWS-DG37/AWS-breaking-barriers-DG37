@@ -10,11 +10,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections import Counter
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import Field
 
 from mel.agents import build_agents
+from mel.bundle import Bundle
 from mel.config import Settings, StrictModel
 from mel.configs import config_bundle
 from mel.datasets import InsightFilter
@@ -65,6 +67,45 @@ class BatchJobSpec(StrictModel):
 
 class ExperimentJobSpec(StrictModel):
     experiment_id: UUID
+
+
+# Rough per-survey figures from a live GPT-6 Luna run (one generation, one review).
+# They size a run before it starts; actual usage is recorded per outcome.
+ESTIMATE_SECONDS_PER_SURVEY = 12
+ESTIMATE_INPUT_TOKENS_PER_SURVEY = 6600
+ESTIMATE_OUTPUT_TOKENS_PER_SURVEY = 400
+
+
+def estimate_batch(bundle: Bundle, insights: list[dict]) -> dict:
+    """What a batch would do, decided by the rules alone: no model calls. Insights the
+    rules decline are skipped for free; each survey costs one generation and one
+    review, plus up to max_revisions more of each."""
+    engine = bundle.decision_engine()
+    rules = Counter(engine.decide(insight).rule for insight in insights)
+    surveys = rules.pop(engine.survey_rule, 0)
+    config = bundle.config
+    input_tokens = surveys * ESTIMATE_INPUT_TOKENS_PER_SURVEY
+    output_tokens = surveys * ESTIMATE_OUTPUT_TOKENS_PER_SURVEY
+    prices = config.batch
+    cost = (
+        (
+            input_tokens * prices.input_cost_per_million
+            + output_tokens * prices.output_cost_per_million
+        )
+        / 1_000_000
+        if prices.input_cost_per_million is not None and prices.output_cost_per_million is not None
+        else None
+    )
+    return {
+        "selected": len(insights),
+        "surveys": surveys,
+        "skipped": dict(sorted(rules.items())),
+        "model_calls": {"min": 2 * surveys, "max": 2 * surveys * (1 + config.graph.max_revisions)},
+        "minutes": round(surveys * ESTIMATE_SECONDS_PER_SURVEY / config.batch.concurrency / 60, 1),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_usd": round(cost, 2) if cost is not None else None,
+    }
 
 
 async def run_job(job: dict, *, store: Store, settings: Settings, agent_factory=build_agents):

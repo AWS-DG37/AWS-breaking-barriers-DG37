@@ -417,24 +417,127 @@ class Store:
         return _dataset_summary(row) if row else None
 
     def insights(self, dataset_id: str, selection: InsightFilter, offset: int = 0) -> list[dict]:
-        """Insight bodies in file order. Untyped NULL parameters are cast so an unset
-        filter field matches every row."""
+        """Insight bodies in file order."""
         with self.lock:
             rows = self.connection.execute(
-                "SELECT body FROM insights WHERE dataset_id=%(dataset_id)s "
-                "AND (%(farmer_id)s::text IS NULL OR farmer_id=%(farmer_id)s) "
-                "AND (%(crop)s::text IS NULL OR crop=%(crop)s) "
-                "AND (%(concern)s::text IS NULL OR concern=%(concern)s) "
-                "AND (%(resolution_type)s::text IS NULL OR resolution_type=%(resolution_type)s) "
-                "AND (%(quality_flag)s::text IS NULL OR quality_flag=%(quality_flag)s) "
-                "AND (%(created_from)s::date IS NULL "
-                "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date >= %(created_from)s) "
-                "AND (%(created_to)s::date IS NULL "
-                "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date <= %(created_to)s) "
+                f"SELECT body FROM insights WHERE {_SELECTION} "
                 "ORDER BY ordinal LIMIT %(limit)s OFFSET %(offset)s",
                 {**selection.model_dump(), "dataset_id": dataset_id, "offset": offset},
             ).fetchall()
         return [row[0] for row in rows]
+
+    def count_insights(self, dataset_id: str, selection: InsightFilter) -> int:
+        """Rows matching the selection, before its limit."""
+        with self.lock:
+            return self.connection.execute(
+                f"SELECT count(*) FROM insights WHERE {_SELECTION}",
+                {**selection.model_dump(), "dataset_id": dataset_id},
+            ).fetchone()[0]
+
+    def dataset_facets(self, dataset_id: str) -> dict:
+        """Filter choices with row counts, and the India Standard Time date range."""
+        facets = {}
+        with self.lock:
+            for column in ("crop", "concern", "resolution_type", "quality_flag"):
+                rows = self.connection.execute(
+                    f"SELECT {column}, count(*) FROM insights WHERE dataset_id=%s "
+                    f"AND {column} IS NOT NULL GROUP BY {column} ORDER BY count(*) DESC, {column}",
+                    (dataset_id,),
+                ).fetchall()
+                facets[column] = [{"value": value, "count": count} for value, count in rows]
+            first, last = self.connection.execute(
+                "SELECT min((created_at AT TIME ZONE 'Asia/Kolkata')::date), "
+                "max((created_at AT TIME ZONE 'Asia/Kolkata')::date) FROM insights "
+                "WHERE dataset_id=%s",
+                (dataset_id,),
+            ).fetchone()
+        facets["created"] = {"from": _iso(first), "to": _iso(last)}
+        return facets
+
+    # Generation runs for the scheduler (purpose 'handoff'), as the console lists them.
+
+    def list_runs(self, limit: int = 50) -> list[dict]:
+        with self.lock:
+            rows = self.connection.execute(
+                f"{_RUN_SUMMARY} WHERE r.purpose='handoff' "
+                "GROUP BY r.run_id,j.job_id ORDER BY r.created_at DESC LIMIT %s",
+                (limit,),
+            ).fetchall()
+        return [_run_summary(row) for row in rows]
+
+    def run_summary(self, run_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                f"{_RUN_SUMMARY} WHERE r.run_id=%s GROUP BY r.run_id,j.job_id", (run_id,)
+            ).fetchone()
+        return _run_summary(row) if row else None
+
+    def run_results(
+        self, run_id: str, status: str | None = None, offset: int = 0, limit: int = 50
+    ) -> list[dict]:
+        """One page of results, newest checkpoint last, with the fields a results table
+        shows. The full outcome comes from run_result."""
+        with self.lock:
+            rows = self.connection.execute(
+                "SELECT insight_id,status,insight,outcome->>'rule',outcome->>'reason',"
+                "outcome->>'detail',outcome->'survey'->'items'->0->>'prompt',"
+                "outcome->'candidate_survey'->'items'->0->>'prompt',"
+                "jsonb_array_length(coalesce(outcome->'survey'->'items','[]')),"
+                "(outcome->'review'->>'relevance_score')::float,"
+                "(outcome->>'elapsed_seconds')::float FROM insight_results "
+                "WHERE run_id=%s AND (%s::text IS NULL OR status=%s) "
+                "ORDER BY updated_at,insight_id LIMIT %s OFFSET %s",
+                (run_id, status, status, limit, offset),
+            ).fetchall()
+        return [
+            {
+                "insight_id": key,
+                "status": state,
+                "insight": {
+                    field: insight.get(field)
+                    for field in (
+                        "farmer_id",
+                        "created_at",
+                        "concern",
+                        "conversation_language",
+                        "query_summary",
+                        "advice_summary",
+                    )
+                }
+                | {"crop": (insight.get("asset") or {}).get("name")},
+                "rule": rule,
+                "reason": reason,
+                "detail": detail,
+                "first_question": question or draft_question,
+                "questions": questions,
+                "relevance": relevance,
+                "elapsed_seconds": elapsed,
+            }
+            for (
+                key,
+                state,
+                insight,
+                rule,
+                reason,
+                detail,
+                question,
+                draft_question,
+                questions,
+                relevance,
+                elapsed,
+            ) in rows
+        ]
+
+    def run_result(self, run_id: str, insight_id: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT status,insight,outcome FROM insight_results "
+                "WHERE run_id=%s AND insight_id=%s",
+                (run_id, insight_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"insight_id": insight_id, "status": row[0], "insight": row[1], "outcome": row[2]}
 
     # Jobs. Workers claim queued jobs with SKIP LOCKED, so several runners can share
     # one queue without running a job twice.
@@ -529,6 +632,62 @@ class Store:
 
 def _iso(value) -> str | None:
     return value.isoformat() if value else None
+
+
+# Unset filter fields match every row; untyped NULL parameters need casts.
+_SELECTION = (
+    "dataset_id=%(dataset_id)s "
+    "AND (%(farmer_id)s::text IS NULL OR farmer_id=%(farmer_id)s) "
+    "AND (%(crop)s::text IS NULL OR crop=%(crop)s) "
+    "AND (%(concern)s::text IS NULL OR concern=%(concern)s) "
+    "AND (%(resolution_type)s::text IS NULL OR resolution_type=%(resolution_type)s) "
+    "AND (%(quality_flag)s::text IS NULL OR quality_flag=%(quality_flag)s) "
+    "AND (%(created_from)s::date IS NULL "
+    "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date >= %(created_from)s) "
+    "AND (%(created_to)s::date IS NULL "
+    "OR (created_at AT TIME ZONE 'Asia/Kolkata')::date <= %(created_to)s)"
+)
+
+_RUN_SUMMARY = (
+    "SELECT r.run_id,r.status,r.created_at,r.finished_at,r.config_id,r.job_id,"
+    "r.manifest->'selection',j.progress,"
+    "coalesce(jsonb_object_agg(i.status,i.n) FILTER (WHERE i.status IS NOT NULL),'{}'),"
+    "coalesce(sum(i.input_tokens),0),coalesce(sum(i.output_tokens),0) "
+    "FROM generation_runs r LEFT JOIN jobs j ON j.job_id=r.job_id "
+    "LEFT JOIN (SELECT run_id,status,count(*) n,"
+    "sum((outcome->>'input_tokens')::bigint) input_tokens,"
+    "sum((outcome->>'output_tokens')::bigint) output_tokens "
+    "FROM insight_results GROUP BY run_id,status) i ON i.run_id=r.run_id"
+)
+
+
+def _run_summary(row) -> dict:
+    (
+        run_id,
+        status,
+        created,
+        finished,
+        config_id,
+        job_id,
+        selection,
+        progress,
+        counts,
+        input_tokens,
+        output_tokens,
+    ) = row
+    return {
+        "run_id": str(run_id),
+        "status": status,
+        "created_at": _iso(created),
+        "finished_at": _iso(finished),
+        "config_id": str(config_id) if config_id else None,
+        "job_id": str(job_id) if job_id else None,
+        "selection": selection,
+        "progress": progress,
+        "counts": counts,
+        "input_tokens": int(input_tokens),
+        "output_tokens": int(output_tokens),
+    }
 
 
 def _config_summary(row, definition: dict) -> dict:

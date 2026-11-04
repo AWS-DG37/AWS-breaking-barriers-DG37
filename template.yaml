@@ -414,6 +414,7 @@ Resources:
           MEL_AUTH_CLIENT_ID: !Ref UserPoolClient
           MEL_AUTH_ISSUER: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
           MEL_CONSOLE_URL: !Sub 'https://${UiDistribution.DomainName}'
+          MEL_PACK_URI: !Sub 's3://${DataBucket}/datasets/participant-pack/insights.jsonl'
       Policies:
         - Version: '2012-10-17'
           Statement:
@@ -432,6 +433,9 @@ Resources:
             - Effect: Allow
               Action: [bedrock:ListFoundationModels, bedrock:ListInferenceProfiles]
               Resource: '*'
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub '${DataBucket.Arn}/datasets/*'
 
   # Console origin: the UI from a private bucket, and /api/* from the console API, so
   # the browser sees one origin (no CORS) and session cookies stay first-party.

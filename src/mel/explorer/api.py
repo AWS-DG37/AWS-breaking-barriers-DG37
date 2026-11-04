@@ -16,9 +16,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
-from mel.bundle import Bundle
+from mel.bundle import Bundle, read_bytes
 from mel.config import Settings, StrictModel
-from mel.configs import active_config
+from mel.configs import active_config, config_bundle
 from mel.datasets import InsightFilter, parse_insights
 from mel.experiments import (
     ExperimentSpec,
@@ -29,12 +29,11 @@ from mel.experiments import (
     validate_assessment,
 )
 from mel.explorer import auth
-from mel.jobs import BatchJobSpec, dispatch
+from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
 from mel.store import Store
 
 logger = logging.getLogger("mel.explorer")
-PACK_INSIGHTS = Path("docs/participant-pack/data/insights.jsonl")
 BROWSE_LIMIT = 500
 
 
@@ -288,9 +287,13 @@ def create_app(
 
     @app.post("/api/datasets/import-pack", status_code=201)
     def import_pack():
-        if not PACK_INSIGHTS.is_file():
-            raise HTTPException(503, "The participant pack insights file is unavailable")
-        return import_rows("Participant pack insights", PACK_INSIGHTS.read_bytes())
+        try:
+            body = read_bytes(settings.pack_uri, settings.aws_region)
+        except Exception as error:
+            raise HTTPException(
+                503, f"Participant pack unavailable ({type(error).__name__})"
+            ) from None
+        return import_rows("Participant pack", body)
 
     def import_rows(name: str, body: bytes) -> dict:
         try:
@@ -318,6 +321,80 @@ def create_app(
 
         return {"insights": database_call(query), "limit": limit, "offset": offset}
 
+    @app.get("/api/datasets/{dataset_id}/facets")
+    def dataset_facets(dataset_id: UUID):
+        def facets(db):
+            dataset = db.dataset(str(dataset_id))
+            if dataset is None:
+                raise HTTPException(404, "Dataset not found")
+            return {**dataset, "facets": db.dataset_facets(str(dataset_id))}
+
+        return database_call(facets)
+
+    @app.get("/api/datasets/{dataset_id}/count")
+    def dataset_count(dataset_id: UUID, selection: Annotated[InsightFilter, Query()]):
+        def count(db):
+            if db.dataset(str(dataset_id)) is None:
+                raise HTTPException(404, "Dataset not found")
+            unlimited = selection.model_copy(update={"limit": None})
+            matched = db.count_insights(str(dataset_id), unlimited)
+            return {"matched": matched, "selected": min(matched, selection.limit or matched)}
+
+        return database_call(count)
+
+    def batch_spec(db, value: NewBatchJob) -> BatchJobSpec:
+        if db.dataset(str(value.dataset_id)) is None:
+            raise HTTPException(422, "Unknown dataset")
+        if value.config_id is None:
+            config_id, _ = active_config(db, settings)
+        elif db.config(str(value.config_id)) is None:
+            raise HTTPException(422, "Unknown configuration version")
+        else:
+            config_id = str(value.config_id)
+        return BatchJobSpec(
+            dataset_id=value.dataset_id, config_id=config_id, selection=value.selection
+        )
+
+    @app.post("/api/jobs/batch/estimate")
+    def estimate(value: NewBatchJob):
+        """The rules' verdict on the selection and the rough model usage, before any spend."""
+
+        def run(db):
+            spec = batch_spec(db, value)
+            bundle = config_bundle(db, str(spec.config_id))
+            insights = db.insights(str(spec.dataset_id), spec.selection)
+            return {"config_id": str(spec.config_id), **estimate_batch(bundle, insights)}
+
+        return database_call(run)
+
+    @app.get("/api/runs")
+    def runs():
+        return {"runs": database_call(lambda db: db.list_runs())}
+
+    @app.get("/api/runs/{run_id}")
+    def run(run_id: UUID):
+        summary = database_call(lambda db: db.run_summary(str(run_id)))
+        if summary is None:
+            raise HTTPException(404, "Run not found")
+        return summary
+
+    @app.get("/api/runs/{run_id}/results")
+    def run_results(
+        run_id: UUID,
+        status: Literal["accepted", "skipped", "rejected", "failed"] | None = None,
+        offset: Annotated[int, Query(ge=0)] = 0,
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    ):
+        rows = database_call(lambda db: db.run_results(str(run_id), status, offset, limit))
+        return {"results": rows, "offset": offset, "limit": limit}
+
+    @app.get("/api/runs/{run_id}/results/{insight_id}")
+    def run_result(run_id: UUID, insight_id: str):
+        record = database_call(lambda db: db.run_result(str(run_id), insight_id))
+        if record is None:
+            raise HTTPException(404, "Result not found")
+        return record
+
     @app.get("/api/jobs")
     def jobs():
         return {"jobs": database_call(lambda db: db.list_jobs())}
@@ -335,17 +412,7 @@ def create_app(
             raise HTTPException(403, "Live execution is disabled")
 
         def enqueue(db):
-            if db.dataset(str(value.dataset_id)) is None:
-                raise HTTPException(422, "Unknown dataset")
-            if value.config_id is None:
-                config_id, _ = active_config(db, settings)
-            elif db.config(str(value.config_id)) is None:
-                raise HTTPException(422, "Unknown configuration version")
-            else:
-                config_id = str(value.config_id)
-            spec = BatchJobSpec(
-                dataset_id=value.dataset_id, config_id=config_id, selection=value.selection
-            )
+            spec = batch_spec(db, value)
             return queue(db, "batch", spec.model_dump(mode="json"))
 
         return database_call(enqueue)

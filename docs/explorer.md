@@ -95,10 +95,18 @@ handles a token. Administrators invite users; there is no self sign-up:
 AWS_PROFILE=workshop bash scripts/add_console_user.sh person@example.org
 ```
 
-The worker's IAM policy authorizes Mantle inference only. Configure native Converse
-permissions before using Converse candidates in a deployed worker. The image omits the
-pack's insight file, so upload datasets with `POST /api/datasets` there.
+The console opens on **Generate**: choose a dataset (load the participant pack from the
+empty state the first time), filter it, pick a configuration version, and check
+**Before you run**, which applies the rules to the selection without model calls and
+shows how many insights get a survey, which rules skip the rest, and the rough number
+of model calls. **Run** queues a batch job; its page shows progress, outcome counts and
+every result, and selecting one shows the agent's steps and a survey preview.
+**Compare** is the model comparison described above. Configure, Schedule and Feedback
+are shown greyed out until they exist. Hosted, `deploy.sh` copies the pack to the data
+bucket, from which the API imports it (`MEL_PACK_URI`).
 
+The worker's IAM policy authorizes Mantle inference only. Configure native Converse
+permissions before using Converse candidates in a deployed worker. 
 ## Change a team-owned component
 
 | Concern | Owner |

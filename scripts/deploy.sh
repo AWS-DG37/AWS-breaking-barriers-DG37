@@ -45,6 +45,9 @@ output() {
   aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
     --query "Stacks[0].Outputs[?OutputKey==\`$1\`].OutputValue | [0]" --output text
 }
+# The image omits datasets; the console loads the participant pack from the data bucket.
+aws s3 cp docs/participant-pack/data/insights.jsonl \
+  "s3://$(output DataBucketName)/datasets/participant-pack/insights.jsonl"
 UI_BUCKET="$(output UiBucketName)"
 STATIC=src/mel/explorer/static
 aws s3 sync "$STATIC" "s3://$UI_BUCKET/static" --delete --exclude '*.test.mjs' --exclude index.html

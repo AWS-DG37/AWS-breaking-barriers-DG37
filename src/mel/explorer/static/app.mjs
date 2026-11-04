@@ -1,5 +1,7 @@
 import {el} from './dom.mjs';
-import {signIn, signedIn, signOut} from './auth.mjs';
+import {signedIn, signOut} from './auth.mjs';
+import {api} from './api.mjs';
+import {showGenerate, leaveGenerate} from './generate.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
 
@@ -11,13 +13,6 @@ const text=(value)=>typeof value === 'object' ? JSON.stringify(value,null,2) : d
 const raw=value=>el('pre',{},text(value));
 const badge=value=>el('span',{class:`badge ${['failed','rejected','completed_with_errors'].includes(value)?'warning':''}`},value?.replaceAll('_',' ') || 'Unknown');
 function notice(message, error=false) { $('notice').hidden=!message; $('notice').className=error?'notice error':'notice'; $('notice').textContent=message; }
-async function api(path, options={}) {
-  const response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json',...options.headers}});
-  if (response.status===401) return signIn();
-  const data=await response.json().catch(()=>({detail:`Server returned ${response.status}.`}));
-  if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail || data));
-  return data;
-}
 const disclosure=(label,value,open=false)=>el('details',open?{open:true}:{},el('summary',{},label),raw(value));
 function picker(label,options,value,change) {
   return el('label',{},label,el('select',{'aria-label':label,onChange:event=>change(event.target.value)},options.map(([id,title])=>el('option',{value:id,selected:String(id)===String(value)},title))));
@@ -223,15 +218,29 @@ function renderComposer() {
 $('new').addEventListener('click',renderComposer);
 $('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
 $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
+let compareLoaded=false;
+function route() {
+  const tab=location.hash.startsWith('#compare')?'compare':'generate';
+  $('generate-view').hidden=tab!=='generate';
+  $('compare-view').hidden=tab!=='compare';
+  document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
+  if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),location.hash || '#generate'); return; }
+  leaveGenerate();
+  if (!compareLoaded) { compareLoaded=true; bootCompare(); }
+}
 async function boot() {
   try {
     const session=await api('/auth/session');
     if (session.auth) { signedIn(); $('sign-out').hidden=false; }
-  } catch(error) { $('health').textContent='Sign-in unavailable'; notice(error.message,true); return; }
+  } catch(error) { $('health').textContent='Sign-in unavailable'; $('generate-view').replaceChildren(el('p',{class:'notice error'},error.message)); return; }
+  api('/health').then(h=>{$('health').textContent=`Database ${h.database}`;}).catch(()=>{$('health').textContent='Server unavailable';});
+  window.addEventListener('hashchange',route);
+  route();
+}
+async function bootCompare() {
   const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));
-  const results=await Promise.allSettled([api('/health'),api('/config'),listExperiments()]);
-  const [health,config,experiments]=results;
-  $('health').textContent=health.status==='fulfilled'?`Database ${health.value.database}`:'Server unavailable';
+  const results=await Promise.allSettled([api('/config'),listExperiments()]);
+  const [config,experiments]=results;
   if(config.status==='fulfilled') state.config=config.value;
   if(experiments.status==='rejected') notice(`Cannot read experiments. ${experiments.reason.message} Use Refresh to try again.`,true);
   else if(state.experiments.length) await openExperiment((state.experiments.find(e=>e.source==='recorded') || state.experiments[0]).experiment_id);
@@ -240,3 +249,5 @@ async function boot() {
 boot();
 window.addEventListener('pagehide',()=>clearTimeout(poll));
 $('sign-out').addEventListener('click',signOut);
+// The skip link focuses the visible section; a hash link would switch tabs.
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();($('generate-view').hidden?$('workspace'):$('generate-view')).focus();});

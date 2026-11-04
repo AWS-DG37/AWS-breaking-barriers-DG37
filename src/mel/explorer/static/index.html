@@ -4,18 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#007A27">
-  <title>FarmerChat Pipeline Explorer</title>
+  <title>FarmerChat MEL Console</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="stylesheet" href="/static/survey-player.css">
   <script type="module" src="/static/app.mjs"></script>
 </head>
 <body>
-  <a class="skip" href="#workspace">Skip to experiment</a>
+  <a class="skip" href="#generate">Skip to content</a>
   <header class="masthead">
-    <a class="brand" href="/" aria-label="FarmerChat explorer home"><span class="brand-parent">Digital Green</span><span>FarmerChat <small>Pipeline Explorer</small></span></a>
+    <a class="brand" href="/" aria-label="FarmerChat explorer home"><span class="brand-parent">Digital Green</span><span>FarmerChat <small>MEL Console</small></span></a>
+    <nav class="tabs" aria-label="Console sections">
+      <a href="#generate" data-tab="generate">Generate</a>
+      <a href="#compare" data-tab="compare">Compare</a>
+      <span class="tab-later" title="Planned: edit and version the agent configuration">Configure</span>
+      <span class="tab-later" title="Planned: season clock, frequency cap and delivery">Schedule</span>
+      <span class="tab-later" title="Planned: rate questions and propose improvements">Feedback</span>
+    </nav>
     <span class="masthead-status"><span id="health" class="health">Connecting to saved runs</span><button id="sign-out" class="quiet" hidden>Sign out</button></span>
   </header>
-  <div class="shell">
+  <main id="generate-view" class="generate" tabindex="-1" hidden></main>
+  <div class="shell" id="compare-view" hidden>
     <aside class="sidebar" aria-label="Experiments">
       <div class="sidebar-title"><h2>Experiments</h2><button id="refresh" class="quiet">Refresh</button></div>
       <p class="muted small">Saved evidence, ready to inspect.</p>
