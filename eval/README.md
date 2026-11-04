@@ -212,6 +212,34 @@ with the judge's rationale. Calibration passes when every criterion reaches 90%
 agreement and no call fails. If it fails, edit the rubric and calibrate again on
 dev. Omit `--max-cases` to use all 47 dev survey rows (up to eight controls each).
 
+### Calibration result and improvement iteration, 4 November 2026
+
+Judge `openai.gpt-6-luna` (the config's review model) in `us-east-1`, dev half only.
+Each cell is agreement with the known-answer controls.
+
+| Criterion | v1, 10 rows | v2, 10 rows | v2, 47 rows | v3, 47 rows |
+| --- | --- | --- | --- | --- |
+| advice_grounding | 30/30 | 30/30 | 141/141 | 141/141 |
+| measures_adoption | **18/20** | 20/20 | 94/94 | 94/94 |
+| measures_outcome | 20/20 | 20/20 | 94/94 | 94/94 |
+| follow_up_routing | 18/18 | 17/18 | **87/90** | 90/90 |
+| no_new_advice | 20/20 | 20/20 | 94/94 | 94/94 |
+| no_personal_info | 20/20 | 20/20 | 94/94 | 94/94 |
+| Calls (failed) | 68 (0) | 68 (0) | 325 (0) | 325 (0) |
+
+- v1 to v2: the judge said that "Have you seen new drying patches? Yes / No / Did
+  not check" does not show the farmer checked (G-0013, G-0015). The rubric now says
+  that a separate "Did not check" answer makes the question measure adoption.
+- v2 to v3: on three rows the judge answered `not_applicable` although one survey
+  option carried a correct code (G-0021, G-0042, G-0123). The rubric now limits
+  `not_applicable` to surveys with no `follow_up` key and tells the judge to ignore
+  the reference questions for this criterion.
+
+The controls are synthetic. Perfect agreement shows that the judge applies the
+rubric to clear cases, not that it agrees with human MEL reviewers on real surveys.
+`relevance_calibration_dev.json` is the v3 report. A test fails if the rubric or
+the split changes without a new calibration.
+
 ### 2. Score saved results
 
 ```bash
@@ -220,7 +248,7 @@ uv run --locked mel-worker golden-insights --golden eval/golden_holdout.jsonl \
 # Generate surveys from those insights (preview, run or the console), then:
 uv run --locked mel-worker eval relevance --part test \
   --results outputs/local/<run-id>/results.jsonl \
-  --calibration outputs/eval/relevance-calibration-<uuid>.json
+  --calibration eval/relevance_calibration_dev.json
 ```
 
 `--part test` refuses to call the model unless the calibration report passed and

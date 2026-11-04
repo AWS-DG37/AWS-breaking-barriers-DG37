@@ -197,6 +197,15 @@ def test_counts_sit_beside_every_rate():
         assert measurement["denominator"] >= 1
 
 
+def test_the_committed_dev_calibration_matches_the_committed_rubric_and_split():
+    """Editing the rubric or the split needs a new dev calibration before test scoring."""
+    report = json.loads((ROOT / "eval/relevance_calibration_dev.json").read_text())
+    relevance.require_calibration(
+        report, split_path=SPLIT, rubric=RUBRIC, judge_model=report["judge_model"],
+    )
+    assert report["dev_survey_rows"] == 47 and report["failed_calls"] == 0
+
+
 def test_failed_judge_calls_still_count_their_usage(tmp_path, monkeypatch):
     from mel import agents, worker
 

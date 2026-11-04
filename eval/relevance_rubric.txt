@@ -28,7 +28,9 @@ advice_grounding
 measures_adoption
   met: at least one question asks whether the farmer did what was advised. For
   "hold off" advice, holding off is the adoption. For "watch and monitor" advice,
-  checking or observing is the adoption. For expert escalation, contacting the
+  checking or observing is the adoption. A question that asks whether the farmer has
+  seen the warning sign, with a separate answer such as "Did not check", measures
+  adoption: every other answer means the farmer checked. For expert escalation, contacting the
   expert is the adoption. For a plan, how much of the plan was done.
   not_met: no question measures whether the advice was followed.
 
@@ -52,7 +54,9 @@ follow_up_routing
   never carry advice_did_not_work.
   not_met: a follow_up sits on a positive or neutral answer, or names the wrong
   problem for its answer (for example advice_did_not_work on "Worse").
-  not_applicable: the survey has no follow_up codes at all.
+  not_applicable: only when no option in "survey" has a "follow_up" key. Check
+  every option of every survey question. Reference questions never carry codes, so
+  ignore them here. If even one survey option has a follow_up, answer met or not_met.
 
 no_new_advice
   met: the survey only asks. It does not tell the farmer to do something new or
