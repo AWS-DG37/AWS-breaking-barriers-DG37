@@ -69,8 +69,71 @@ export ELEVENLABS_API_KEY="$(cat ~/.secrets/elevenlabs-dg37-key)"
    uv run pytest tests/test_voice_session.py
    ```
 
-To change the voice or the wording, edit `VOICE` in `render_audio.py` or `VOICE_LINES` in
-`survey-session.mjs`, then run step 2 again.
+### Automatic recording for the demo
+
+On `main`, a GitHub Actions workflow
+([`.github/workflows/voice-audio.yml`](../.github/workflows/voice-audio.yml)) does step 2 by
+itself. It runs when a push to `main` changes a demo survey or the wording. It records
+the missing clips, commits them to `docs/voice/audio`, and rebuilds GitHub Pages. To run
+it by hand, open **Actions > Record voice clips > Run workflow** and keep the branch
+`main`. On any other branch the job does not run.
+
+The workflow reads the key from the repository secret `ELEVENLABS_API_KEY`. The
+hackathon key expires on 2026-11-11. After that the workflow fails until you replace
+the secret:
+
+```bash
+gh secret set ELEVENLABS_API_KEY --repo AWS-DG37/AWS-breaking-barriers-DG37 < key-file
+```
+
+To change the voice, edit `VOICE` in [`src/mel/voice.py`](../src/mel/voice.py). To change
+the wording, edit `VOICE_LINES` in both `src/mel/voice.py` and `survey-session.mjs`:
+`tests/test_voice_audio.py` fails when the two differ. Then run step 2 again.
+
+## Hosted: the worker records each accepted survey
+
+In the deployed stack nobody runs `render_audio.py`. When the worker accepts a survey for
+the scheduler (`mel-worker run` or a console batch job), it records the survey's lines
+that are not stored yet and saves each one as `s3://<DataBucket>/voice/audio/<clip>`.
+A clip that is already stored costs nothing. Previews and model comparisons record
+nothing, because their surveys are never scheduled.
+
+```mermaid
+flowchart LR
+    W[Worker accepts a survey] --> L[spoken lines and clip names<br/>src/mel/voice.py]
+    L -- clip not stored --> T[ElevenLabs text to speech<br/>3 attempts]
+    T --> S[s3://DataBucket/voice/audio]
+    L -- every clip stored --> H[handoff keeps voice]
+    T -- still failing --> X[handoff without voice<br/>error in trace and log]
+    S --> C[console /voice/audio/] --> P[Voice page]
+```
+
+- **No new handoff field.** `schedule_handoff.schema.json` allows no extra fields. The
+  handoff already holds the survey, and a clip name is a hash of the survey's language
+  and spoken text, so the page and a broadcaster compute the names themselves
+  (`clipName()` in JavaScript, `clip_name()` in Python).
+- **No audio, no voice channel.** If a line still fails after three attempts, or the
+  key is not set, the worker removes `voice` from the handoff's `channel_order`, writes a
+  `voice` trace event with the error, and logs `voice_recording_failed`. The survey still
+  goes out on its other channels. A `voice` channel in a handoff means every clip exists.
+- **Bounded time.** Recording runs after the survey's own time limit, with a budget of
+  120 seconds per survey plus one call in progress (30 s). After that it counts as failed.
+- **Play a new survey.** Open the console, sign in, then open
+  `https://<console>/voice/index.html?survey=/api/runs/<run_id>/results/<insight_id>/survey`.
+
+### Set the key
+
+The stack creates an empty secret, `VoiceKeySecretArn` in the stack outputs. Put the key
+in it once after the first deploy, and again when the key changes:
+
+```bash
+aws secretsmanager put-secret-value --secret-id "<VoiceKeySecretArn>" \
+  --secret-string "$(cat ~/.secrets/elevenlabs-dg37-key)"
+```
+
+The hackathon key expires on 2026-11-11. After that, every recording fails and surveys
+leave the voice channel until you put a key from your own ElevenLabs account in the
+secret. The worker reads the secret at the start of each run, so no deploy is needed.
 
 ## Run the page locally
 
@@ -93,3 +156,5 @@ Open `http://localhost:8737/voice/` and press **Read aloud**. Query parameters:
 - **Cost:** recording all 37 current lines took about 3,000 characters, once. Playing
   them costs nothing.
 - **Not built:** answers stay in the page and are not sent to a store.
+- **Changing the voice:** a clip name does not include the voice. After a change to
+  `VOICE`, empty `s3://<DataBucket>/voice/audio/`, or the worker keeps the old clips.

@@ -4,7 +4,8 @@
 const SKIPPED = 'skipped';
 
 // What the page says aloud, per language. The farmer answers only by tapping.
-// voice/render_audio.py records every line once with ElevenLabs.
+// src/mel/voice.py holds the same wording in Python and records every line once with
+// ElevenLabs. Change both together: tests/test_voice_audio.py fails when they differ.
 export const VOICE_LINES = {
   en: {
     opening: n => `Hello, this is FarmerChat. I have ${n} short questions about the advice you got. Tap your answer on the screen.`,
@@ -52,7 +53,7 @@ export function spokenLines(survey) {
 }
 
 // The recorded clip for one line: the first 16 hex digits of SHA-256("<language>\n<text>").
-// voice/render_audio.py names its files the same way.
+// clip_name() in src/mel/voice.py names the recorded files the same way.
 export async function clipName(language, text) {
   const bytes = new TextEncoder().encode(`${language}\n${text}`);
   const digest = new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes));
