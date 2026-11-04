@@ -32,9 +32,9 @@ async def oracle(message: str) -> relevance.RelevanceJudgment:
         (o["label"], o["follow_up"]) for item in body["survey"]
         for o in item.get("options", []) if o.get("follow_up")
     ]
-    routing = "not_applicable" if not routes else (
-        "not_met" if any(label in relevance.POSITIVE_LABELS for label, _ in routes) else "met"
-    )
+    wrong = {(label, code) for label, code in routes if label in relevance.POSITIVE_LABELS}
+    wrong |= set(routes) & set(relevance.WRONG_CODE_ROUTES.items())
+    routing = "not_applicable" if not routes else ("not_met" if wrong else "met")
     met = lambda ok: "met" if ok else "not_met"  # noqa: E731
     return relevance.RelevanceJudgment(
         advice_grounding=_criterion(met(grounded)),
@@ -88,8 +88,22 @@ def test_controls_use_dev_rows_only_and_cover_every_criterion():
     assert covered == set(relevance.CRITERIA)
     assert {c["control"] for c in cases} >= {
         "own_reference", "unrelated_reference", "generic_question", "positive_routing",
-        "problem_routing", "injected_new_advice", "injected_personal_info",
+        "problem_routing", "wrong_code_routing", "injected_new_advice",
+        "injected_personal_info",
     }
+
+
+def test_routing_controls_follow_the_generator_follow_up_contract():
+    prompt = (ROOT / "prompts/generate.txt").read_text()
+    assert "A Worse outcome answer carries crop_or_animal_damaged" in prompt
+    cases = relevance.controls(_rows("dev"))
+    for case in cases:
+        codes = {(o["label"], o.get("follow_up")) for item in case["items"]
+                 for o in item["options"] if o.get("follow_up")}
+        if case["control"] == "problem_routing":
+            assert ("Worse", "advice_did_not_work") not in codes
+        if case["control"] == "wrong_code_routing":
+            assert codes == {("Worse", "advice_did_not_work")}
 
 
 def test_the_judge_message_leaves_out_identifiers():

@@ -40,12 +40,18 @@ measures_outcome
   survey (rare; explain why).
 
 follow_up_routing
-  met: every follow_up code sits on an answer that shows a problem the code names
-  (for example could_not_reach_expert on "Could not reach", advice_did_not_work on
-  "Worse" or "No" to "is it working"), and no positive or neutral answer ("Yes" to
-  adoption, "Better", "All steps") carries a follow_up.
+  met: every follow_up code sits on an answer that shows the problem the code names:
+  - crop_or_animal_damaged: a "Worse" outcome, or "Yes" to having seen the warning
+    sign the farmer was told to watch for;
+  - advice_did_not_work: only an answer that says the advice did not help, such as
+    "No" to "Is the plan working so far?" or "Did their advice help?";
+  - could_not_reach_expert: not reaching a named expert (doctor, vet, agronomist);
+  - could_not_get_input: a product, seed or service the farmer could not obtain.
+  No positive or neutral answer ("Yes" to adoption, "Better", "All steps") carries a
+  follow_up. "Not yet", "Too early to say", "Cannot tell" and "Did it differently"
+  never carry advice_did_not_work.
   not_met: a follow_up sits on a positive or neutral answer, or names the wrong
-  problem for its answer.
+  problem for its answer (for example advice_did_not_work on "Worse").
   not_applicable: the survey has no follow_up codes at all.
 
 no_new_advice

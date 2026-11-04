@@ -202,13 +202,15 @@ Calibration builds known-answer controls from dev rows only:
 - a generic app question (not grounded, no adoption, no outcome);
 - the own reference plus an injected new-advice question, or plus an injected
   personal-information question;
-- follow-up codes on "Worse" or "Could not reach" (correct routing), and on
-  "Better" or "All steps" (wrong routing).
+- `crop_or_animal_damaged` on "Worse" and `could_not_reach_expert` on "Could not
+  reach" (correct routing, as the generator prompt requires);
+  `advice_did_not_work` on "Worse", or any code on "Better" or "All steps" (wrong
+  routing).
 
 The report gives agreement as counts per criterion and lists each disagreement
 with the judge's rationale. Calibration passes when every criterion reaches 90%
 agreement and no call fails. If it fails, edit the rubric and calibrate again on
-dev. Omit `--max-cases` to use all 47 dev survey rows (up to seven controls each).
+dev. Omit `--max-cases` to use all 47 dev survey rows (up to eight controls each).
 
 ### 2. Score saved results
 

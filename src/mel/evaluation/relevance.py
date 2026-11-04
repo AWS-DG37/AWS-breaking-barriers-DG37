@@ -125,7 +125,10 @@ PERSONAL_ITEM = {
 }
 # "Yes" is not here: "Have you seen new drooping plants? Yes" reports a problem.
 POSITIVE_LABELS = {"Better", "All steps"}
-PROBLEM_ROUTES = {"Worse": "advice_did_not_work", "Could not reach": "could_not_reach_expert"}
+# The generator contract (prompts/generate.txt): "A Worse outcome answer carries
+# crop_or_animal_damaged"; advice_did_not_work only on an answer that says it did not help.
+PROBLEM_ROUTES = {"Worse": "crop_or_animal_damaged", "Could not reach": "could_not_reach_expert"}
+WRONG_CODE_ROUTES = {"Worse": "advice_did_not_work"}
 
 
 OUTCOME_QUESTIONS = {"Is the plan working so far?", "Did their advice help?"}
@@ -184,6 +187,9 @@ def controls(rows: list[Mapping]) -> list[dict]:
         positive = {label: "advice_did_not_work" for label in POSITIVE_LABELS}
         if any(o["label"] in positive for item in own for o in item["options"]):
             add("positive_routing", _routed(own, positive), {"follow_up_routing": "not_met"})
+        if any(o["label"] in WRONG_CODE_ROUTES for item in own for o in item["options"]):
+            add("wrong_code_routing", _routed(own, WRONG_CODE_ROUTES),
+                {"follow_up_routing": "not_met"})
         add("injected_new_advice", [*own, NEW_ADVICE_ITEM], {"no_new_advice": "not_met"})
         add("injected_personal_info", [*own, PERSONAL_ITEM], {"no_personal_info": "not_met"})
         add("generic_question", [GENERIC_ITEM], {
