@@ -20,6 +20,7 @@ from mel.graph import Dependencies, Select, State, survey_graph
 from mel.models import Outcome
 from mel.policy import IST
 from mel.store import Store
+from mel.usage import UsageRefused, gateway_context
 
 logger = logging.getLogger("mel")
 
@@ -49,6 +50,8 @@ async def process_insight(
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
+    except UsageRefused:
+        raise
     except Exception as error:
         state.record("failure", "runtime", error_type=type(error).__name__)
         outcome = Outcome(
@@ -67,7 +70,8 @@ async def process_insight(
     outcome.elapsed_seconds = round(time.monotonic() - started, 3)
     prices = deps.config.batch
     if (
-        outcome.usage_complete
+        gateway_context.get() is None
+        and outcome.usage_complete
         and prices.input_cost_per_million is not None
         and prices.output_cost_per_million is not None
     ):

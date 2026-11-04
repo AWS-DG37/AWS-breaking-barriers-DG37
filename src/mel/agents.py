@@ -8,6 +8,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from mel.bedrock import create_mantle_client
 from mel.config import AgentConfig, ModelConfig
 from mel.models import Review, SurveyDraft
+from mel.usage import MeteredModel, gateway_context
 
 
 def build_agents(
@@ -15,8 +16,9 @@ def build_agents(
 ) -> tuple[Agent, Agent]:
     responses_provider = None
     converse_provider = None
+    gateway = gateway_context.get()
 
-    def agent(model: ModelConfig, output: type, prompt: str) -> Agent:
+    def agent(model: ModelConfig, output: type, prompt: str, role: str) -> Agent:
         nonlocal responses_provider, converse_provider
         if not model.model_id:
             raise ValueError("Resolve a Bedrock model ID before constructing an agent")
@@ -25,12 +27,25 @@ def build_agents(
             settings["temperature"] = model.temperature
         if model.api == "converse":
             if converse_provider is None:
-                converse_provider = BedrockProvider(region_name=region)
+                if gateway is None:
+                    converse_provider = BedrockProvider(region_name=region)
+                else:
+                    import boto3
+                    from botocore.config import Config
+
+                    client = boto3.client(
+                        "bedrock-runtime",
+                        region_name=region,
+                        config=Config(retries={"total_max_attempts": 1, "mode": "standard"}),
+                    )
+                    converse_provider = BedrockProvider(bedrock_client=client)
             native_model = BedrockConverseModel(model.model_id, provider=converse_provider)
         else:
             if responses_provider is None:
                 responses_provider = OpenAIProvider(
-                    openai_client=create_mantle_client(region, project_id)
+                    openai_client=create_mantle_client(
+                        region, project_id, **({"max_retries": 0} if gateway else {})
+                    )
                 )
             settings.update(
                 openai_store=False,
@@ -45,6 +60,8 @@ def build_agents(
                     openai_supports_encrypted_reasoning_content=True,
                 ),
             )
+        if gateway is not None:
+            native_model = MeteredModel(native_model, gateway, model, region, role)
         return Agent(
             native_model,
             output_type=output,
@@ -54,6 +71,6 @@ def build_agents(
         )
 
     return (
-        agent(config.generation, SurveyDraft, prompts["generate"]),
-        agent(config.review, Review, prompts["review"]),
+        agent(config.generation, SurveyDraft, prompts["generate"], "generate"),
+        agent(config.review, Review, prompts["review"], "review"),
     )

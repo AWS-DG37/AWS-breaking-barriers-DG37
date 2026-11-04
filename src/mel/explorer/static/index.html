@@ -21,6 +21,7 @@
       <p class="muted small">Saved evidence, ready to inspect.</p>
       <div id="experiment-list" aria-live="polite"><p>Loading experiments…</p></div>
       <button id="import" class="secondary wide">Import recorded run</button>
+      <button id="usage" class="secondary wide">Usage and live controls</button>
       <button id="new" class="primary wide">New live experiment</button>
       <p class="small muted sidebar-note">Recorded runs replay saved outputs. Live experiments invoke the selected models. Neither sends surveys to farmers.</p>
       <footer>Field Echo · Team 37<br>AWS Breaking Barriers 2026</footer>
@@ -28,6 +29,7 @@
     <main id="workspace" tabindex="-1">
       <div id="notice" role="status" aria-live="polite" hidden></div>
       <section id="content" aria-label="Experiment workspace"><div class="empty"><h1>Follow an insight.<br>Understand every question.</h1><p>Choose a saved experiment to explore its decisions, survey questions and available evidence.</p></div></section>
+      <section id="usage-panel" hidden aria-label="Usage and live controls"></section>
       <section id="composer" hidden aria-labelledby="form-title"></section>
     </main>
   </div>

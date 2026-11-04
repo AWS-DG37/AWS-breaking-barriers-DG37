@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import copy
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from pydantic_ai import Agent
@@ -20,6 +20,7 @@ from mel.config import AgentConfig
 from mel.contracts import Contracts
 from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
 from mel.policy import eligibility, handoff, send_window
+from mel.usage import identity_context, usage_scope
 
 
 @dataclass
@@ -140,13 +141,17 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
             "context": s.context,
         }
         s.record("generate", "runtime", kind="request", payload=payload)
-        result = await d.generator.run(
-            json.dumps(payload, ensure_ascii=False),
-            usage=s.usage,
-            usage_limits=UsageLimits(
-                request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-            ),
-        )
+        identity = identity_context.get()
+        with usage_scope(
+            identity=replace(identity, role="generate", attempt=s.attempts) if identity else None
+        ):
+            result = await d.generator.run(
+                json.dumps(payload, ensure_ascii=False),
+                usage=s.usage,
+                usage_limits=UsageLimits(
+                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                ),
+            )
         check_usage(s, result)
         s.question_evidence = list(result.output.question_evidence)
         s.survey = {
@@ -175,20 +180,27 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
         s.record("schema", "schema", target="survey", valid=not s.feedback, errors=s.feedback)
         if not s.feedback:
             s.record("review", "runtime", kind="request", survey=s.survey)
-            result = await d.reviewer.run(
-                json.dumps(
-                    {
-                        "insight": s.insight,
-                        "survey": s.survey,
-                        "constraints": {"max_questions": 3, "conditional_display_supported": False},
-                    },
-                    ensure_ascii=False,
-                ),
-                usage=s.usage,
-                usage_limits=UsageLimits(
-                    request_limit=s.usage.requests + d.config.graph.max_requests_per_call
-                ),
-            )
+            identity = identity_context.get()
+            with usage_scope(
+                identity=replace(identity, role="review", attempt=s.attempts) if identity else None
+            ):
+                result = await d.reviewer.run(
+                    json.dumps(
+                        {
+                            "insight": s.insight,
+                            "survey": s.survey,
+                            "constraints": {
+                                "max_questions": 3,
+                                "conditional_display_supported": False,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                    usage=s.usage,
+                    usage_limits=UsageLimits(
+                        request_limit=s.usage.requests + d.config.graph.max_requests_per_call
+                    ),
+                )
             check_usage(s, result)
             s.review = result.output
             s.record("review", "model", kind="response", review=s.review.model_dump())

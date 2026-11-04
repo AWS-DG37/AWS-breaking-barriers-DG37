@@ -54,6 +54,7 @@ class AgentConfig(StrictModel):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="MEL_", extra="ignore")
     aws_region: str = "us-east-1"
+    explorer_allowed_origins: list[str] = ["http://localhost:8765", "http://127.0.0.1:8765"]
     config_path: Path = Path("config/agent.yaml")
     bedrock_model_id: str | None = "openai.gpt-6-luna"  # Fallback for null YAML model IDs.
     bedrock_project_id: str = "default"

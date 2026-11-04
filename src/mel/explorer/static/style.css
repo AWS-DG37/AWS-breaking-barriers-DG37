@@ -741,3 +741,9 @@ form h2+p {
 .check.fail,.finding { background:#FFF0EB; color:#81392C; }
 .finding { padding:12px; border-left:3px solid #B65D4D; margin-top:12px; }
 .comparison>label { max-width:360px; margin:16px 0 8px; }
+
+.exposure { background: #f0f7ef; border: 1px solid #bfd6bc; border-radius: 12px; padding: 1rem; margin: 1rem 0; overflow-wrap: anywhere; }
+.price-row { border: 1px solid #ccd9cd; border-radius: 10px; padding: 1rem; margin: 1rem 0; min-width: 0; }
+.price-row input, .price-row select { max-width: 100%; }
+.usage-analysis { margin: 1.5rem 0; }
+.usage-breakdown { border-bottom: 1px solid #d9e1d7; padding-bottom: .75rem; overflow-wrap: anywhere; }

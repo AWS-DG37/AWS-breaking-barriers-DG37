@@ -22,6 +22,7 @@ from mel.graph import Dependencies
 from mel.models import Outcome, TraceEvent
 from mel.policy import eligibility, send_window
 from mel.store import Store
+from mel.usage import CallIdentity, UsageRefused, usage_scope
 from mel.worker import close_model_clients, process_insight
 
 
@@ -221,12 +222,15 @@ async def execute_experiment(
                 for ordinal, row in enumerate(rows, 1):
                     if row["insight_id"] in completed:
                         continue
-                    outcome = await process_insight(
-                        row,
-                        f"S-{ordinal:010d}",
-                        deps,
-                        context=snapshot["contexts"][row["insight_id"]],
-                    )
+                    with usage_scope(
+                        identity=CallIdentity(run_id, row["insight_id"], "generate", 1)
+                    ):
+                        outcome = await process_insight(
+                            row,
+                            f"S-{ordinal:010d}",
+                            deps,
+                            context=snapshot["contexts"][row["insight_id"]],
+                        )
                     await asyncio.to_thread(store.save, run_id, row, outcome)
                     run_had_errors |= outcome.status == "failed"
                     had_errors |= run_had_errors
@@ -236,6 +240,9 @@ async def execute_experiment(
                 await asyncio.to_thread(
                     store.finish, run_id, "completed_with_errors" if run_had_errors else "completed"
                 )
+            except UsageRefused:
+                await asyncio.to_thread(store.finish, run_id, "failed")
+                raise
             except BaseException as error:
                 had_errors = True
                 completed = await asyncio.to_thread(store.completed, run_id, False)

@@ -10,10 +10,10 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
@@ -30,6 +30,7 @@ from mel.experiments import (
 )
 from mel.models import Outcome
 from mel.store import Store
+from mel.usage import PolicyConflict, PolicyUpdate, UsageGateway, UsageRefused, usage_scope
 
 logger = logging.getLogger("mel.explorer")
 FLOW = {
@@ -135,7 +136,7 @@ def create_app(
     catalog_loader=discover_models,
     executor=execute_experiment,
     demo_path: Path | None = None,
-    live_enabled: bool = True,
+    live_enabled: bool = False,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
@@ -150,6 +151,34 @@ def create_app(
         await asyncio.gather(*jobs, return_exceptions=True)
 
     app = FastAPI(title="FarmerChat experiment explorer", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def operator_intent(request: Request, call_next):
+        if request.url.path.startswith("/api/") and request.method not in (
+            "GET",
+            "HEAD",
+            "OPTIONS",
+        ):
+            origin = request.headers.get("origin")
+            if (
+                request.headers.get("x-mel-intent") != "operator"
+                or request.headers.get("content-type", "").split(";")[0] != "application/json"
+                or request.headers.get("sec-fetch-site") == "cross-site"
+                or (origin is not None and origin not in settings.explorer_allowed_origins)
+            ):
+                return JSONResponse(
+                    {"detail": "An explicit same-site JSON action is required"}, status_code=403
+                )
+        return await call_next(request)
+
+    @app.exception_handler(UsageRefused)
+    async def refused(request, error):
+        return JSONResponse(
+            {"detail": str(error)}, status_code=409 if isinstance(error, PolicyConflict) else 403
+        )
+
+    def gateway(db, version=None):
+        return UsageGateway(db, host_allowed=live_enabled, expected_version=version)
 
     def database():
         db = None
@@ -166,7 +195,7 @@ def create_app(
         db = database()
         try:
             return operation(db)
-        except HTTPException:
+        except (HTTPException, UsageRefused):
             raise
         except Exception as error:
             raise HTTPException(
@@ -200,6 +229,7 @@ def create_app(
                 ],
                 "flow": FLOW,
                 "live_enabled": live_enabled,
+                "aws_region": settings.aws_region,
             }
         except Exception as error:
             raise HTTPException(
@@ -238,11 +268,36 @@ def create_app(
             "flow": FLOW,
         }
 
-    async def execute(spec, key):
+    @app.get("/api/live-policy")
+    def live_policy():
+        return database_call(lambda db: gateway(db).view())
+
+    @app.put("/api/live-policy")
+    def update_live_policy(update: PolicyUpdate):
+        return database_call(lambda db: gateway(db).configure(update))
+
+    @app.post("/api/usage/quote")
+    def quote(spec: ExperimentSpec):
+        bundle = Bundle.load(settings)
+        return database_call(
+            lambda db: gateway(db).quote(spec, settings.aws_region, bundle.config.graph)
+        )
+
+    @app.get("/api/usage")
+    def usage(run_id: UUID | None = None, experiment_id: UUID | None = None):
+        return database_call(
+            lambda db: gateway(db).analysis(
+                run_id=str(run_id) if run_id else None,
+                experiment_id=str(experiment_id) if experiment_id else None,
+            )
+        )
+
+    async def execute(spec, key, version):
         db = None
         try:
             db = await asyncio.to_thread(database)
-            await executor(spec, settings=settings, store=db, experiment_id=key)
+            with usage_scope(gateway=gateway(db, version)):
+                await executor(spec, settings=settings, store=db, experiment_id=key)
         except BaseException as error:
             logger.error("Experiment %s failed (%s)", key, type(error).__name__)
             if db is not None:
@@ -252,7 +307,12 @@ def create_app(
                 await asyncio.to_thread(db.close)
 
     @app.post("/api/experiments", status_code=202)
-    async def start_experiment(spec: ExperimentSpec):
+    async def start_experiment(
+        spec: ExperimentSpec,
+        x_mel_launch_id: UUID = Header(),
+        x_mel_policy_version: int = Header(ge=0),
+        x_mel_quote: str = Header(pattern=r"^[0-9a-f]{64}$"),
+    ):
         if not live_enabled:
             raise HTTPException(403, "Live execution is disabled")
         try:
@@ -266,11 +326,21 @@ def create_app(
         async with job_lock:
             if len(jobs) >= 2:
                 raise HTTPException(429, "Two experiments are already active. Wait for completion.")
-            key = str(uuid4())
-            await asyncio.to_thread(
-                database_call, lambda db: db.create_experiment(key, spec.model_dump(mode="json"))
+            bundle = Bundle.load(settings)
+            key, created = await asyncio.to_thread(
+                database_call,
+                lambda db: gateway(db).launch(
+                    str(x_mel_launch_id),
+                    spec,
+                    x_mel_policy_version,
+                    settings.aws_region,
+                    bundle.config.graph,
+                    quote_hash=x_mel_quote,
+                ),
             )
-            task = asyncio.create_task(execute(spec, key))
+            if not created:
+                return {"experiment_id": key, "status": "previously_queued"}
+            task = asyncio.create_task(execute(spec, key, x_mel_policy_version))
             jobs.add(task)
             task.add_done_callback(jobs.discard)
         return {"experiment_id": key, "status": "queued"}
@@ -317,6 +387,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--allow-live",
+        action="store_true",
+        help="Allow persisted website controls to enable model execution",
+    )
     parser.add_argument("--no-live", action="store_true", help="Disable live model execution")
     args = parser.parse_args()
-    uvicorn.run(create_app(live_enabled=not args.no_live), host=args.host, port=args.port)
+    uvicorn.run(
+        create_app(live_enabled=args.allow_live and not args.no_live),
+        host=args.host,
+        port=args.port,
+    )

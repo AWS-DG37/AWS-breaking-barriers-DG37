@@ -68,7 +68,9 @@ class Store:
 
 def test_assessments_keep_identical_question_ids_separate_by_run():
     store = Store()
-    with TestClient(create_app(store_factory=lambda _: store)) as client:
+    with TestClient(
+        create_app(store_factory=lambda _: store), headers={"X-MEL-Intent": "operator"}
+    ) as client:
         rating = {
             "scope": "question",
             "assessor": "human",
@@ -118,7 +120,15 @@ def test_get_does_not_start_live_execution_and_invalid_requests_do_not_queue():
     async def execute(*args, **kwargs):
         invoked.append(kwargs["experiment_id"])
 
-    with TestClient(create_app(store_factory=lambda _: store, executor=execute)) as client:
+    with TestClient(
+        create_app(store_factory=lambda _: store, executor=execute),
+        headers={
+            "X-MEL-Intent": "operator",
+            "X-MEL-Launch-Id": str(uuid4()),
+            "X-MEL-Policy-Version": "0",
+            "X-MEL-Quote": "0" * 64,
+        },
+    ) as client:
         assert client.get("/api/experiments").status_code == 200
         assert not invoked
         spec = specification().model_dump(mode="json")
@@ -126,8 +136,8 @@ def test_get_does_not_start_live_execution_and_invalid_requests_do_not_queue():
         assert client.post("/api/experiments", json=spec).status_code == 422
         assert not store.created
         spec["row_limit"] = 1
-        assert client.post("/api/experiments", json=spec).status_code == 202
-    assert invoked
+        assert client.post("/api/experiments", json=spec).status_code == 403
+    assert not invoked
 
 
 def test_recorded_import_preserves_actual_relevance_and_absent_history(tmp_path):

@@ -1,4 +1,5 @@
 import {el} from './dom.mjs';
+import {mountUsage, quoteView} from './usage.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {parseJsonLines, displayValue, questionAssessments, eventsForStage, selectedModel} from './domain.mjs';
 
@@ -11,7 +12,7 @@ const raw=value=>el('pre',{},text(value));
 const badge=value=>el('span',{class:`badge ${['failed','rejected','completed_with_errors'].includes(value)?'warning':''}`},value?.replaceAll('_',' ') || 'Unknown');
 function notice(message, error=false) { $('notice').hidden=!message; $('notice').className=error?'notice error':'notice'; $('notice').textContent=message; }
 async function api(path, options={}) {
-  const response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json',...options.headers}});
+  const response=await fetch(`/api${path}`,{...options,headers:{'Content-Type':'application/json','X-MEL-Intent':'operator',...options.headers}});
   const data=await response.json().catch(()=>({detail:`Server returned ${response.status}.`}));
   if (!response.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail || data));
   return data;
@@ -28,6 +29,7 @@ async function listExperiments() {
   },el('strong',{},item.name),el('span',{class:'small muted'},`${item.source==='recorded'?'Recorded':'Live'} · ${item.insight_count} insights · ${item.candidate_count} candidates`),badge(item.status))) : [el('p',{class:'empty-note'},'No experiments saved yet. Import a recorded run or create a bounded live experiment.')]));
 }
 async function openExperiment(id, refresh=false, reference=null) {
+  $('usage-panel').hidden=true;
   const ticket=++state.request;
   clearTimeout(poll);
   if(!refresh) { $('composer').hidden=true; $('content').hidden=false; $('content').replaceChildren(el('p',{class:'empty-note'},'Loading saved evidence…')); }
@@ -164,6 +166,7 @@ function modelOptions() {
 }
 function renderComposer() {
   clearTimeout(poll); ++state.request;
+  $('usage-panel').hidden=true;
   $('content').hidden=true; $('composer').hidden=false;
   const config=state.config;
   if(!config) { $('composer').replaceChildren(el('h1',{},'Configuration unavailable'),el('p',{},'Refresh the page after the server configuration is available.')); return; }
@@ -174,27 +177,34 @@ function renderComposer() {
   const candidates=el('div',{class:'candidate-fields'});
   function addCandidate(model) {
     const row=el('div',{class:'candidate-row'},el('label',{},'Candidate label',el('input',{name:'candidate_label',required:true,value:`Candidate ${candidates.children.length+1}`})),el('label',{},'Model and native API',selectModel('candidate_model',model)));
-    row.append(el('button',{type:'button',class:'quiet',onClick:()=>{row.remove();add.disabled=candidates.children.length>=6;}},'Remove')); candidates.append(row);
+    row.append(el('button',{type:'button',class:'quiet',onClick:()=>{row.remove();add.disabled=candidates.children.length>=6;invalidateQuote();}},'Remove')); candidates.append(row);
     add.disabled=candidates.children.length>=6;
   }
-  const add=el('button',{type:'button',class:'secondary',onClick:()=>addCandidate()},'Add candidate');
+  const add=el('button',{type:'button',class:'secondary',onClick:()=>{addCandidate();invalidateQuote();}},'Add candidate');
   for(const candidate of config.default_candidates || []) addCandidate(candidate.model);
   if(!candidates.children.length) addCandidate();
-  const upload=el('input',{type:'file',accept:'.jsonl,.ndjson,.json,text/plain',onChange:async event=>{const file=event.target.files[0]; if(file) input.value=await file.text();}});
-  const form=el('form',{onSubmit:async event=>{
-    event.preventDefault();
-    const submit=form.querySelector('[type=submit]');
-    try {
+  const upload=el('input',{type:'file',accept:'.jsonl,.ndjson,.json,text/plain',onChange:async event=>{const file=event.target.files[0]; if(file) {input.value=await file.text();invalidateQuote();}}});
+  let reviewedQuote=null, launchId=null;
+  const exposure=el('div',{});
+  function composeSpec() {
       const data=new FormData(form), insights=parseJsonLines(input.value), profileRows=parseJsonLines(profiles.value);
       if(!insights.length) throw new Error('Add at least one normalized insight.');
       if(!candidates.children.length) throw new Error('Select at least one candidate.');
       const model=(index,defaults)=>selectedModel(choices[Number(index)],defaults);
-      const spec={name:data.get('name').trim(),insights,profiles:profileRows,candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value.trim(),model:model(row.querySelector('select').value,config.default_candidates[0]?.model)})),reviewer:model(data.get('reviewer'),config.default_reviewer),row_limit:Number(data.get('row_limit')),ruleset:data.get('ruleset'),evaluation_reference:data.get('reference')};
+      return {name:data.get('name').trim(),insights,profiles:profileRows,candidates:[...candidates.children].map(row=>({label:row.querySelector('input').value.trim(),model:model(row.querySelector('select').value,config.default_candidates[0]?.model)})),reviewer:model(data.get('reviewer'),config.default_reviewer),row_limit:Number(data.get('row_limit')),ruleset:data.get('ruleset'),evaluation_reference:data.get('reference')};
+  }
+  function invalidateQuote() {reviewedQuote=null;launchId=null;form.querySelector('[type=submit]').disabled=true;exposure.replaceChildren(el('p',{},'Inputs changed. Review a fresh estimate before launching.'));}
+  const form=el('form',{onInput:invalidateQuote,onSubmit:async event=>{
+    event.preventDefault();
+    const submit=form.querySelector('[type=submit]');
+    try {
+      const spec=composeSpec();
+      if(!reviewedQuote?.effective) throw new Error('Review an available estimate first.');
       submit.disabled=true; notice('Submitting bounded live experiment…');
-      const result=await api('/experiments',{method:'POST',body:JSON.stringify(spec)});
+      const result=await api('/experiments',{method:'POST',headers:{'X-MEL-Launch-Id':launchId,'X-MEL-Policy-Version':String(reviewedQuote.policy_version),'X-MEL-Quote':reviewedQuote.terms_hash},body:JSON.stringify(spec)});
       notice('Live experiment queued. Execution results will appear as they are saved.'); await openExperiment(result.experiment_id);
     } catch(error) { notice(`Experiment was not submitted. ${error.message}`,true); }
-    finally {submit.disabled=!config.live_enabled;}
+    finally {submit.disabled=!reviewedQuote?.effective;}
   }});
   form.append(
     el('div',{class:'form-grid'},
@@ -214,13 +224,20 @@ function renderComposer() {
     el('details',{},el('summary',{},'Optional farmer profile context'),el('label',{},'Profile JSONL',profiles)),
     el('div',{class:'launch'},
       el('p',{},config.live_enabled?'This explicitly invokes the selected Bedrock models. Default run size is 3 insight rows. Experiment results stay outside the scheduler handoff queue.':'Live execution is disabled by the server. Recorded experiments remain available.'),
-      el('button',{type:'submit',class:'primary',disabled:!config.live_enabled},'Run live experiment')));
+      el('button',{type:'button',class:'secondary',onClick:async()=>{try {if(!form.reportValidity()) return;reviewedQuote=await api('/usage/quote',{method:'POST',body:JSON.stringify(composeSpec())});launchId=crypto.randomUUID();exposure.replaceChildren(quoteView(reviewedQuote));form.querySelector('[type=submit]').disabled=!reviewedQuote.effective;}catch(error){notice(error.message,true);}}},'Review cost estimate'),
+      el('button',{type:'submit',class:'primary',disabled:true},'Run live experiment')),exposure);
 
   $('composer').replaceChildren(el('div',{class:'heading'},el('div',{},el('h1',{id:'form-title'},'New live experiment'),el('p',{class:'muted'},'Make a deliberate change. Keep the evidence.')),el('button',{class:'secondary',onClick:()=>{ $('composer').hidden=true; $('content').hidden=false; if(state.detail) openExperiment(state.detail.experiment_id); }},'Back to saved runs')),form);
 }
 $('new').addEventListener('click',renderComposer);
+$('usage').addEventListener('click',async()=>{
+  clearTimeout(poll);++state.request;
+  $('content').hidden=true;$('composer').hidden=true;$('usage-panel').hidden=false;
+  try {await mountUsage($('usage-panel'),{api,config:state.config||{},detail:state.detail,onPolicy:policy=>{state.policy=policy;},notice});}
+  catch(error) {notice(`Usage controls unavailable. ${error.message}`,true);}
+});
 $('refresh').addEventListener('click',async()=>{try {await listExperiments();if(state.detail) await openExperiment(state.detail.experiment_id,true); notice('Saved experiments refreshed.');}catch(error){notice(error.message,true);}});
-$('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
+$('import').addEventListener('click',async()=>{const b=$('import');b.disabled=true;try {const result=await api('/import-recorded',{method:'POST',body:'{}'});notice('Recorded artifact imported. Intermediate events are shown only when they were saved.');await openExperiment(result.experiment_id);}catch(error){notice(`Recorded import unavailable. ${error.message}`,true);}finally{b.disabled=false;}});
 async function boot() {
   const catalog=api('/models').then(models=>{state.models=models.models;if(models.error) notice(`Model catalog partially available. ${models.error}`,true);}).catch(error=>notice(`Model catalog unavailable. ${error.message} Recorded runs remain usable.`,true));
   const results=await Promise.allSettled([api('/health'),api('/config'),listExperiments()]);
