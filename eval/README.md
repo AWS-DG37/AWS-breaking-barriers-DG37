@@ -163,11 +163,32 @@ The policy score assesses decisions before inference. It does not score generate
 questions. Language quality, channel precedence and generation reliability stay
 `not_assessed`. The relevance judge below scores generated questions.
 
+## Privacy calibration (calls Bedrock)
+
+```bash
+uv run --locked mel-worker eval calibrate-privacy --max-cases 8
+```
+
+Omit `--max-cases` for all 47 dev survey rows (188 reviewer calls before retries).
+Each row has clean and personal-question controls in English and Hindi; clean
+Hindi controls rotate three benign keyword traps. The judge is the production
+reviewer, using the config's review prompt and model. `--split`, `--config`,
+`--model-id`, `--api`, and `--output` override their defaults.
+
+Reports default to `outputs/eval/privacy-calibration-<uuid>.json` and never
+overwrite an existing file. They include prompt, split and scorer hashes, token
+usage including failed calls, FP/FN numerator/denominator counts by language,
+false positives by Hindi trap, quotes for disagreements, and failed cases.
+Failed calls are excluded from FP/FN denominators and independently fail the gate.
+`gate.build_narrow_check` is true if any false negative occurs, false positives
+exceed the fixed limit of 2, or any reviewer call fails; `passed` is its inverse.
+The gate recommends the separate narrow check; calibration does not build it.
+
 ## Relevance judge (calls Bedrock)
 
 The judge reads saved worker results. It does not run the worker and adds no
-inference loop to it. Only these two commands call a model. The judge model is the
-config's review model unless you set `--model-id` and `--api`.
+inference loop to it. These two commands and privacy calibration call a model.
+The judge model is the config's review model unless you set `--model-id` and `--api`.
 
 The rubric is `eval/relevance_rubric.txt`. For each generated survey, the judge
 marks six criteria as met, not met or not applicable:
