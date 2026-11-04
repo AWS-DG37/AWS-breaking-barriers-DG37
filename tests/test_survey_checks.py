@@ -38,12 +38,6 @@ def test_golden_reference_questions_raise_no_false_positives():
     assert flagged == []
 
 
-def test_dont_know_answers_are_not_personal_information():
-    survey = load(next(p for p in SCENARIOS if p.name == "survey.hi-IN.json"))
-    survey["items"][0]["options"].append({"value": "dont_know", "label": "पता नहीं"})
-    assert survey_issues(survey) == []
-
-
 def hindi_strings(value):
     if isinstance(value, str):
         return [value] if any("ऀ" <= c <= "ॿ" for c in value) else []
@@ -54,15 +48,7 @@ def hindi_strings(value):
     return []
 
 
-def test_hindi_terms_match_whole_words_only():
-    survey = load(next(p for p in SCENARIOS if p.name == "survey.hi-IN.json"))
-    survey["items"][0]["prompt"] = "क्या आपने तेल-आधारित कीटनाशक का छिड़काव किया?"
-    assert survey_issues(survey) == []
-    survey["items"][0]["prompt"] = "अपना आधार नंबर बताएं?"
-    assert any("personal" in issue for issue in survey_issues(survey))
-
-
-def test_recorded_demo_hindi_text_raises_no_personal_flags():
+def test_recorded_demo_hindi_text_raises_no_false_positives():
     recorded = json.loads(
         Path("src/mel/explorer/demo/recorded-run.json").read_text(encoding="utf-8")
     )
@@ -97,7 +83,6 @@ def drop_follow_ups(survey):
     [
         (lambda s: s["items"][0].update(prompt=s["items"][0]["prompt"] + " \U0001f33e"), "emoji"),
         (lambda s: s["items"][0].update(prompt="Did you spray on 12/11?"), "exact date"),
-        (lambda s: s["items"][0].update(prompt="What is your phone number?"), "personal"),
         (lambda s: s.update(language="en-IN"), "Devanagari in an English"),
         (lambda s: s["items"][0].update(prompt="Did you spray?"), "no Devanagari"),
         (drop_follow_ups, "routed back"),

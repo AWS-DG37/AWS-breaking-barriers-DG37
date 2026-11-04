@@ -2,9 +2,12 @@
 
 Ported from the hackathon starter kit's check_survey.py (add-mel-starter). The draft
 models and the pack schema already enforce shape: label length, option counts and
-follow_up values. These cover what they cannot: emoji, exact dates, personal-
-information words, script that does not match the language, and surveys whose
-answers cannot route a bad outcome back for follow-up.
+follow_up values. These cover what they cannot: emoji, exact dates, script that does
+not match the language, and surveys whose answers cannot route a bad outcome back.
+
+Personal-information asks are left to the model reviewer (Review.asks_personal_info).
+A keyword list rejected valid questions in three review rounds: पता नहीं ("don't
+know"), आधारित ("based on") and asking whether the farmer phoned the expert.
 """
 
 from __future__ import annotations
@@ -18,19 +21,6 @@ DATE = re.compile(
     r"|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2}\b",
     re.I,
 )
-# ponytail: a keyword list, not a classifier. The model reviewer still judges meaning;
-# upgrade to a reviewed term list per language if false positives appear.
-PERSONAL_EN = re.compile(
-    r"\b(name|phone|mobile|address|aadhaa?r|income|salary|bank|account number)\b", re.I
-)
-# Hindi terms match whole words only: as substrings, आधार (Aadhaar) hits आधारित ("based
-# on"). पता (address) is left out: पता नहीं is the everyday "don't know" answer.
-PERSONAL_HI = frozenset({"नाम", "फोन", "मोबाइल", "आधार", "आमदनी", "कमाई", "बैंक"})
-HINDI_WORD = re.compile(r"[ऀ-ॣ०-ॿ]+")  # Excludes the danda punctuation.
-
-
-def _personal(text: str) -> bool:
-    return bool(PERSONAL_EN.search(text)) or not PERSONAL_HI.isdisjoint(HINDI_WORD.findall(text))
 
 
 def survey_issues(survey: dict) -> list[str]:
@@ -48,8 +38,6 @@ def survey_issues(survey: dict) -> list[str]:
                 issues.append(f"{key}: remove the emoji from the {kind}")
             if DATE.search(text):
                 issues.append(f"{key}: the {kind} names an exact date; use relative timing")
-            if _personal(text):
-                issues.append(f"{key}: the {kind} may ask for personal information: {text[:40]}")
             if language == "en-IN" and DEVANAGARI.search(text):
                 issues.append(f"{key}: the {kind} uses Devanagari in an English survey")
         if language == "hi-IN" and not DEVANAGARI.search(item.get("prompt") or ""):
