@@ -9,6 +9,7 @@ from postgres import requires_postgres
 from test_improvement_postgres import Shared, batch_run
 from test_jobs_postgres import SETTINGS, active, agents, fund_console
 
+from mel.browse import ResultFilter
 from mel.costs import cap_view
 from mel.experiments import ExperimentSpec, execute_experiment
 from mel.explorer.api import create_app
@@ -37,7 +38,7 @@ def test_deleting_a_run_removes_its_records_but_keeps_spend_and_review_comments(
     config_id = active(database)
     run_id = batch_run(database, config_id)
     job_id = database.run_summary(run_id)["job_id"]
-    accepted = database.run_results(run_id, "accepted")[0]["insight_id"]
+    accepted = database.run_results(run_id, ResultFilter(status="accepted"))[0]["insight_id"]
     client = console(database)
     list_id = client.post("/api/review-lists", json={"name": "Keep me"}).json()["list_id"]
     item = client.post(
@@ -72,7 +73,8 @@ def test_comparison_running_and_claimed_runs_are_refused(database):
 
     experiment = str(uuid4())
     insight = database.run_result(
-        run := batch_run(database, config_id), database.run_results(run)[0]["insight_id"]
+        run := batch_run(database, config_id),
+        database.run_results(run, ResultFilter())[0]["insight_id"],
     )["insight"]
     asyncio.run(
         execute_experiment(

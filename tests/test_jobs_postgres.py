@@ -15,6 +15,7 @@ from test_costs import price
 from test_experiments import versions
 from test_trace import dependencies
 
+from mel.browse import ResultFilter, RunFilter
 from mel.bundle import Bundle
 from mel.config import Settings
 from mel.costs import CapUpdate, NewPrice, cap_view, save_price, set_cap
@@ -185,14 +186,14 @@ def test_facets_counts_and_the_runs_view_describe_a_batch(database):
     summary = database.run_summary(run["run_id"])
     assert summary["job_id"] == job["job_id"] and summary["progress"] == {"done": 4, "total": 4}
     assert sum(summary["counts"].values()) == 4
-    assert run["run_id"] in {r["run_id"] for r in database.list_runs()}
-    rows = database.run_results(run["run_id"])
+    assert run["run_id"] in {r["run_id"] for r in database.list_runs(RunFilter())}
+    rows = database.run_results(run["run_id"], ResultFilter())
     assert len(rows) == 4
     accepted = [r for r in rows if r["status"] == "accepted"]
     assert accepted and all(r["first_question"] and r["questions"] >= 1 for r in accepted)
-    skipped = database.run_results(run["run_id"], status="skipped")
+    skipped = database.run_results(run["run_id"], ResultFilter(status="skipped"))
     assert all(r["rule"] and r["rule"] != "R8" for r in skipped)
-    assert database.run_results(run["run_id"], offset=3, limit=5)[0] == rows[3]
+    assert database.run_results(run["run_id"], ResultFilter(), offset=3, limit=5)[0] == rows[3]
     one = database.run_result(run["run_id"], rows[0]["insight_id"])
     assert one["outcome"]["insight_id"] == rows[0]["insight_id"]
     assert database.run_result(run["run_id"], "missing") is None

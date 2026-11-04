@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import boto3
 
+from mel.browse import ResultFilter, RunFilter, like_pattern
 from mel.bundle import definition_sha256
 from mel.config import Settings
 from mel.datasets import InsightFilter, index_columns
@@ -492,12 +493,14 @@ class Store:
 
     # Generation runs for the scheduler (purpose 'handoff'), as the console lists them.
 
-    def list_runs(self, limit: int = 50) -> list[dict]:
+    def list_runs(self, runs: RunFilter, limit: int = 200) -> list[dict]:
         with self.lock:
             rows = self.connection.execute(
                 f"{_RUN_SUMMARY} WHERE r.purpose='handoff' "
-                "GROUP BY r.run_id,j.job_id ORDER BY r.created_at DESC LIMIT %s",
-                (limit,),
+                "AND (%(status)s::text IS NULL OR r.status=%(status)s) "
+                "AND (%(config)s::uuid IS NULL OR r.config_id=%(config)s) "
+                f"GROUP BY r.run_id,j.job_id ORDER BY {_RUN_ORDER[runs.sort]} LIMIT %(limit)s",
+                {"status": runs.status, "config": runs.config_id, "limit": limit},
             ).fetchall()
         return [_run_summary(row) for row in rows]
 
@@ -509,10 +512,11 @@ class Store:
         return _run_summary(row) if row else None
 
     def run_results(
-        self, run_id: str, status: str | None = None, offset: int = 0, limit: int = 50
+        self, run_id: str, results: ResultFilter, offset: int = 0, limit: int = 50
     ) -> list[dict]:
-        """One page of results, newest checkpoint last, with the fields a results table
-        shows. The full outcome comes from run_result."""
+        """One page of matching results, with the fields a results table shows. The
+        full outcome comes from run_result."""
+        search = like_pattern(results.search) if results.search else None
         with self.lock:
             rows = self.connection.execute(
                 "SELECT insight_id,status,insight,outcome->>'rule',outcome->>'reason',"
@@ -521,9 +525,29 @@ class Store:
                 "jsonb_array_length(coalesce(outcome->'survey'->'items','[]')),"
                 "(outcome->'review'->>'relevance_score')::float,"
                 "(outcome->>'elapsed_seconds')::float FROM insight_results "
-                "WHERE run_id=%s AND (%s::text IS NULL OR status=%s) "
-                "ORDER BY updated_at,insight_id LIMIT %s OFFSET %s",
-                (run_id, status, status, limit, offset),
+                "WHERE run_id=%(run)s AND (%(status)s::text IS NULL OR status=%(status)s) "
+                "AND (%(crop)s::text IS NULL OR insight->'asset'->>'name'=%(crop)s) "
+                "AND (%(concern)s::text IS NULL OR insight->>'concern'=%(concern)s) "
+                "AND (%(rule)s::text IS NULL OR outcome->>'rule'=%(rule)s) "
+                "AND (%(search)s::text IS NULL OR insight_id ILIKE %(search)s "
+                "OR insight->>'query_summary' ILIKE %(search)s "
+                "OR insight->>'advice_summary' ILIKE %(search)s "
+                "OR EXISTS (SELECT 1 FROM jsonb_array_elements(coalesce(outcome->'survey'->"
+                "'items',outcome->'candidate_survey'->'items','[]')) q "
+                "WHERE q->>'prompt' ILIKE %(search)s)) "
+                f"ORDER BY {_RESULT_ORDER[results.sort]} {results.direction.upper()} NULLS LAST,"
+                f"insight_id {results.direction.upper()} "
+                "LIMIT %(limit)s OFFSET %(offset)s",
+                {
+                    "run": run_id,
+                    "status": results.status,
+                    "crop": results.crop,
+                    "concern": results.concern,
+                    "rule": results.rule,
+                    "search": search,
+                    "limit": limit,
+                    "offset": offset,
+                },
             ).fetchall()
         return [
             {
@@ -563,6 +587,25 @@ class Store:
                 elapsed,
             ) in rows
         ]
+
+    def run_facets(self, run_id: str) -> dict:
+        """The crops, concerns and deciding rules in a run, with result counts."""
+        columns = {
+            "crops": "insight->'asset'->>'name'",
+            "concerns": "insight->>'concern'",
+            "rules": "outcome->>'rule'",
+        }
+        with self.lock:
+            return {
+                key: dict(
+                    self.connection.execute(
+                        f"SELECT {column},count(*) FROM insight_results WHERE run_id=%s "
+                        f"AND {column} IS NOT NULL GROUP BY 1 ORDER BY 2 DESC,1",
+                        (run_id,),
+                    ).fetchall()
+                )
+                for key, column in columns.items()
+            }
 
     def run_result(self, run_id: str, insight_id: str) -> dict | None:
         with self.lock:
@@ -921,6 +964,25 @@ _RUN_SUMMARY = (
     "sum((outcome->>'output_tokens')::bigint) output_tokens "
     "FROM insight_results GROUP BY run_id,status) i ON i.run_id=r.run_id"
 )
+
+
+# Whitelisted ORDER BY clauses; filters choose a key, never SQL.
+_RUN_ORDER = {
+    "newest": "r.created_at DESC,r.run_id DESC",
+    "oldest": "r.created_at,r.run_id",
+    "most_accepted": "coalesce(sum(i.n) FILTER (WHERE i.status='accepted'),0) DESC,"
+    "r.created_at DESC,r.run_id DESC",
+    "most_results": "coalesce(sum(i.n),0) DESC,r.created_at DESC,r.run_id DESC",
+}
+_RESULT_ORDER = {
+    "processed": "updated_at",
+    "insight": "insight_id",
+    # ISO text, not a cast: junk insights (R1) may carry a malformed date.
+    "insight_date": "insight->>'created_at'",
+    "outcome": "array_position(ARRAY['accepted','rejected','skipped','failed'],status)",
+    "relevance": "(outcome->'review'->>'relevance_score')::float",
+    "time": "(outcome->>'elapsed_seconds')::float",
+}
 
 
 def _run_summary(row) -> dict:
