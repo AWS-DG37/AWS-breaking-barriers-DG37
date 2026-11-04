@@ -247,6 +247,8 @@ class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
                 f"relevance={r.relevance_score}; correct_language={r.language_correct}; "
                 f"new_advice={r.gives_new_advice}; personal_info={r.asks_personal_info}"
             ]
+            if r.asks_personal_info:
+                s.feedback.append(f"Asks for personal information: {r.personal_info_quote}")
         if s.attempts <= d.config.graph.max_revisions:
             return Generate()
         return finish(s, "rejected", reason="; ".join(s.feedback), candidate_survey=s.survey)
