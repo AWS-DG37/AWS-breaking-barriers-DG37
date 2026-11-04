@@ -150,7 +150,7 @@ class WindowPolicyTests(unittest.TestCase):
         late = self.insight("three_to_ten_days", created_at="2027-03-30T14:09:00+05:30")
         self.assertIsNone(self.golden.window_for(late))
 
-    def test_golden_policy_guards_against_timing_it_has_no_rule_for(self):
+    def test_golden_policy_rejects_timing_it_has_no_rule_for(self):
         # Defensive guard. The engine now declines such insights at R5b before the
         # window is ever computed (see VerificationMetadataTests), so this raise
         # should be unreachable in the live pipeline; it stays as a backstop.
