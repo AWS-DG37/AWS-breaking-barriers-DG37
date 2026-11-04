@@ -22,7 +22,8 @@ DATE = re.compile(
 # upgrade to a reviewed term list per language if false positives appear.
 PERSONAL = re.compile(
     r"\b(name|phone|mobile|address|aadhaa?r|income|salary|bank|account number)\b"
-    r"|नाम|फोन|मोबाइल|पता|आधार|आमदनी|आमदनी|कमाई|बैंक",
+    # पता (address) is left out: पता नहीं is the everyday "don't know" answer.
+    r"|नाम|फोन|मोबाइल|आधार|आमदनी|कमाई|बैंक",
     re.I,
 )
 

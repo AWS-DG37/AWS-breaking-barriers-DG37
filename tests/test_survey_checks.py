@@ -38,6 +38,12 @@ def test_golden_reference_questions_raise_no_false_positives():
     assert flagged == []
 
 
+def test_dont_know_answers_are_not_personal_information():
+    survey = load(next(p for p in SCENARIOS if p.name == "survey.hi-IN.json"))
+    survey["items"][0]["options"].append({"value": "dont_know", "label": "पता नहीं"})
+    assert survey_issues(survey) == []
+
+
 def drop_follow_ups(survey):
     for item in survey["items"]:
         item.pop("follow_up_reason", None)
