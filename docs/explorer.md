@@ -210,6 +210,14 @@ edits, tests, saves and activates versions. Schedule and Feedback are not availa
 as console sections yet. Hosted, `deploy.sh` copies the pack to the data
 bucket, from which the API imports it (`MEL_PACK_URI`).
 
+**Detail level.** The dial in the masthead sets how much the console shows:
+**Essential** (the default) shows outcomes, results and the survey preview.
+**Detailed** adds costs, outcome metrics, the insight journey and Compare.
+**Everything** adds raw JSON, timings, run deletion and Configure. Compare always
+opens at Detailed or more, and Configure at Everything, so a shared link stays
+usable. Leaving that section restores the chosen level. Notices, errors and an
+unset spend cap show at every level. The choice is stored in this browser only.
+
 The worker's IAM policy authorizes Mantle inference for `BedrockAllowedModelIds` and
 Converse inference for Bedrock models and inference profiles; the console limits
 the model/API combinations versions may use. Deployment prerequisites, account/profile setup and the
