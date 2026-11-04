@@ -9,6 +9,7 @@ from improvement_fakes import edit, improver_factory
 from postgres import requires_postgres
 from test_jobs_postgres import SETTINGS, active, agents, fund_console, smoke_dataset
 
+from mel.browse import ResultFilter
 from mel.datasets import InsightFilter
 from mel.explorer.api import create_app
 from mel.jobs import BatchJobSpec, run_queue
@@ -49,8 +50,8 @@ def test_review_list_drives_an_improvement_job_that_saves_a_draft_and_meters_its
     fund_console(database, "test", "improver")
     config_id = active(database)
     run_id = batch_run(database, config_id)
-    accepted = database.run_results(run_id, "accepted")[0]["insight_id"]
-    skipped = database.run_results(run_id, "skipped")[0]["insight_id"]
+    accepted = database.run_results(run_id, ResultFilter(status="accepted"))[0]["insight_id"]
+    skipped = database.run_results(run_id, ResultFilter(status="skipped"))[0]["insight_id"]
     client = TestClient(
         create_app(
             settings=SETTINGS,
