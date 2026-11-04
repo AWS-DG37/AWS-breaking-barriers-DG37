@@ -1,0 +1,24 @@
+[
+  {
+    "file": "openai-luna-I-004512-S-0000000001.json",
+    "label": "OpenAI Luna: mustard, hi-IN",
+    "model_id": "openai.gpt-6-luna",
+    "config_version": "luna-golden-patterns-v3",
+    "experiment_id": "5ecf8baf-a9f2-4b21-a612-a689d93491e6",
+    "recorded_at": "2026-11-04T02:13:10.629615+00:00",
+    "insight_id": "I-004512",
+    "advice_summary": "These are aphids. Spray the recommended insecticide within 2 days if no rain is forecast. Spray in the evening when bees are not active.",
+    "language": "hi-IN"
+  },
+  {
+    "file": "anthropic-haiku-I-004512-S-0000000001.json",
+    "label": "Anthropic Haiku: mustard, hi-IN",
+    "model_id": "us.anthropic.claude-haiku-4-5-20251001-v1:0",
+    "config_version": "luna-golden-patterns-v3",
+    "experiment_id": "5ecf8baf-a9f2-4b21-a612-a689d93491e6",
+    "recorded_at": "2026-11-04T02:13:10.629615+00:00",
+    "insight_id": "I-004512",
+    "advice_summary": "These are aphids. Spray the recommended insecticide within 2 days if no rain is forecast. Spray in the evening when bees are not active.",
+    "language": "hi-IN"
+  }
+]
