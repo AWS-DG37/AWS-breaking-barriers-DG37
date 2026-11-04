@@ -39,7 +39,10 @@ async def oracle(message: str) -> relevance.RelevanceJudgment:
     return relevance.RelevanceJudgment(
         advice_grounding=_criterion(met(grounded)),
         measures_adoption=_criterion(met(not generic)),
-        measures_outcome=_criterion(met(not generic)),
+        measures_outcome=_criterion(met(not generic and relevance.has_outcome_question(
+            [{"prompt": item["question"], "options": item.get("options", [])}
+             for item in body["survey"]]
+        ))),
         follow_up_routing=_criterion(routing),
         no_new_advice=_criterion(met(relevance.NEW_ADVICE_ITEM["prompt"] not in questions)),
         no_personal_info=_criterion(met(relevance.PERSONAL_ITEM["prompt"] not in questions)),
@@ -107,6 +110,18 @@ def test_an_agreeing_judge_passes_calibration_and_a_lenient_one_fails():
     assert {d["criterion"] for d in lenient["disagreements"]} >= {
         "advice_grounding", "no_new_advice", "no_personal_info",
     }
+
+
+@pytest.mark.parametrize("verdict", ["met", "not_met"])
+def test_a_constant_outcome_judge_fails_calibration(verdict):
+    async def constant(message):
+        judgment = await oracle(message)
+        return judgment.model_copy(update={"measures_outcome": _criterion(verdict)})
+
+    report = calibrate(constant)
+    assert report["passed"] is False
+    outcome = report["agreement"]["measures_outcome"]
+    assert outcome["numerator"] < outcome["denominator"]
 
 
 def test_a_failed_call_fails_calibration_without_hiding_other_controls():

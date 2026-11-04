@@ -195,7 +195,9 @@ uv run --locked mel-worker eval calibrate-relevance --max-cases 10
 Calibration builds known-answer controls from dev rows only:
 
 - the row's own reference questions (grounded, measures adoption, no new advice,
-  no personal information);
+  no personal information, and measures outcome when the reference asks
+  Better/Same/Worse, whether the plan or the expert's advice worked, or "Have you
+  seen ...");
 - a reference from an unrelated dev row (not grounded);
 - a generic app question (not grounded, no adoption, no outcome);
 - the own reference plus an injected new-advice question, or plus an injected

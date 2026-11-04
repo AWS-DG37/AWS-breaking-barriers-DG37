@@ -128,6 +128,20 @@ POSITIVE_LABELS = {"Better", "All steps"}
 PROBLEM_ROUTES = {"Worse": "advice_did_not_work", "Could not reach": "could_not_reach_expert"}
 
 
+OUTCOME_QUESTIONS = {"Is the plan working so far?", "Did their advice help?"}
+
+
+def has_outcome_question(items: list[Mapping]) -> bool:
+    """A golden reference that plainly asks a result: Better/Same/Worse, plan working,
+    expert advice helped, or a "Have you seen ..." observation since the advice."""
+    return any(
+        item["prompt"] in OUTCOME_QUESTIONS
+        or item["prompt"].startswith("Have you seen")
+        or any(o["label"] == "Better" for o in item["options"])
+        for item in items
+    )
+
+
 def _routed(items: list[dict], routes: Mapping[str, str]) -> list[dict]:
     items = copy.deepcopy(items)
     for item in items:
@@ -158,10 +172,13 @@ def controls(rows: list[Mapping]) -> list[dict]:
                 "items": items, "expected": expected, "verdicts": verdicts,
             })
 
-        add("own_reference", own, {
+        verdicts = {
             "advice_grounding": "met", "measures_adoption": "met",
             "no_new_advice": "met", "no_personal_info": "met",
-        })
+        }
+        if has_outcome_question(own):  # A positive outcome check, beside the generic one.
+            verdicts["measures_outcome"] = "met"
+        add("own_reference", own, verdicts)
         if any(o["label"] in PROBLEM_ROUTES for item in own for o in item["options"]):
             add("problem_routing", _routed(own, PROBLEM_ROUTES), {"follow_up_routing": "met"})
         positive = {label: "advice_did_not_work" for label in POSITIVE_LABELS}
