@@ -69,6 +69,22 @@ export ELEVENLABS_API_KEY="$(cat ~/.secrets/elevenlabs-dg37-key)"
    uv run pytest tests/test_voice_session.py
    ```
 
+### Automatic recording for the demo
+
+On `main`, a GitHub Actions workflow
+([`.github/workflows/voice-audio.yml`](../.github/workflows/voice-audio.yml)) does step 2 by
+itself. It runs when a push to `main` changes a demo survey or the wording. It records
+the missing clips, commits them to `docs/voice/audio`, and rebuilds GitHub Pages. To run
+it by hand, open **Actions > Record voice clips > Run workflow**.
+
+The workflow reads the key from the repository secret `ELEVENLABS_API_KEY`. The
+hackathon key expires on 2026-11-11. After that the workflow fails until you replace
+the secret:
+
+```bash
+gh secret set ELEVENLABS_API_KEY --repo AWS-DG37/AWS-breaking-barriers-DG37 < key-file
+```
+
 To change the voice, edit `VOICE` in [`src/mel/voice.py`](../src/mel/voice.py). To change
 the wording, edit `VOICE_LINES` in both `src/mel/voice.py` and `survey-session.mjs`:
 `tests/test_voice_audio.py` fails when the two differ. Then run step 2 again.

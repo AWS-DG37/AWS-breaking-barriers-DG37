@@ -1,0 +1,53 @@
+# Records the voice demo's missing clips, so GitHub Pages plays every demo survey aloud
+# without anyone running voice/render_audio.py by hand. See voice/README.md.
+name: Record voice clips
+
+on:
+  push:
+    branches: [main]
+    # The surveys and the wording the clips are made from. The clips themselves
+    # (docs/voice/audio) are not listed, so this workflow's own commit does not start it.
+    paths:
+      - docs/voice/generated/**
+      - docs/voice/survey-session.mjs
+      - src/mel/voice.py
+      - voice/render_audio.py
+      - docs/participant-pack/json/scenarios/*/survey.*.json
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the clips
+  pages: write # rebuild the site after that commit
+
+concurrency:
+  group: voice-audio
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Record missing clips
+        # Fails loudly when the key is missing, expired or out of credits.
+        run: uv run --frozen --no-dev python voice/render_audio.py
+        env:
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+      - name: Commit the clips and rebuild the site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git add -A docs/voice/audio
+          if git diff --cached --quiet; then
+            echo "Every clip is already recorded."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Record voice clips for the demo surveys"
+          git pull --rebase origin main
+          git push origin HEAD:main
+          # A push made with the workflow token does not always start a Pages build.
+          gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent
