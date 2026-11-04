@@ -1,5 +1,3 @@
-"""Exercise independent demo languages in the real browser players."""
-
 import functools
 import http.server
 import json
@@ -29,7 +27,6 @@ def demo_page():
                 try:
                     page = browser.new_page()
                     page.set_default_timeout(3000)
-                    # Speech is an external browser service; capture its requested language/text.
                     page.add_init_script("""
                       window.spoken = [];
                       window.utterances = [];

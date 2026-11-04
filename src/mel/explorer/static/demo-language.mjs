@@ -1,4 +1,3 @@
-// Bundled English demo wording, matched to the exact original prompts and labels.
 // ponytail: covers the recorded demo and participant-pack surveys. New wording needs
 // a translation entry; unknown text disables English controls instead of guessing.
 const translations = {
