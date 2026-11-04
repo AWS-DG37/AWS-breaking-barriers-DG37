@@ -15,7 +15,7 @@ export function capPanel() {
       const save=el('button',{type:'button',class:'secondary',onClick:async()=>{
         save.disabled=true;
         try {await api('/spend-cap',{method:'PUT',body:JSON.stringify({expected_version:cap.version,budget_usd:input.value || null})});await load();}
-        catch(e) {box.append(el('p',{class:'notice error'},e.message));save.disabled=false;}
+        catch(e) {box.removeAttribute('data-level');box.append(el('p',{class:'notice error'},e.message));save.disabled=false;}
       }},'Save cap');
       // An unset cap refuses live runs, so it shows at every detail level.
       if (cap.budget_usd===null) box.removeAttribute('data-level'); else box.setAttribute('data-level','2');
@@ -23,7 +23,7 @@ export function capPanel() {
         el('p',{},cap.budget_usd===null?'No console spend cap is set. Live runs are refused until you set one.':`Console spend cap ${money(cap.budget_usd)} · committed ${money(cap.committed_usd)} · remaining ${money(cap.remaining_usd)}`),
         el('label',{},'Console spend cap (USD)',input),save,
         el('p',{class:'muted'},cap.scope));
-    } catch(e) {box.replaceChildren(el('p',{class:'notice error'},`Spend cap unavailable. ${e.message}`));}
+    } catch(e) {box.removeAttribute('data-level');box.replaceChildren(el('p',{class:'notice error'},`Spend cap unavailable. ${e.message}`));}
   }
   load();
   return box;

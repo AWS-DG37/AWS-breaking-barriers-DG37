@@ -8,6 +8,7 @@ class Element {
   constructor(tag) { this.tagName=tag; this.children=[]; this.attrs={}; this.dataset={}; this.listeners={}; }
   setAttribute(key,value) { this.attrs[key]=value; if(key==='value') this.value=value; if(key.startsWith('data-')) this.dataset[key.slice(5)]=value; }
   getAttribute(key) { return this.attrs[key]; }
+  removeAttribute(key) { delete this.attrs[key]; if(key.startsWith('data-')) delete this.dataset[key.slice(5)]; }
   append(...nodes) { for(const n of nodes) { n.parentElement=this; this.children.push(n); } }
   replaceChildren(...nodes) { this.children=[]; this.append(...nodes); }
   addEventListener(type,fn) { this.listeners[type]=fn; }
@@ -29,7 +30,7 @@ globalThis.localStorage={getItem:key=>stored.get(key) ?? null,setItem:(key,value
 const handlers={};
 globalThis.location={hash:'',replace(hash){this.hash=hash;}};
 globalThis.window={addEventListener(){}};
-const {showGenerate,leaveGenerate}=await import('./generate.mjs');
+const {showGenerate,showRuns,leaveGenerate}=await import('./generate.mjs');
 const {showConfigure,leaveConfigure}=await import('./configure.mjs');
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const deferred=()=>{let resolve;const promise=new Promise(r=>{resolve=r;});return {promise,resolve};};
@@ -126,6 +127,25 @@ test('leaving Compare during a delayed response cannot restart polling or change
   assert.doesNotMatch(get('content').textContent,/Old comparison/);
   assert.equal(get('notice').textContent,'');
   // No active poll timer remains to keep this test process alive.
+});
+
+test('an active outcome filter keeps its controls visible at every detail level',async()=>{
+  const root=new Element('main');
+  globalThis.fetch=async url=>{
+    if(url==='/api/runs/f') return response({run_id:'f',status:'completed',counts:{skipped:1,failed:1}});
+    if(url.startsWith('/api/runs/f/results?')) return response({results:[{insight_id:'a',status:'skipped',insight:{},rule:'R1'}]});
+    if(url==='/api/runs/f/facets') return response({crops:{},concerns:{},rules:{}});
+    throw new Error(url);
+  };
+  const settle=async()=>{for(let i=0;i<5;i++) await tick();};
+  showRuns(root,'#runs/run/f'); await settle();
+  const metrics=()=>root.querySelector('.gen-metrics');
+  assert.equal(metrics().getAttribute('data-level'),'2');
+  metrics().querySelectorAll('button')[1].listeners.click(); await settle();
+  assert.equal(metrics().getAttribute('data-level'),undefined);
+  metrics().querySelectorAll('button')[1].listeners.click(); await settle();
+  assert.equal(metrics().getAttribute('data-level'),'2');
+  leaveGenerate();
 });
 
 test('route applies the section floor to the detail level and drops it on the way back',async()=>{

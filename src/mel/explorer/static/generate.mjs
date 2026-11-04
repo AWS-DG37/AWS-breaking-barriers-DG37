@@ -329,7 +329,8 @@ function runHeader(summary) {
     head.push(el('div',{class:'progress',role:'progressbar','aria-valuemin':0,'aria-valuemax':total,'aria-valuenow':done,'aria-label':'Insights processed'},
       el('span',{style:`width:${Math.round(100*done/total)}%`})),el('p',{class:'small muted'},`${number(done)} of ${number(total)} insights processed`));
   }
-  head.push(el('div',{class:'gen-metrics','data-level':2},Object.keys(STATUS).map(key=>el('button',{type:'button',class:'metric','aria-pressed':view.run.filter===key,
+  // An active filter narrows the rows, so its controls stay visible to clear it.
+  head.push(el('div',{class:'gen-metrics','data-level':view.run.filter?null:2},Object.keys(STATUS).map(key=>el('button',{type:'button',class:'metric','aria-pressed':view.run.filter===key,
     onClick:()=>{view.run.filter=view.run.filter===key?null:key;view.run.rows=[];renderRun(view.run.id,view.run.insight);}},
     el('span',{},STATUS[key]),el('strong',{},number(counts[key] || 0))))));
   return head;
