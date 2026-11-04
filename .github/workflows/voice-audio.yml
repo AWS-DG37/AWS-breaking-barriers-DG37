@@ -31,16 +31,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The newest main, not the commit that started the run: a rerun of an old run must
+      # see the clips that run already committed, or it records and pushes them again.
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: astral-sh/setup-uv@v6
       - name: Record missing clips
         # Fails loudly when the key is missing, expired or out of credits.
         run: uv run --frozen --no-dev python voice/render_audio.py
         env:
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-      - name: Commit the clips and rebuild the site
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Commit the clips
         run: |
           git add -A docs/voice/audio
           if git diff --cached --quiet; then
@@ -52,6 +54,10 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
-          # A push made with the workflow token does not start a Pages build. Ask for one
-          # on every run, so a rerun also repairs a build request that failed.
-          gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent
+      # A push made with the workflow token does not start a Pages build. Ask for one on
+      # every run, even after a failed step, so a rerun also repairs a failed request.
+      - name: Rebuild the site
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds" --silent
