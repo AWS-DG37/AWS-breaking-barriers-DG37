@@ -246,7 +246,9 @@ details[open] summary {
   background:var(--deep);
   color:white;
 }
-@media(max-width:700px) {
+/* With every nav link and the dial, one row needs about 1150 px. */
+@media(max-width:1180px) {
+  .masthead { height:auto; flex-wrap:wrap; }
   .masthead-status { flex-wrap:wrap; gap:8px 16px; }
 }
 /* Hide elements above the effective level; the current section's nav link stays. */

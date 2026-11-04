@@ -11,7 +11,9 @@ export function capPanel() {
   async function load() {
     try {
       const cap=await api('/spend-cap');
-      const input=el('input',{type:'number',min:'0.000001',step:'any',value:cap.budget_usd ?? '','aria-label':'Console spend cap (USD)',onKeydown:event=>{if(event.key==='Enter') event.preventDefault();}});
+      // The editor saves on its own button. A form id that matches no form detaches the
+      // input from the launch form, so a draft hidden by the dial cannot block a launch.
+      const input=el('input',{type:'number',min:'0.000001',step:'any',value:cap.budget_usd ?? '','aria-label':'Console spend cap (USD)',form:'spend-cap-editor',onKeydown:event=>{if(event.key==='Enter') event.preventDefault();}});
       const save=el('button',{type:'button',class:'secondary',onClick:async()=>{
         save.disabled=true;
         try {await api('/spend-cap',{method:'PUT',body:JSON.stringify({expected_version:cap.version,budget_usd:input.value || null})});await load();}
