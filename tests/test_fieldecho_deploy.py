@@ -391,3 +391,24 @@ def test_migration_failure_recovers_previous_before_consuming_next_release(d, ta
 def test_container_probe_programs_are_executable_python(d):
     for program in (d.DB_PROBE, d.HTTP_PROBE, d.SNAPSHOT, d.MIGRATE):
         compile(program, "<container-probe>", "exec")
+
+
+def test_failed_final_state_persistence_recovers_previous_image(d, target, host):
+    h, r = host
+    save = h.save
+
+    def disk_full_on_candidate(state):
+        if state.last_outcome == "DEPLOYED":
+            raise OSError("state write failed")
+        save(state)
+
+    h.save = disk_full_on_candidate
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 12}, target
+    )
+    result = h.activate(release)
+    assert result["outcome"] == "FAILED_ROLLED_BACK"
+    assert result["serving_image"] == OLD_IMAGE
+    assert result["deployed"]["sha"] == OLD
+    assert h.read().transition is None
+    assert h.read().highest_sequence == 12

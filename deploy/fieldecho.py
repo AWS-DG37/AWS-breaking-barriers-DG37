@@ -316,6 +316,7 @@ class Host:
             atomic_write(self.root / "compose.yaml", compose)
             self.runtime.switch(compose)
             self.runtime.smoke(state.deployed)
+            atomic_write(self.root / "COMMIT", state.deployed["sha"] + "\n")
             state.transition = None
             state.last_outcome = "RECOVERED_PREVIOUS"
             self.save(state)
@@ -347,12 +348,16 @@ class Host:
             self.runtime.smoke(candidate)
             atomic_write(self.root / "compose.yaml", next_compose)
             self.checkpoint("compose")
-            state.previous, state.deployed = state.deployed, candidate
-            state.transition = None
-            state.last_outcome = "DEPLOYED"
-            self.save(state)
             atomic_write(self.root / "COMMIT", release.sha + "\n")
-            return self.report(state)
+            committed = dataclasses.replace(
+                state,
+                previous=state.deployed,
+                deployed=candidate,
+                transition=None,
+                last_outcome="DEPLOYED",
+            )
+            self.save(committed)
+            return self.report(committed)
         except Exception:
             if state.transition:
                 self.recover(state)
