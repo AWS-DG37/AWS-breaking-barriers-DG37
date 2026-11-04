@@ -79,20 +79,27 @@ def reference_items(expected: Mapping) -> list[dict]:
 
 
 def _items(items: list[Mapping]) -> list[dict]:
+    """Choice and scale questions in one shape: options, each with its own follow_up.
+
+    A scale becomes one option per step; the steps at or below its follow-up
+    threshold carry its follow_up_reason, so the rubric judges both kinds alike.
+    """
     out = []
     for item in items:
         entry: dict = {"question": item["prompt"]}
-        if item.get("options"):
+        if "scale_min" in item:
+            cut, reason = item.get("follow_up_at_or_below"), item.get("follow_up_reason")
+            entry["options"] = [
+                {"label": str(step), **(
+                    {"follow_up": reason} if cut is not None and reason and step <= cut else {}
+                )}
+                for step in range(item["scale_min"], item["scale_max"] + 1)
+            ]
+        elif item.get("options"):
             entry["options"] = [
                 {k: o[k] for k in ("label", "value", "follow_up") if o.get(k)}
                 for o in item["options"]
             ]
-        if "scale_min" in item:
-            entry["scale"] = {
-                k: item[k] for k in (
-                    "scale_min", "scale_max", "follow_up_at_or_below", "follow_up_reason",
-                ) if item.get(k) is not None
-            }
         out.append(entry)
     return out
 
@@ -145,6 +152,18 @@ def has_outcome_question(items: list[Mapping]) -> bool:
     )
 
 
+def _as_scale(items: list[dict], cut: int) -> list[dict]:
+    """The Better/Same/Worse question as a 1-5 scale routed at or below `cut`."""
+    return [
+        {
+            "prompt": f"{item['prompt']} (1 = much worse, 5 = much better)",
+            "scale_min": 1, "scale_max": 5, "follow_up_at_or_below": cut,
+            "follow_up_reason": "crop_or_animal_damaged",
+        } if any(o["label"] == "Better" for o in item["options"]) else item
+        for item in items
+    ]
+
+
 def _routed(items: list[dict], routes: Mapping[str, str]) -> list[dict]:
     items = copy.deepcopy(items)
     for item in items:
@@ -190,6 +209,10 @@ def controls(rows: list[Mapping]) -> list[dict]:
         if any(o["label"] in WRONG_CODE_ROUTES for item in own for o in item["options"]):
             add("wrong_code_routing", _routed(own, WRONG_CODE_ROUTES),
                 {"follow_up_routing": "not_met"})
+        if any(o["label"] == "Better" for item in own for o in item["options"]):
+            # Scales route through a threshold: 1-2 is damage; routing 1-5 sends "much better".
+            add("scale_routing", _as_scale(own, 2), {"follow_up_routing": "met"})
+            add("scale_wrong_routing", _as_scale(own, 5), {"follow_up_routing": "not_met"})
         add("injected_new_advice", [*own, NEW_ADVICE_ITEM], {"no_new_advice": "not_met"})
         add("injected_personal_info", [*own, PERSONAL_ITEM], {"no_personal_info": "not_met"})
         add("generic_question", [GENERIC_ITEM], {
@@ -234,6 +257,8 @@ def _provenance(split_path: Path, rubric: str, judge_model: str) -> dict:
         "split_version": split["version"],
         "split_sha256": _sha(split_bytes),
         "rubric_sha256": _sha(rubric.encode()),
+        # This module builds the controls and renders surveys; editing it recalibrates.
+        "scorer_sha256": _sha(Path(__file__).read_bytes()),
         "judge_model": judge_model,
     }
 

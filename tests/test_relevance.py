@@ -34,6 +34,9 @@ async def oracle(message: str) -> relevance.RelevanceJudgment:
     ]
     wrong = {(label, code) for label, code in routes if label in relevance.POSITIVE_LABELS}
     wrong |= set(routes) & set(relevance.WRONG_CODE_ROUTES.items())
+    # A question that routes every answer, the best one included, routes wrongly.
+    wrong |= {"all" for item in body["survey"] if item.get("options")
+              and all(o.get("follow_up") for o in item["options"])}
     routing = "not_applicable" if not routes else ("not_met" if wrong else "met")
     met = lambda ok: "met" if ok else "not_met"  # noqa: E731
     return relevance.RelevanceJudgment(
@@ -89,8 +92,20 @@ def test_controls_use_dev_rows_only_and_cover_every_criterion():
     assert {c["control"] for c in cases} >= {
         "own_reference", "unrelated_reference", "generic_question", "positive_routing",
         "problem_routing", "wrong_code_routing", "injected_new_advice",
-        "injected_personal_info",
+        "injected_personal_info", "scale_routing", "scale_wrong_routing",
     }
+
+
+def test_scale_follow_ups_reach_the_judge_as_option_follow_ups():
+    scale = {"prompt": "How is your wheat now?", "scale_min": 1, "scale_max": 5,
+             "follow_up_at_or_below": 5, "follow_up_reason": "could_not_reach_expert"}
+    (item,) = json.loads(relevance.render(_rows("dev")[0]["insight"], [scale], None))["survey"]
+    assert [o["label"] for o in item["options"]] == ["1", "2", "3", "4", "5"]
+    assert all(o["follow_up"] == "could_not_reach_expert" for o in item["options"])
+    (item,) = json.loads(relevance.render(
+        _rows("dev")[0]["insight"], [{**scale, "follow_up_at_or_below": 2}], None,
+    ))["survey"]
+    assert ["follow_up" in o for o in item["options"]] == [True, True, False, False, False]
 
 
 def test_routing_controls_follow_the_generator_follow_up_contract():
@@ -99,7 +114,7 @@ def test_routing_controls_follow_the_generator_follow_up_contract():
     cases = relevance.controls(_rows("dev"))
     for case in cases:
         codes = {(o["label"], o.get("follow_up")) for item in case["items"]
-                 for o in item["options"] if o.get("follow_up")}
+                 for o in item.get("options", []) if o.get("follow_up")}
         if case["control"] == "problem_routing":
             assert ("Worse", "advice_did_not_work") not in codes
         if case["control"] == "wrong_code_routing":

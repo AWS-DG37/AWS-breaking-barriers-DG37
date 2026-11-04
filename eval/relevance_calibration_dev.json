@@ -4,12 +4,13 @@
   "split_version": "golden-dev-test-v1",
   "split_sha256": "9d585b1ca9d70cc777baca824f7f307357e6623e397a2c5ae31778d81f83074f",
   "rubric_sha256": "670bc6ad1b237ec396e04cbe56e299f03844e45ae9829864f0fa57b656942c73",
+  "scorer_sha256": "7d0bb51870ef276b872dc26a5154803bf67222b9f6e62cb1042192e3d1ddfd4e",
   "judge_model": "openai.gpt-6-luna",
   "threshold": 0.9,
   "passed": true,
   "dev_rows": 74,
   "dev_survey_rows": 47,
-  "controls": 325,
+  "controls": 377,
   "failed_calls": 0,
   "agreement": {
     "advice_grounding": {
@@ -29,8 +30,8 @@
     },
     "follow_up_routing": {
       "kind": "assessed",
-      "numerator": 90,
-      "denominator": 90
+      "numerator": 142,
+      "denominator": 142
     },
     "no_new_advice": {
       "kind": "assessed",
@@ -68,6 +69,14 @@
       "agree": 29,
       "checks": 29
     },
+    "scale_routing": {
+      "agree": 26,
+      "checks": 26
+    },
+    "scale_wrong_routing": {
+      "agree": 26,
+      "checks": 26
+    },
     "unrelated_reference": {
       "agree": 47,
       "checks": 47
@@ -80,8 +89,8 @@
   "disagreements": [],
   "failures": [],
   "usage": {
-    "requests": 325,
-    "input_tokens": 537607,
-    "output_tokens": 78690
+    "requests": 377,
+    "input_tokens": 628463,
+    "output_tokens": 92211
   }
 }
