@@ -80,7 +80,10 @@ the explorer always starts explicitly with `--no-live`, including rollback.
 
 Workflow-level serialization has cancellation disabled. The CLI checks current
 main immediately before SSM dispatch. A host flock and atomically written
-`delivery-state.json` admit each workflow sequence once, including failed attempts.
+`delivery-state.json` bind the highest admitted workflow sequence to its exact SHA
+and image digest, including failed attempts. An exact active replay verifies serving
+readiness and returns `ALREADY_DEPLOYED`; an exact failed or recovered release can
+retry. Lower sequences and same-sequence identity changes are refused.
 The workflow path is persisted: renaming the workflow requires an explicit operator
 state migration rather than quietly resetting the sequence. Replaying an older run
 cannot replace a newer release, even when that newer release rolled back.
@@ -88,13 +91,14 @@ cannot replace a newer release, even when that newer release rolled back.
 On initial adoption the handler retains the running local image ID and gives it a
 rollback tag. It never prunes local images, including the old `45eb13b` image absent
 from ECR. A release record contains SHA, image identity and workflow sequence; host
-state owns deployed/previous, highest admitted sequence, outcome and transition.
+state owns deployed/previous, highest admitted sequence and release identity, outcome
+and transition.
 
 1. Validate the artifact and data mount. Persist the admitted sequence and an
    explicit transition containing the last healthy compose before stopping writers.
 2. Stop the explorer; leave PostgreSQL running. Capture the migration ledger,
    original column names, counts and hashes of all existing public-table rows,
-   and a root-readable SQL dump under `backups/<sequence>-<sha>/`.
+   and a root-readable SQL dump under a unique `backups/<sequence>-<sha>/attempt-*/` directory. Earlier dumps are retained.
 3. Restore a separate rehearsal database. Apply the candidate's packaged migrations
    twice using `Store.initialize`. Preserve every existing filename/checksum ledger
    row and every original-column row fingerprint. The old
