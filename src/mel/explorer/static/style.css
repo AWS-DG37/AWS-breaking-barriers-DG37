@@ -466,7 +466,7 @@ main {
   display:block;
   margin-top:12px;
 }
-.survey-panel>h3 {
+.question-analysis>h3 {
   margin-top:22px;
   color:var(--purple-ink);
 }

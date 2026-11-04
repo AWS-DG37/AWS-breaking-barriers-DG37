@@ -124,7 +124,7 @@ function renderSurvey(outcome) {
   return panel;
 }
 function renderQuestionAnalysis(outcome,item) {
-  const panel=el('div',{},el('p',{class:'small muted question-record'},`${item.item_id} · ${item.type}`));
+  const panel=el('div',{class:'question-analysis'},el('p',{class:'small muted question-record'},`${item.item_id} · ${item.type}`));
   const evidence=(outcome.question_evidence || []).filter(e=>e.item_id===item.item_id);
   panel.append(el('div',{class:'evidence'},el('h3',{},'What this question measures'),evidence.length?evidence.map(e=>el('div',{},el('strong',{},e.measurement.replaceAll('_',' ')),el('p',{},e.explanation),el('p',{class:'small'},`Source fields · ${e.source_fields.join(', ') || 'Not recorded'}`))):el('p',{},'Question-level evidence not recorded.'),el('p',{class:'small muted'},'Diagnostic explanation supplied by the model. It is not independent validation.')));
   const {run,result}=selected();
