@@ -23,6 +23,7 @@ from mel.costs import request_scope
 from mel.decision import CropCalendar, Decision, DecisionEngine
 from mel.handoff import handoff
 from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
+from mel.survey_checks import survey_issues
 
 
 @dataclass
@@ -198,7 +199,8 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
 class ReviewSurvey(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
-        s.feedback = d.contracts.errors("survey", s.survey)
+        # Free code checks first; the paid reviewer only sees drafts that pass them.
+        s.feedback = d.contracts.errors("survey", s.survey) + survey_issues(s.survey)
         s.record("schema", "schema", target="survey", valid=not s.feedback, errors=s.feedback)
         if not s.feedback:
             s.record("review", "runtime", kind="request", survey=s.survey)

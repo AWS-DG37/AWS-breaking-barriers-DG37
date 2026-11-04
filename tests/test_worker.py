@@ -66,8 +66,11 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "item_id": "q1",
                     "type": "survey-confirm",
-                    "prompt": "Did you do it?",
-                    "options": [{"value": "yes", "label": "Yes"}, {"value": "no", "label": "No"}],
+                    "prompt": "क्या आपने सलाह मानी?",
+                    "options": [
+                        {"value": "yes", "label": "हाँ"},
+                        {"value": "no", "label": "नहीं", "follow_up": "advice_did_not_work"},
+                    ],
                 }
             ],
         }
