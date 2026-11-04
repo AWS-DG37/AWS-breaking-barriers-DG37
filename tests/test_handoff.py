@@ -618,10 +618,11 @@ class TimestampAndIdTests(unittest.TestCase):
             r_mustard["farmerchat_flow"]["flow_id"], r_cow["farmerchat_flow"]["flow_id"]
         )
 
-    # The pack disagrees with itself: index.html shows the IDs handoff() derives
-    # (for example campaign 283df456..., flow eb101082...), but the scenario
-    # schedule_handoff.json files carry other IDs. Expected to fail until Digital
-    # Green says which source is canonical.
+    # Known gap: the pack (index.html and every scenario schedule_handoff.json agree)
+    # shows campaign 283df456... and per-survey flow IDs that handoff()'s uuid5
+    # derivation does not reproduce, and the pack does not say how they are made.
+    # Expected to fail until Digital Green says whether FarmerChat assigns these IDs
+    # at flow registration or how we should compute them.
     @unittest.expectedFailure
     def test_flow_id_matches_pack(self):
         for scenario in (MUSTARD, WHEAT_IRR, POTATO, COW, WHEAT_PLAN):
@@ -632,7 +633,7 @@ class TimestampAndIdTests(unittest.TestCase):
                     result["farmerchat_flow"]["flow_id"], expected["farmerchat_flow"]["flow_id"]
                 )
 
-    @unittest.expectedFailure  # Same pack conflict as test_flow_id_matches_pack.
+    @unittest.expectedFailure  # Same known gap as test_flow_id_matches_pack.
     def test_campaign_id_matches_pack(self):
         for scenario in (MUSTARD, WHEAT_IRR, POTATO, COW, WHEAT_PLAN):
             with self.subTest(scenario=scenario[0]["insight_id"]):
