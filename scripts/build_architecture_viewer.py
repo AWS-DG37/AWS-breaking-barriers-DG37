@@ -14,7 +14,10 @@ def build(destination):
     assets.mkdir(exist_ok=True)
     shutil.copyfile(ROOT / "docs/architecture-walkthrough.html", destination / "index.html")
     source = ROOT / "src/mel/explorer/static"
-    for name in ("survey-player.mjs", "survey-player.css", "dom.mjs", "recorded-preview.mjs"):
+    for name in (
+        "survey-player.mjs", "survey-player.css", "dom.mjs", "recorded-preview.mjs",
+        "demo-language.mjs",
+    ):
         shutil.copyfile(source / name, assets / name)
     shutil.copyfile(source / "assets/mustard-field.webp", assets / "mustard-field.webp")
     recorded = json.loads((ROOT / "src/mel/explorer/demo/recorded-run.json").read_text())

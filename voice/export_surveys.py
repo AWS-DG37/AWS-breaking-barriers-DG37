@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RUN = ROOT / "src/mel/explorer/demo/recorded-run.json"
 OUT = ROOT / "docs/voice/generated"
+DEMO_LANGUAGE = ROOT / "src/mel/explorer/static/demo-language.mjs"
 
 
 def dump(value) -> str:
@@ -82,6 +83,9 @@ def main() -> None:
     if args.check:
         if current != files:
             sys.exit("docs/voice/generated is stale. Run: uv run python voice/export_surveys.py")
+        shared = OUT / DEMO_LANGUAGE.name
+        if not shared.exists() or shared.read_bytes() != DEMO_LANGUAGE.read_bytes():
+            sys.exit("Demo translations are stale. Run: uv run python voice/export_surveys.py")
         print(f"docs/voice/generated is current ({len(files) - 1} surveys)")
         return
     OUT.mkdir(parents=True, exist_ok=True)
@@ -89,6 +93,7 @@ def main() -> None:
         (OUT / name).unlink()
     for name, text in files.items():
         (OUT / name).write_text(text)
+    (OUT / DEMO_LANGUAGE.name).write_bytes(DEMO_LANGUAGE.read_bytes())
     print(f"Wrote {len(files) - 1} surveys and index.json to {OUT.relative_to(ROOT)}")
 
 
