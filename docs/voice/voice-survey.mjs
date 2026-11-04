@@ -102,7 +102,12 @@ async function readQuestion() {
   const item = currentItem();
   const text = spokenLines(state.survey).items[item.item_id];
   addEvent(state.repeats ? `No tap in ${REPEAT.timeout_seconds} s: read ${item.item_id} again` : `Read ${item.item_id}`);
-  if (!(await speak(text)) || answered()) return;
+  if (!(await speak(text))) return;
+  if (answered()) {
+    state.mode = 'answered';
+    renderVoice();
+    return;
+  }
   state.mode = 'waiting';
   renderVoice();
   const speech = state.speech;
@@ -118,7 +123,7 @@ async function readQuestion() {
 }
 
 async function startVoice() {
-  state.voiceOn = true;
+  Object.assign(state, {voiceOn: true, repeats: 0});
   addEvent('Voice on');
   // A tap, Stop or survey change during the opening cuts it off; then read nothing more.
   if (state.index === 0 && !state.done && !(await speak(spokenLines(state.survey).opening))) return;
@@ -185,8 +190,10 @@ async function finish() {
   if (!state.voiceOn) return;
   const record = finishSurvey(state.session);
   const lines = spokenLines(state.survey);
-  await speak(record.needs_follow_up ? lines.closing_if_follow_up : lines.closing);
-  Object.assign(state, {mode: 'off', caption: ''});
+  // The voice ends with the survey. A Stop or survey change during the closing owns the state.
+  if (!(await speak(record.needs_follow_up ? lines.closing_if_follow_up : lines.closing))) return;
+  Object.assign(state, {voiceOn: false, mode: 'off', caption: ''});
+  addEvent('Voice off');
   renderVoice();
 }
 
