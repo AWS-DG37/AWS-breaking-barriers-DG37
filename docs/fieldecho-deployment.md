@@ -37,7 +37,9 @@ The public Python calls are `deploy(target, full_sha, workflow_sequence)` and
 immutable digest and positive sequence. Its shell is fixed and uses validated
 SSM environment parameters, never caller-supplied shell. It pulls the image,
 checks its revision label, extracts this image's handler and target, and runs the
-handler under host Python 3.9. Status uses the last extracted artifact handler;
+handler under host Python 3.9. Status uses the last successfully activated artifact
+through one atomically replaced `delivery/current` directory symlink. Rejected and
+failed releases cannot replace the status handler or its target;
 before the first deployment, no managed status exists and that command fails loud.
 A document-interface change requires a new versioned document name and reviewed
 target update; silently editing deployed document version 1 is not an update path.
@@ -76,6 +78,14 @@ build/healthcheck settings change. It refuses extra compose services or any
 container before delivery. The committed boot compose has only explorer/postgres;
 the explorer always starts explicitly with `--no-live`, including rollback.
 
+The existing explorer must already use host networking, without attached networks
+or published ports. Its effective `MEL_*` settings, resolved by Docker Compose, must
+match `explorer.env` alone. Identical inline host and port values are accepted.
+The database host must be loopback. A bridge host such as `postgres`, or a Compose
+override that would send the migration probes to a different database, fails before
+any explorer replacement. Convert incompatible hosts in a separate reviewed operator
+change. Delivery does not rewrite their network or database configuration.
+
 ## Activation and recovery
 
 Workflow-level serialization has cancellation disabled. The CLI checks current
@@ -94,8 +104,13 @@ from ECR. A release record contains SHA, image identity and workflow sequence; h
 state owns deployed/previous, highest admitted sequence and release identity, outcome
 and transition.
 
-1. Validate the artifact and data mount. Persist the admitted sequence and an
-   explicit transition containing the last healthy compose before stopping writers.
+1. Validate the artifact, data mount, and current host contract. Render both the
+   previous and candidate Compose files and validate each with the installed
+   `docker compose config --quiet` parser. Preserve the exact original Compose as
+   root-readable `compose.original.yaml`, without overwriting an existing copy.
+   Persist the admitted sequence and explicit transition before any replacement.
+   Start the previous image from the rendered healthy Compose and prove readiness
+   before taking a snapshot or migrating. Only then persist healthy boot Compose.
 2. Stop the explorer; leave PostgreSQL running. Capture the migration ledger,
    original column names, counts and hashes of all existing public-table rows,
    and a root-readable SQL dump under a unique `backups/<sequence>-<sha>/attempt-*/` directory. Earlier dumps are retained.
@@ -123,6 +138,24 @@ switch, after the switch, or between compose and state commits therefore causes
 recovery to start the saved healthy release. Recovery failure preserves the intent
 and stops further admission. On reboot, the existing systemd unit starts the last
 committed compose; the next deploy performs recovery before any new activation.
+
+The SSM document establishes one deadline before lock acquisition, image pull, and
+handler extraction. Startup commands are bounded by the same activation cutoff.
+Activation has at most 1320 seconds from document start. A further 360 seconds is
+reserved for recovery, with a final cutoff at 1680 seconds, below SSM's 1800-second
+hard timeout. Each host subprocess is clamped to the remaining phase budget.
+An activation alarm, SIGTERM, or SIGINT becomes a recoverable exception. The same
+invocation restores the prior image and Compose without waiting for a new push.
+Recovery never extends the cutoff. If recovery itself fails or exhausts its budget,
+the transition and sequence fence remain for operator attention or the next attempt.
+SIGKILL, host loss, and a Docker daemon that cannot execute recovery still need that
+persisted-intent recovery path. These limits do not make those failures recoverable
+inside a killed process.
+
+Full SQL dumps are retained for every attempt. Delivery never removes database
+backups. Operators must monitor free space and choose an archive and retention
+limit before backup growth exhausts the host. Automatic retention remains a separate
+reviewed follow-up.
 
 `Store.initialize` already puts all packaged migration execution and ledger changes
 inside one PostgreSQL transaction with an advisory lock. Applied migration bytes
