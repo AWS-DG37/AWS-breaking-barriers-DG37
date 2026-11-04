@@ -102,6 +102,7 @@ class HostState:
     workflow: str
     transition: dict | None = None
     last_outcome: str = "ADOPTED"
+    highest_release: dict | None = None
 
 
 def command(args, *, cwd=None, input=None):
@@ -199,7 +200,6 @@ def deploy(target, full_sha, workflow_sequence):
     if len(details) != 1:
         raise ValueError("expected one immutable artifact")
     digest = require(DIGEST, details[0]["imageDigest"], "digest")
-    # Check again immediately before dispatch; the host sequence fence handles queued commands.
     if main_head(target) != full_sha:
         return {"outcome": "SUPERSEDED", "sha": full_sha}
     return dispatch(target, "deploy", full_sha, digest, workflow_sequence)
@@ -234,7 +234,6 @@ def render_compose(current, image):
     app = result["services"]["explorer"]
     app.pop("build", None)
     app.pop("command", None)
-    # Health is checked explicitly, including authenticated 401, outside Compose.
     app["healthcheck"] = {"disable": True}
     app["image"] = image
     app["network_mode"] = "host"
@@ -303,6 +302,17 @@ class Host:
                 healthy = json.loads(state.transition["healthy_compose"])
                 if healthy["services"]["explorer"]["image"] != state.deployed["image"]:
                     raise ValueError("transition does not preserve deployed image")
+            if state.highest_release is None and state.highest_sequence:
+                candidates = [state.deployed]
+                if state.transition:
+                    candidates.append(state.transition["candidate"])
+                state.highest_release = next(
+                    (r for r in candidates if r["sequence"] == state.highest_sequence), None
+                )
+            if state.highest_release is not None:
+                admitted = Release.parse(state.highest_release, self.target)
+                if admitted.sequence != state.highest_sequence:
+                    raise ValueError("admitted release does not match sequence fence")
             return state
         if not adopt:
             raise ValueError("no managed deployment state")
@@ -310,7 +320,6 @@ class Host:
 
     def recover(self, state):
         if state.transition:
-            # Compose and state are NOT an atomic pair. Intent wins in either crash window.
             self.runtime.recover_cleanup(state.transition["candidate"])
             compose = state.transition["healthy_compose"]
             atomic_write(self.root / "compose.yaml", compose)
@@ -326,16 +335,21 @@ class Host:
         state = self.recover(self.read())
         if state.workflow != self.target.workflow:
             raise ValueError("workflow identity changed; operator migration required")
-        if release.sequence <= state.highest_sequence:
-            return self.report(state, "REFUSED_STALE")
-        state.highest_sequence = release.sequence
-        self.save(state)  # Failed attempts consume their sequence too.
         candidate = dataclasses.asdict(release)
+        if release.sequence < state.highest_sequence or (
+            release.sequence == state.highest_sequence and candidate != state.highest_release
+        ):
+            return self.report(state, "REFUSED_STALE")
+        if candidate == state.deployed:
+            self.runtime.smoke(candidate)
+            return self.report(state, "ALREADY_DEPLOYED")
+        state.highest_sequence = release.sequence
+        state.highest_release = candidate
+        self.save(state)
         switched = False
         try:
             self.runtime.preflight(candidate)
             healthy = self.runtime.compose(state.deployed)
-            # The adopted image is also forced offline before any migration or reboot.
             atomic_write(self.root / "compose.yaml", healthy)
             state.transition = {"healthy_compose": healthy, "candidate": candidate}
             self.save(state)
@@ -376,7 +390,6 @@ class Host:
         }
 
 
-# Executed inside the application image; no credential values are printed.
 DB_PROBE = """
 import json, os
 from mel.config import Settings
@@ -459,7 +472,6 @@ class DockerHost:
         image = self.inspect(self.container)["Image"]
         require(DIGEST, image, "running local image")
         sha = require(SHA, (self.root / "COMMIT").read_text().strip(), "adopted commit")
-        # Retain a stable local tag as well as the immutable local ID. Never prune images here.
         command(["docker", "image", "tag", image, "dg37-explorer-cloud-explorer:rollback-" + sha])
         return {"sha": sha, "image": image, "sequence": 0}
 
@@ -599,12 +611,12 @@ class DockerHost:
         require(r"[A-Za-z_][A-Za-z0-9_]*", user, "database user")
         require(r"[A-Za-z_][A-Za-z0-9_]*", database, "database name")
         rehearsal = "fieldecho_rehearsal_" + str(release["sequence"])
-        backup = self.root / "backups" / (str(release["sequence"]) + "-" + release["sha"])
-        backup.mkdir(mode=0o700, parents=True, exist_ok=False)
-        self.compose_command("stop", "explorer")  # Quiesce all application writers before snapshot.
+        backups = self.root / "backups" / (str(release["sequence"]) + "-" + release["sha"])
+        backups.mkdir(mode=0o700, parents=True, exist_ok=True)
+        backup = Path(tempfile.mkdtemp(dir=backups, prefix="attempt-"))
+        self.compose_command("stop", "explorer")
         before = json.loads(self.run_image(release["image"], SNAPSHOT))
         atomic_write(backup / "before.json", json.dumps(before))
-        # Plain SQL keeps binary dump bytes out of the text subprocess interface.
         dump = self.pg("pg_dump", "-U", user, "-d", database, "--no-owner", "--no-privileges")
         atomic_write(backup / "database.sql", dump)
         self.pg("createdb", "-U", user, rehearsal)
@@ -625,7 +637,6 @@ class DockerHost:
                     self.run_image(release["image"], SNAPSHOT, rehearsal, before["columns"])
                 )
                 check_snapshot(before, after, packaged)
-            # Prior release must read recorded experiments on the migrated DB, with live off.
             compatibility = """
 from mel.config import Settings
 from mel.store import Store
@@ -670,9 +681,7 @@ finally: s.close()
                 self.smoke(previous, old_container, 8878)
             finally:
                 command(["docker", "rm", "-f", old_container])
-            self.run_image(
-                release["image"], MIGRATE
-            )  # Explicit production migration before activation.
+            self.run_image(release["image"], MIGRATE)
             production = json.loads(
                 self.run_image(release["image"], SNAPSHOT, columns=before["columns"])
             )
@@ -718,14 +727,15 @@ def main():
                     )
                     result = host.activate(release)
                 else:
-                    state = host.read(adopt=False)  # Status never changes host state.
+                    state = host.read(adopt=False)
                     result = host.report(state)
                     result["serving_image"] = runtime.inspect(runtime.container)["Image"]
                     result["worker_present"] = runtime.worker_present()
         print("DG37_RESULT " + json.dumps(result, sort_keys=True))
         return (
             0
-            if result["outcome"] in ("DEPLOYED", "SUPERSEDED", "ADOPTED", "RECOVERED_PREVIOUS")
+            if result["outcome"]
+            in ("DEPLOYED", "ALREADY_DEPLOYED", "SUPERSEDED", "ADOPTED", "RECOVERED_PREVIOUS")
             or args.action.endswith("status")
             else 1
         )

@@ -1,5 +1,3 @@
-"""Release safety tests: doubles replace Docker/AWS, filesystem state stays real."""
-
 import copy
 import importlib
 import json
@@ -116,8 +114,6 @@ def test_migrations_preserve_unknown_old_filename_and_recorded_data(d):
 
 
 class Runtime:
-    """Docker boundary fixture; a crash is BaseException, outside ordinary rollback."""
-
     def __init__(self, root, fail=None):
         self.root, self.fail, self.events = root, fail, []
         self.running = OLD_IMAGE
@@ -127,8 +123,12 @@ class Runtime:
 
     def preflight(self, release):
         self.events.append("preflight")
+        if self.fail == "preflight":
+            raise ValueError("artifact temporarily unavailable")
 
     def rehearse_and_migrate(self, release, previous):
+        if self.fail == "migration":
+            raise ValueError("rehearsal temporarily unavailable")
         self.events.extend(
             [
                 "snapshot",
@@ -145,6 +145,8 @@ class Runtime:
         self.events.append("switch:" + self.running)
 
     def smoke(self, release):
+        if self.running != release["image"]:
+            raise ValueError("serving image differs from release")
         if self.fail == "smoke" and release["sha"] == SHA:
             raise ValueError("candidate unhealthy")
         self.events.append("smoke:" + release["sha"])
@@ -174,7 +176,85 @@ def test_success_serves_digest_and_replay_cannot_undo_it(d, target, host):
     assert h.activate(release)["outcome"] == "DEPLOYED"
     assert r.events.index("migrate-production") < r.events.index("switch:" + release.image)
     r.events.clear()
-    assert h.activate(release)["outcome"] == "REFUSED_STALE"
+    assert h.activate(release)["outcome"] == "ALREADY_DEPLOYED"
+    assert r.events == ["smoke:" + SHA]
+    assert h.read().highest_sequence == 7
+
+
+@pytest.mark.parametrize("failure", ["image", "readiness"])
+def test_active_replay_verifies_serving_image_and_readiness(d, target, host, failure):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 7}, target
+    )
+    h.activate(release)
+    if failure == "image":
+        r.running = OLD_IMAGE
+    else:
+        r.fail = "smoke"
+    r.events.clear()
+    with pytest.raises(ValueError):
+        h.activate(release)
+    assert not r.events
+    assert h.read().deployed == vars(release)
+
+
+@pytest.mark.parametrize("failure", ["preflight", "migration", "smoke"])
+def test_exact_failed_release_can_retry_after_host_restart(d, target, host, failure):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 8}, target
+    )
+    r.fail = failure
+    assert h.activate(release)["outcome"].startswith("FAILED_")
+    r.fail = None
+    h = d.Host(h.root, target, r)
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert r.running == release.image
+    assert h.read().highest_sequence == 8
+
+
+def test_admission_crash_can_retry_same_release_without_lowering_fence(d, target, host):
+    h, r = host
+    save = h.save
+
+    class Crash(BaseException):
+        pass
+
+    def crash_after_admission(state):
+        save(state)
+        raise Crash()
+
+    h.save = crash_after_admission
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 8}, target
+    )
+    with pytest.raises(Crash):
+        h.activate(release)
+    h = d.Host(h.root, target, r)
+    stale = d.Release.parse({**vars(release), "sequence": 7}, target)
+    assert h.activate(stale)["outcome"] == "REFUSED_STALE"
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert h.read().highest_sequence == 8
+
+
+@pytest.mark.parametrize("failed", [False, True])
+@pytest.mark.parametrize("change", [{"sequence": 6}, {"sha": OLD}, {"image": "changed"}])
+def test_lower_sequence_and_same_sequence_identity_collision_are_refused(
+    d, target, host, failed, change
+):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 7}, target
+    )
+    r.fail = "preflight" if failed else None
+    h.activate(release)
+    if change.get("image") == "changed":
+        change = {"image": target.registry + "@sha256:" + "3" * 64}
+    other = d.Release.parse({**vars(release), **change}, target)
+    r.events.clear()
+    h = d.Host(h.root, target, r)
+    assert h.activate(other)["outcome"] == "REFUSED_STALE"
     assert not r.events
     assert h.read().highest_sequence == 7
 
@@ -209,10 +289,107 @@ def test_crash_recovers_last_healthy_compose_before_fencing(d, target, host, win
     with pytest.raises(Crash):
         h.activate(release)
     h.checkpoint = lambda name: None
-    assert h.activate(release)["outcome"] == "REFUSED_STALE"
+    r.events.clear()
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert r.events.index("smoke:" + OLD) < r.events.index("preflight")
+    assert r.running == release.image
+    assert h.read().highest_sequence == 9
+    assert h.read().transition is None
+
+
+@pytest.mark.parametrize("window", ["intent", "switched", "compose"])
+def test_crash_recovery_preserves_fence_against_other_release(d, target, host, window):
+    h, r = host
+
+    class Crash(BaseException):
+        pass
+
+    h.checkpoint = lambda name: (_ for _ in ()).throw(Crash()) if name == window else None
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 9}, target
+    )
+    with pytest.raises(Crash):
+        h.activate(release)
+    h = d.Host(h.root, target, r)
+    for change in (
+        {"sequence": 8},
+        {"sha": OLD},
+        {"image": target.registry + "@sha256:" + "3" * 64},
+    ):
+        assert (
+            h.activate(d.Release.parse({**vars(release), **change}, target))["outcome"]
+            == "REFUSED_STALE"
+        )
     assert r.running == OLD_IMAGE
     assert h.read().highest_sequence == 9
     assert h.read().transition is None
+
+
+@pytest.mark.parametrize("window", ["switch", "smoke", "save"])
+def test_interrupted_recovery_can_resume_and_retry_exact_release(d, target, host, window):
+    h, r = host
+
+    class Crash(BaseException):
+        pass
+
+    h.checkpoint = lambda name: (_ for _ in ()).throw(Crash())
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 9}, target
+    )
+    with pytest.raises(Crash):
+        h.activate(release)
+    h = d.Host(h.root, target, r)
+    owner = h if window == "save" else r
+    operation = getattr(owner, window)
+
+    def crash_during_recovery(*args):
+        if window != "save":
+            operation(*args)
+        raise Crash()
+
+    setattr(owner, window, crash_during_recovery)
+    with pytest.raises(Crash):
+        h.activate(release)
+    assert h.read().highest_sequence == 9
+    assert h.read().transition is not None
+    setattr(owner, window, operation)
+    assert d.Host(h.root, target, r).activate(release)["outcome"] == "DEPLOYED"
+    assert r.running == release.image
+
+
+def test_rehearsal_retries_preserve_each_attempt_backup(d, target, tmp_path, monkeypatch):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target, runtime.container = tmp_path, target, "explorer"
+    (tmp_path / "database.env").write_text("POSTGRES_USER=app\nPOSTGRES_DB=app\n")
+    before = {"ledger": {}, "tables": {}, "columns": {}}
+    dumps = iter(["first backup", "second backup"])
+    monkeypatch.setattr(runtime, "compose_command", lambda *a: "")
+    monkeypatch.setattr(runtime, "smoke", lambda *a: None)
+    monkeypatch.setattr(d, "command", lambda *a, **kw: "")
+    monkeypatch.setattr(
+        runtime,
+        "run_image",
+        lambda image, script, *a, **kw: json.dumps(before) if script == d.SNAPSHOT else "{}",
+    )
+    monkeypatch.setattr(
+        runtime, "pg", lambda action, *a, **kw: next(dumps) if action == "pg_dump" else ""
+    )
+    release = {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 4}
+    previous = {"sha": OLD, "image": OLD_IMAGE, "sequence": 0}
+    backups = tmp_path / "backups" / ("4-" + SHA)
+    backups.mkdir(parents=True)
+    (backups / "database.sql").write_text("legacy backup")
+    runtime.rehearse_and_migrate(release, previous)
+    runtime.rehearse_and_migrate(release, previous)
+    assert (backups / "database.sql").read_text() == "legacy backup"
+    attempts = [path for path in backups.iterdir() if path.is_dir()]
+    assert len(attempts) == 2
+    assert {(attempt / "database.sql").read_text() for attempt in attempts} == {
+        "first backup",
+        "second backup",
+    }
+    assert all((attempt / "migration-proof.json").is_file() for attempt in attempts)
+    assert all(attempt.stat().st_mode & 0o777 == 0o700 for attempt in attempts)
 
 
 def test_workflow_mismatch_fails_without_switch(d, target, host):
@@ -412,3 +589,74 @@ def test_failed_final_state_persistence_recovers_previous_image(d, target, host)
     assert result["deployed"]["sha"] == OLD
     assert h.read().transition is None
     assert h.read().highest_sequence == 12
+    h.save = save
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+
+
+@pytest.mark.parametrize("transition", [False, True])
+def test_legacy_state_replays_only_evidenced_highest_release(d, target, host, transition):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 7}, target
+    )
+    if transition:
+
+        class Crash(BaseException):
+            pass
+
+        h.checkpoint = lambda name: (_ for _ in ()).throw(Crash())
+        with pytest.raises(Crash):
+            h.activate(release)
+    else:
+        h.activate(release)
+    raw = json.loads(h.state_path.read_text())
+    raw.pop("highest_release")
+    h.state_path.write_text(json.dumps(raw))
+    h = d.Host(h.root, target, r)
+    assert h.activate(release)["outcome"] == ("DEPLOYED" if transition else "ALREADY_DEPLOYED")
+
+
+def test_legacy_failed_admission_with_unknown_identity_remains_fenced(d, target, host):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 7}, target
+    )
+    r.fail = "preflight"
+    h.activate(release)
+    raw = json.loads(h.state_path.read_text())
+    raw.pop("highest_release")
+    h.state_path.write_text(json.dumps(raw))
+    r.fail = None
+    r.events.clear()
+    assert h.activate(release)["outcome"] == "REFUSED_STALE"
+    assert not r.events
+
+
+@pytest.mark.parametrize("change", [{"sequence": 6}, {"image": "invalid"}])
+def test_invalid_admitted_identity_is_refused_before_runtime(d, target, host, change):
+    h, r = host
+    release = d.Release.parse(
+        {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 7}, target
+    )
+    h.activate(release)
+    raw = json.loads(h.state_path.read_text())
+    raw["highest_release"].update(change)
+    h.state_path.write_text(json.dumps(raw))
+    r.events.clear()
+    with pytest.raises(ValueError):
+        h.activate(release)
+    assert not r.events
+
+
+def test_already_deployed_is_a_successful_host_command(d, tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(d, "ROOT", tmp_path)
+    monkeypatch.setattr(d.os, "umask", lambda mode: 0o022)
+    monkeypatch.setattr(d, "DockerHost", lambda *a: object())
+    monkeypatch.setattr(d.Host, "activate", lambda *a: {"outcome": "ALREADY_DEPLOYED"})
+    monkeypatch.setattr(
+        d.sys,
+        "argv",
+        ["fieldecho.py", "host-activate", "--sha", SHA, "--digest", DIGEST, "--sequence", "7"],
+    )
+    assert d.main() == 0
+    assert '"outcome": "ALREADY_DEPLOYED"' in capsys.readouterr().out
