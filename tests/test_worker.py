@@ -13,7 +13,7 @@ from pydantic_ai.models.test import TestModel
 
 from mel.config import Settings
 from mel.models import Review, SurveyDraft
-from mel.worker import parse_insights, run_batch
+from mel.worker import DEFAULT_ROW_LIMIT, parse_insights, run_batch
 
 
 class MemoryStore:
@@ -55,7 +55,7 @@ class MemoryStore:
 
 
 class WorkerTests(unittest.IsolatedAsyncioTestCase):
-    async def run_smoke(self, full=False):
+    async def run_smoke(self, full=False, source="tests/fixtures/smoke_insights.jsonl"):
         store = MemoryStore()
         draft = {
             "rationale": "Check adoption of the original advice.",
@@ -81,7 +81,7 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             args = argparse.Namespace(
-                input="tests/fixtures/smoke_insights.jsonl",
+                input=source,
                 output=str(Path(directory) / "results.jsonl"),
                 run_id=str(uuid4()),
                 bundle_uri=None,
@@ -101,17 +101,22 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(exported), first_saved)
         return store
 
-    async def test_six_worked_scenarios_run_offline(self):
+    async def test_smoke_scenarios_run_offline(self):
         store = await self.run_smoke(full=True)
-        self.assertEqual(store.saved, 6)
-        self.assertEqual(sum(r["status"] == "accepted" for r in store.records.values()), 5)
-        self.assertEqual(sum(r["status"] == "skipped" for r in store.records.values()), 1)
+        self.assertEqual(store.saved, 10)
+        self.assertEqual(sum(r["status"] == "accepted" for r in store.records.values()), 6)
+        self.assertEqual(sum(r["status"] == "skipped" for r in store.records.values()), 4)
 
-    async def test_default_and_resume_never_process_more_than_three_rows(self):
-        store = await self.run_smoke()
-        self.assertEqual(store.saved, 3)
-        source = parse_insights(Path("tests/fixtures/smoke_insights.jsonl").read_bytes())
-        self.assertEqual(set(store.records), {row["insight_id"] for row in source[:3]})
+    async def test_default_and_resume_never_process_more_than_the_row_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "input.jsonl"
+            rows = [{"insight_id": f"junk-{n:02d}", "quality_flag": "junk"} for n in range(12)]
+            source.write_text("".join(json.dumps(row) + "\n" for row in rows))
+            store = await self.run_smoke(source=str(source))
+        self.assertEqual(store.saved, DEFAULT_ROW_LIMIT)
+        self.assertEqual(
+            set(store.records), {row["insight_id"] for row in rows[:DEFAULT_ROW_LIMIT]}
+        )
 
     def test_limit_counts_nonblank_rows_and_does_not_parse_the_tail(self):
         rows = parse_insights(b'\n{"insight_id":"one"}\n\n{"insight_id":"two"}\nbad json', 2)

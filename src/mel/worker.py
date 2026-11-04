@@ -14,13 +14,23 @@ from uuid import UUID, uuid4
 from mel.agents import build_agents
 from mel.bedrock import create_mantle_client
 from mel.bundle import Bundle, local_bundle, read_bytes, write_bytes
+from mel.clock import IST
 from mel.config import Settings
+from mel.evaluation import (
+    insights_jsonl,
+    load_golden,
+    load_results,
+    score_decisions,
+    score_surveys,
+)
 from mel.graph import Dependencies, Select, State, survey_graph
 from mel.models import Outcome
-from mel.policy import IST
 from mel.store import Store
 
 logger = logging.getLogger("mel")
+
+DEFAULT_ROW_LIMIT = 10  # Rows processed unless --full is given.
+GOLDEN_PATH = Path("docs/participant-pack/data/golden_set.jsonl")
 
 
 async def process_insight(insight: dict, survey_id: str, deps: Dependencies) -> Outcome:
@@ -107,7 +117,7 @@ async def run_batch(args: argparse.Namespace, settings: Settings) -> int:
     bundle = Bundle.load(settings, args.bundle_uri)
     config = bundle.config
     body = read_bytes(args.input, settings.aws_region)
-    limit = None if getattr(args, "full", False) else 3
+    limit = None if getattr(args, "full", False) else DEFAULT_ROW_LIMIT
     insights = parse_insights(body, limit=limit)
     # Bind checkpoints to this selection. Resuming a limited run must never
     # advance into another group of rows or silently turn into a full run.
@@ -116,14 +126,7 @@ async def run_batch(args: argparse.Namespace, settings: Settings) -> int:
     generator, reviewer = build_agents(
         config, settings.aws_region, bundle.snapshot["prompts"], settings.bedrock_project_id
     )
-    deps = Dependencies(
-        config,
-        bundle.snapshot["rules"],
-        bundle.snapshot["calendar"],
-        bundle.contracts,
-        generator,
-        reviewer,
-    )
+    deps = Dependencies.from_bundle(bundle, generator, reviewer)
     store = None
     try:
         store = Store(settings)
@@ -196,7 +199,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
         settings = settings.model_copy(update={"config_path": args.config})
     bundle = Bundle.load(settings)
     body = args.input.read_bytes()
-    rows = parse_insights(body, limit=None if args.full else 3)
+    rows = parse_insights(body, limit=None if args.full else DEFAULT_ROW_LIMIT)
     run_id = str(uuid4())
     directory = args.output_dir / run_id
     directory.mkdir(parents=True, exist_ok=False)
@@ -212,7 +215,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
         "input_sha256": hashlib.sha256(body).hexdigest(),
         "region": settings.aws_region,
         "selected_rows": len(rows),
-        "selection": "full" if args.full else "first_3",
+        "selection": "full" if args.full else f"first_{DEFAULT_ROW_LIMIT}",
         "generation_model": bundle.config.generation.model_id,
         "review_model": bundle.config.review.model_id,
         "results": str(directory / "results.jsonl"),
@@ -231,14 +234,7 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
             bundle.snapshot["prompts"],
             settings.bedrock_project_id,
         )
-        deps = Dependencies(
-            bundle.config,
-            bundle.snapshot["rules"],
-            bundle.snapshot["calendar"],
-            bundle.contracts,
-            generator,
-            reviewer,
-        )
+        deps = Dependencies.from_bundle(bundle, generator, reviewer)
         pending = iter(enumerate(rows, 1))
         with (directory / "results.jsonl").open("w", encoding="utf-8") as output:
 
@@ -293,6 +289,44 @@ async def preview(args: argparse.Namespace, settings: Settings) -> int:
             await client.close()
 
 
+def eval_rules(args: argparse.Namespace) -> None:
+    """Deterministic decisions and windows vs the golden set. No model calls."""
+    bundle = Bundle.load(Settings(config_path=args.config))
+    report = score_decisions(bundle.decision_engine(), load_golden(args.golden)).to_dict()
+    body = json.dumps(report, indent=2, ensure_ascii=False)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(body + "\n", encoding="utf-8")
+    summary = {key: report[key] for key in ("cases", "decision_accuracy", "rule_accuracy")}
+    print(
+        json.dumps(
+            {
+                **summary,
+                "window": report["window"],
+                "output": str(args.output) if args.output else None,
+            }
+        )
+    )
+
+
+def eval_surveys(args: argparse.Namespace) -> None:
+    """Results file vs golden set: decisions, survey shape, speed. No model calls."""
+    report = score_surveys(load_results(args.results), load_golden(args.golden))
+    output = args.output or args.results.with_name("survey_eval.json")
+    output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print(
+        json.dumps(
+            {**{k: v for k, v in report.items() if k != "side_by_side"}, "output": str(output)},
+            ensure_ascii=False,
+        )
+    )
+
+
+def golden_insights(args: argparse.Namespace) -> None:
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(insights_jsonl(load_golden(args.golden)), encoding="utf-8")
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     parser = argparse.ArgumentParser(description=__doc__)
@@ -306,7 +340,7 @@ def main() -> None:
     run.add_argument(
         "--full",
         action="store_true",
-        help="Process the entire input; default is only the first 3 nonblank rows",
+        help=f"Process the entire input; default is the first {DEFAULT_ROW_LIMIT} nonblank rows",
     )
     local = sub.add_parser(
         "preview", help="Iterate locally against Bedrock; no database or deployment"
@@ -315,14 +349,33 @@ def main() -> None:
     local.add_argument("--config", type=Path, help="Config YAML; defaults to MEL_CONFIG_PATH")
     local.add_argument("--output-dir", type=Path, default=Path("outputs/local"))
     local.add_argument(
-        "--full", action="store_true", help="Use the entire input; default is 3 rows"
+        "--full",
+        action="store_true",
+        help=f"Use the entire input; default is {DEFAULT_ROW_LIMIT} rows",
     )
     bundle = sub.add_parser("bundle-config", help="Snapshot prompts, policy, schemas and calendar")
     bundle.add_argument("--config", type=Path, default=Path("config/agent.yaml"))
     bundle.add_argument("--output", type=Path, required=True)
     sub.add_parser("check-model", help="One small Bedrock access check; no database or dataset")
+    rules = sub.add_parser("eval-rules", help="Score survey decisions and windows vs golden set")
+    rules.add_argument("--golden", type=Path, default=GOLDEN_PATH)
+    rules.add_argument("--config", type=Path, default=Path("config/agent.yaml"))
+    rules.add_argument("--output", type=Path, help="Write the full report, mismatches included")
+    surveys = sub.add_parser("eval-surveys", help="Score a results file vs golden set")
+    surveys.add_argument("--results", type=Path, required=True)
+    surveys.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
+    surveys.add_argument("--output", type=Path, help="Default: survey_eval.json beside results")
+    extract = sub.add_parser("golden-insights", help="Write golden insights as worker input")
+    extract.add_argument("--golden", type=Path, default=Path("eval/golden_holdout.jsonl"))
+    extract.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    if args.command == "bundle-config":
+    if args.command == "eval-rules":
+        eval_rules(args)
+    elif args.command == "eval-surveys":
+        eval_surveys(args)
+    elif args.command == "golden-insights":
+        golden_insights(args)
+    elif args.command == "bundle-config":
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(local_bundle(args.config), indent=2, ensure_ascii=False))
     else:

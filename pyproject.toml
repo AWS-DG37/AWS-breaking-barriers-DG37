@@ -15,6 +15,9 @@ dependencies = [
   "httpx>=0.28,<1",
   "botocore>=1.35,<2",
   "pydantic-graph==1.84.1",
+  # 0.1 adds output_reasoning_tokens, which pydantic-ai 1.84.1's RequestUsage rejects;
+  # pydantic-ai swallows the error and reports zero tokens. Lift with a pydantic-ai upgrade.
+  "genai-prices<0.1",
   "pydantic-settings>=2.7,<3",
   "psycopg[binary]>=3.2,<4",
   "PyYAML>=6,<7",

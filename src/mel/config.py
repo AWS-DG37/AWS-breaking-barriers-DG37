@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,6 +33,28 @@ class BatchPolicy(StrictModel):
     output_cost_per_million: float | None = Field(default=None, ge=0)
 
 
+class GoldenWindowConfig(StrictModel):
+    """Send windows as golden set v1 draws them; see GoldenWindowPolicy."""
+
+    days: dict[str, tuple[int, int]]
+    opens: str
+    closes: str
+    same_day_delay_hours: int = Field(ge=0)
+    same_day_length_hours: int = Field(gt=0)
+
+
+class DecisionPolicy(StrictModel):
+    human_call_severities: list[str] = Field(min_length=1)
+    window_policy: Literal["pack", "golden_v1"]
+    golden_v1: GoldenWindowConfig | None = None
+
+    @model_validator(mode="after")
+    def golden_settings_present(self):
+        if self.window_policy == "golden_v1" and self.golden_v1 is None:
+            raise ValueError("window_policy golden_v1 requires decision.golden_v1 settings")
+        return self
+
+
 class PromptPaths(StrictModel):
     generate: Path
     review: Path
@@ -44,6 +66,7 @@ class AgentConfig(StrictModel):
     review: ModelConfig
     graph: GraphPolicy = Field(default_factory=GraphPolicy)
     batch: BatchPolicy = Field(default_factory=BatchPolicy)
+    decision: DecisionPolicy
     prompts: PromptPaths
     rules_path: Path
     calendar_path: Path

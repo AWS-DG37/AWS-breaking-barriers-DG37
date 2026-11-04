@@ -44,7 +44,9 @@ The worker never sends a real message or calls production FarmerChat.
 | Survey-writing instructions | `prompts/generate.txt` |
 | Independent review instructions | `prompts/review.txt` |
 | Golden example provenance and held-out cases | `eval/prompt_example_split.json`, `eval/golden_holdout.jsonl` |
-| Eligibility, windows, channels, caps, priority | Participant pack `json/rules/rules.json` |
+| Survey-or-not rules R1–R8 and their order | `src/mel/decision/__init__.py` (`build_engine`) |
+| Human-call severities (R2), window policy | `config/agent.yaml`: `decision` |
+| Windows, channels, caps, priority | Participant pack `json/rules/rules.json` |
 | Crop-calendar evidence passed to the generator | Participant pack `data/crop_calendar_bihar_rabi.csv` |
 | Actual graph topology / node routing | `src/mel/graph.py` |
 | PostgreSQL layout and scheduler outbox | `migrations/001_initial.sql` |
@@ -78,7 +80,7 @@ The worker reads it with `--bundle-uri s3://.../config/.../bundle.json`. A confi
 bundle is data, not executable graph code. Topology changes require a new image.
 Config snapshots include no database credentials.
 
-Prompt version `luna-golden-patterns-v3` embeds the same seven golden reference
+Prompt version `luna-golden-patterns-v6` embeds the same seven golden reference
 patterns in generation and review. Positive examples span five advice types and
 five crop/animal contexts, with two no-survey boundary examples. The agents are
 instructed to transfer the measurement pattern rather than copy crop-specific
@@ -91,10 +93,77 @@ from scoring, leaving 138 candidate held-out golden records. The original source
 dataset is unchanged. Prompt and version edits are uploaded by each launcher run
 and do not require rebuilding the worker image. Use a fresh run UUID to test them.
 
-Timing is a deterministic implementation of the pack's window rules. Crop-calendar
-rows are supplied to generation as context; the scaffold does **not** infer new
-phenology dates, fetch weather, or implement calendar-aware rescheduling. Add such
-policies in `policy.py`, with tests, when the MEL team specifies them.
+## Survey decisions and golden-set scoring
+
+Survey or not is decided in code before any model call, by `mel.decision`. Each
+golden rule is one class in `src/mel/decision/rules.py`; the engine applies them in
+order and the first one that declines wins:
+
+| Rule | Reason code | Declines when |
+|---|---|---|
+| R1 | `junk_insight` | `quality_flag` is junk, or the row breaks the insight schema |
+| R2 | `critical_needs_human_call` | severity is in `decision.human_call_severities` |
+| R3 | `nothing_to_verify` | `resolution_type` is `generic_information` |
+| R4 | `waiting_for_details` | `resolution_type` is `needs_more_context` |
+| R5 | `no_check_needed` | `verification.needed` is false |
+| R6 | `window_after_season` | the window policy finds no window before 31 March |
+| R7 | `crop_already_harvested` | the crop's calendar has ended by the advice day |
+| R8 | (survey) | none of the above |
+
+Send windows come from a `WindowPolicy`, chosen by `decision.window_policy` in
+`config/agent.yaml`. Pack v1 contradicts itself here, so both are implemented:
+
+- `golden_v1` (default, `GoldenWindowPolicy`): the windows golden set v1 expects.
+  Day timings open at 09:00 on the first offset day and close at 19:00 on the last,
+  ignoring the action window and minimum width, clipped to 31 March. `same_day`
+  opens four hours after the advice for four hours, moving to 09:00 next morning
+  when that falls after 19:00. Seasonal is 30 to 45 days. Settings live under
+  `decision.golden_v1`.
+- `pack` (`PackWindowPolicy`): the written "When to send" rules in `rules.json`:
+  07:00 to 19:00, never before the action window ends, at least two days wide.
+
+Score decisions and windows against the golden set, offline and free:
+
+```bash
+uv run mel-worker eval-rules --output outputs/eval/rules.json
+```
+
+With `golden_v1`: 150/150 decisions and rules, and 95/95 windows exact to the
+minute. With `pack`: 149/150 decisions, and most window dates differ.
+`tests/test_decision.py` pins the `golden_v1` result. Ask Digital Green which rule
+is intended; switching is one config line.
+
+To run the real agents on held-out golden insights, extract the insights first.
+Expected answers are never written to the agent input:
+
+```bash
+uv run mel-worker golden-insights --output outputs/golden_insights.jsonl
+uv run mel-worker preview --input outputs/golden_insights.jsonl
+uv run mel-worker eval-surveys --results outputs/local/<run-id>/results.jsonl
+```
+
+`eval-surveys` scores a results file with no model calls: decision accuracy,
+questions and options per survey against the golden set, follow-up codes, reviewer
+relevance, seconds and tokens per survey. It writes `survey_eval.json` beside the
+results, including golden and generated questions side by side for human review.
+Question meaning is not scored automatically yet.
+
+Prompt history on held-out golden insights (all decisions correct in every run):
+
+| Version | Rows | Options per question | Questions | Seconds per survey |
+|---|---|---|---|---|
+| v3 | 1–10 | 4.7 (max 6) | 2.3 | 6.0 |
+| v4: short answer sets | 1–10 | 3.0 (max 3) | 2.3 | 4.3 |
+| v5: main action first, two questions by default | 1–10 | 3.0 (max 3) | 2.0 | 4.9 |
+| v5 | 11–30 | 3.05 (max 4) | 2.0 | 5.4 |
+| v6: fixed plan and monitoring shapes | 1–30 | 2.9 (max 3) | 2.0 | 5.9 |
+
+Golden direct-action surveys often add "If not, what stopped you?" shown only after
+a No. The survey contract has no conditional display, so v5 leaves barrier
+questions out; that needs a `show_if` field from Digital Green.
+
+Crop-calendar rows are supplied to generation as context; the scaffold does **not**
+infer new phenology dates, fetch weather, or implement calendar-aware rescheduling.
 
 ## Fast local prompt iteration
 
@@ -112,10 +181,10 @@ uv run mel-worker preview
 ```
 
 The default input is `tests/fixtures/smoke_insights.jsonl`, limited to its first
-three rows. To try another local input or a separate experiment config:
+10 rows. To try another local input or a separate experiment config:
 
 ```bash
-uv run mel-worker preview --input path/to/three-insights.jsonl \
+uv run mel-worker preview --input path/to/insights.jsonl \
   --config config/agent.yaml
 ```
 
@@ -151,7 +220,7 @@ export MEL_BEDROCK_MODEL_ID=openai.gpt-6-luna
 # One short access check, with no database or input dataset:
 uv run mel-worker check-model
 
-# Start with three rows of the curated smoke input.
+# Start with the 10-row curated smoke input.
 uv run mel-worker run --input tests/fixtures/smoke_insights.jsonl \
   --output outputs/smoke-results.jsonl \
   --run-id 63b63c0a-1bfd-41dc-aa8b-0796118bc662
@@ -167,16 +236,17 @@ sam validate --lint --template-file template.yaml
 ```
 
 `tests/fixtures/smoke_insights.jsonl` contains the six worked scenarios from the
-participant pack: spraying, irrigation, monitoring blight, expert escalation,
-planning, and an information-only insight that should get no survey. Add `--full`
-when using this fixture to exercise all six. Automated worker tests use fake LLM
+participant pack (spraying, irrigation, monitoring blight, expert escalation,
+planning, and an information-only insight that gets no survey) plus four held-out
+golden insights: a critical case (R2), a no-check case (R5), a harvested crop (R7),
+and a hold-off survey. Automated worker tests use fake LLM
 responses and an in-memory store; they verify contracts and workflow, not actual
 question quality or Bedrock/PostgreSQL access.
 
-Every run processes only the first **3 nonblank input records** by default, including
+Every run processes only the first **10 nonblank input records** by default, including
 skipped/rejected records. Add `--full` to process the entire input. This applies to
 both the local worker and the Fargate launcher; there is no `--limit` CLI option.
-Resume selects the same rows and never advances to the next three. Switching to
+Resume selects the same rows and never advances to the next 10. Switching to
 `--full` requires a new run UUID. Revision/output retries still apply, so one
 selected insight can make multiple model calls.
 
@@ -277,7 +347,7 @@ uv run python scripts/start_run.py --region "$AWS_REGION" --stack "$STACK_NAME" 
 The command prints a run UUID, task ARN, log group, and S3 results URI. It returns
 after task submission; use ECS task status/container exit code and CloudWatch logs
 to check completion. For the 6,999-row dataset, use
-`--input docs/participant-pack/data/insights.jsonl`; it still processes just three
+`--input docs/participant-pack/data/insights.jsonl`; it still processes just 10
 rows unless you explicitly add `--full`. Concurrency is per task; account-wide
 Bedrock quotas still apply.
 
@@ -313,13 +383,13 @@ are an internal batch contract, not FarmerChat's response contract.
 
 Known pack differences are handled explicitly:
 
-- `no_survey.schema.json` permits only `generic_information` and `needs_more_context`.
-  Junk, invalid, verification-not-needed, and season-window skips stay in the internal
-  outcome reason until Digital Green supplies a broader contract.
+- `no_survey.schema.json` permits only `generic_information` and `needs_more_context`,
+  so only R3 and R4 emit a `no_survey` object. Every skip records its golden `rule` and
+  `reason` in the outcome until Digital Green supplies a broader contract.
 - The flow-key rule uses a survey ID containing a hyphen, while the flow-key schema
   forbids hyphens. The worker normalizes the ID to underscores in `flow_key`.
-- `same_day` and `next_day` offsets are normalized by minimum-start/action-window
-  and minimum-width rules, matching the brief's effective timing examples.
+- Golden v1 windows contradict the written timing rules; see "Survey decisions and
+  golden-set scoring" for the two window policies.
 
 The review score is an LLM quality gate, not proof of quality against a validated
 rubric. Use the golden set to evaluate survey/no-survey decisions and MEL reviewers
@@ -341,7 +411,7 @@ contents except the small test reply) to help diagnose missing counters.
 
 ## Team boundaries
 
-1. Generation: `src/mel/graph.py`, `agents.py`, `policy.py`, prompts, config, quality evaluation.
+1. Generation: `src/mel/graph.py`, `agents.py`, `decision/`, `handoff.py`, prompts, config, quality evaluation.
 2. Scheduling: consume the validated handoff outbox; own clock, frequency caps, dispatch/retries.
 3. Delivery: render questions and emit delivery/interaction events; do not decide validity.
 4. Answer recording/reporting: validate submissions against the stored survey, persist

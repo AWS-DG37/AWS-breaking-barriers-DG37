@@ -12,6 +12,7 @@ import boto3
 
 from mel.config import AgentConfig, Settings, load_config
 from mel.contracts import Contracts
+from mel.decision import CropCalendar, DecisionEngine, build_engine
 
 
 def read_bytes(uri: str, region: str) -> bytes:
@@ -74,20 +75,32 @@ class Bundle:
         snapshot["config"] = config.model_dump(mode="json")
         return cls(config, snapshot, Contracts(schemas=snapshot["schemas"]))
 
+    def calendar(self) -> CropCalendar:
+        return CropCalendar(self.snapshot["calendar"])
+
+    def decision_engine(self) -> DecisionEngine:
+        return build_engine(
+            self.snapshot["rules"],
+            self.config.decision,
+            self.calendar(),
+            lambda insight: self.contracts.errors("insight", insight),
+        )
+
     def fingerprint(self, input_bytes: bytes, region: str) -> str:
         # Bundles contain their source paths for traceability, but execution uses the
         # embedded text/data. Moving an identical bundle between teammates is safe.
         snapshot = {**self.snapshot, "config": dict(self.snapshot["config"])}
         for key in ("prompts", "rules_path", "calendar_path", "schemas_path"):
             snapshot["config"].pop(key, None)
+        package = Path(__file__).parent
         manifest = {
             "bundle": snapshot,
             "input_sha256": hashlib.sha256(input_bytes).hexdigest(),
             "region": region,
             "implementation_sha256": hashlib.sha256(
                 b"".join(
-                    p.name.encode() + p.read_bytes()
-                    for p in sorted(Path(__file__).parent.glob("*.py"))
+                    str(p.relative_to(package)).encode() + p.read_bytes()
+                    for p in sorted(package.rglob("*.py"))
                 )
             ).hexdigest(),
         }

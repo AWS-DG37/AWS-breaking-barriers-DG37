@@ -11,9 +11,9 @@ from botocore.credentials import Credentials
 from mel.agents import build_agents
 from mel.bedrock import MantleSigV4Auth, create_mantle_client
 from mel.bundle import Bundle
+from mel.clock import IST
 from mel.config import Settings
 from mel.graph import State, check_usage
-from mel.policy import IST
 
 
 class BedrockTests(unittest.IsolatedAsyncioTestCase):
@@ -76,7 +76,14 @@ class BedrockTests(unittest.IsolatedAsyncioTestCase):
                             "status": "completed",
                         }
                     ],
-                    "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}
+                    # Same shape Mantle returns, including the details objects.
+                    "usage": {
+                        "input_tokens": 10,
+                        "input_tokens_details": {"cache_write_tokens": 0, "cached_tokens": 0},
+                        "output_tokens": 5,
+                        "output_tokens_details": {"reasoning_tokens": 0},
+                        "total_tokens": 15,
+                    }
                     if usage_reported
                     else None,
                 },

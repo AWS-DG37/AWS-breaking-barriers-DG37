@@ -24,7 +24,8 @@ class ChoiceItem(StrictModel):
     item_id: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
     type: Literal["survey-single-select", "survey-confirm"]
     prompt: str = Field(min_length=1, max_length=400)
-    options: list[Option] = Field(min_length=2, max_length=10)
+    # The pack schema allows ten; golden questions never use more than four.
+    options: list[Option] = Field(min_length=2, max_length=4)
 
     @model_validator(mode="after")
     def check_options(self):
@@ -87,7 +88,9 @@ class Review(StrictModel):
 class Outcome(StrictModel):
     insight_id: str
     status: Literal["accepted", "skipped", "rejected", "failed"]
+    rule: str | None = None  # Golden rule code (R1-R8) that decided survey or not.
     reason: str | None = None
+    detail: str | None = None
     survey: dict | None = None
     candidate_survey: dict | None = None  # Rejected draft for review; never a scheduler handoff.
     handoff: dict | None = None

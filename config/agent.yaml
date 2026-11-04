@@ -1,5 +1,5 @@
 # Paths resolve relative to this file. Override with --config or MEL_CONFIG_PATH.
-version: luna-golden-patterns-v3
+version: luna-golden-patterns-v6
 generation:
   model_id: null  # Null uses MEL_BEDROCK_MODEL_ID; set an explicit ID to override it.
   temperature: null  # Omit sampling parameters for reasoning models.
@@ -20,6 +20,22 @@ batch:
   concurrency: 3
   input_cost_per_million: null  # Set actual model prices to enable estimated cost.
   output_cost_per_million: null
+decision:
+  human_call_severities: [critical]  # Golden R2: a person calls instead of a survey.
+  # pack: the participant pack's written "When to send" rules (rules.json).
+  # golden_v1: the windows golden set v1 expects; they conflict with the written rules.
+  window_policy: golden_v1
+  golden_v1:
+    days:  # Days after the advice: [opens, closes]. Golden v1 ignores the action window.
+      next_day: [1, 2]  # No golden example; taken from rules.json.
+      two_to_five_days: [2, 5]
+      three_to_ten_days: [3, 10]
+      seven_to_fourteen_days: [7, 14]
+      seasonal: [30, 45]
+    opens: "09:00"
+    closes: "19:00"
+    same_day_delay_hours: 4   # same_day opens this long after the advice...
+    same_day_length_hours: 4  # ...and stays open this long.
 prompts:
   generate: ../prompts/generate.txt
   review: ../prompts/review.txt

@@ -3,52 +3,10 @@
 This constructs the handoff only. A downstream scheduler enforces it at dispatch.
 """
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
-from zoneinfo import ZoneInfo
 
-IST = ZoneInfo("Asia/Kolkata")
-
-
-def eligibility(insight: dict, rules: dict) -> str | None:
-    if insight.get("quality_flag") == "junk":
-        return "junk_insight"
-    resolution = insight["resolution_type"]
-    if not rules["survey_by_resolution"][resolution]["survey"]:
-        return resolution
-    if not insight["verification"]["needed"]:
-        return "verification_not_needed"
-    return None
-
-
-def send_window(insight: dict, rules: dict) -> dict:
-    policy = rules["window_rules"]
-    origin = datetime.fromisoformat(insight["created_at"]).astimezone(IST).date()
-    action_days = insight["action_window_days"]
-    if action_days is None:
-        action_days = policy["action_window_days_if_null"]
-    offsets = rules["send_window_days"][insight["verification"]["timing"]]
-    if offsets == "from_action_window":
-        start = action_days + policy["none_start_after_action_window_days"]
-        end = action_days + policy["none_end_after_action_window_days"]
-    else:
-        start, end = offsets
-    start = max(start, policy["earliest_start_day"])
-    if policy["start_not_before_action_window_end"]:
-        start = max(start, action_days)
-    end = max(end, start + policy["min_width_days"])
-    earliest = origin + timedelta(days=start)
-    latest = min(origin + timedelta(days=end), datetime.fromisoformat(policy["season_end"]).date())
-    if (latest - earliest).days < policy["min_width_days"]:
-        raise ValueError("no_valid_season_window")
-    return {
-        "not_before": datetime.combine(
-            earliest, time.fromisoformat(policy["not_before_time"]), IST
-        ).isoformat(),
-        "not_after": datetime.combine(
-            latest, time.fromisoformat(policy["not_after_time"]), IST
-        ).isoformat(),
-    }
+from mel.clock import IST
 
 
 def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:

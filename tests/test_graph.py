@@ -10,10 +10,10 @@ from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
 from mel.bundle import Bundle
+from mel.clock import IST
 from mel.config import Settings
 from mel.graph import Dependencies, Select, State, survey_graph
 from mel.models import Review, SurveyDraft
-from mel.policy import IST, send_window
 from mel.worker import parse_insights
 
 PACK = Path("docs/participant-pack")
@@ -36,11 +36,8 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
             "asks_personal_info": False,
             "issues": [],
         }
-        self.deps = Dependencies(
-            self.bundle.config,
-            self.bundle.snapshot["rules"],
-            self.bundle.snapshot["calendar"],
-            self.bundle.contracts,
+        self.deps = Dependencies.from_bundle(
+            self.bundle,
             Agent(TestModel(custom_output_args=draft), output_type=SurveyDraft),
             Agent(TestModel(custom_output_args=self.review), output_type=Review),
         )
@@ -101,36 +98,40 @@ class GraphTests(unittest.IsolatedAsyncioTestCase):
     async def test_junk_never_calls_model(self):
         self.insight = {"insight_id": "broken", "quality_flag": "junk"}
         result = await self.execute()
-        self.assertEqual(result.reason, "junk_insight")
+        self.assertEqual((result.rule, result.reason), ("R1", "junk_insight"))
         self.assertEqual(result.attempts, 0)
 
     async def test_information_returns_pack_compatible_no_survey(self):
         self.insight["resolution_type"] = "generic_information"
         result = await self.execute()
-        self.assertEqual(result.status, "skipped")
+        self.assertEqual((result.status, result.rule), ("skipped", "R3"))
         self.bundle.contracts.validate("no_survey", result.no_survey)
+
+    async def test_critical_severity_goes_to_a_person_without_model_call(self):
+        self.insight["severity"] = "critical"
+        result = await self.execute()
+        self.assertEqual((result.rule, result.reason), ("R2", "critical_needs_human_call"))
+        self.assertIsNone(result.no_survey)
+        self.assertEqual(result.attempts, 0)
 
     async def test_invalid_input_is_rejected_before_inference(self):
         del self.insight["farmer_id"]
         result = await self.execute()
-        self.assertTrue(result.reason.startswith("invalid_insight:"))
+        self.assertEqual((result.rule, result.reason), ("R1", "junk_insight"))
+        self.assertIn("farmer_id", result.detail)
         self.assertEqual(result.attempts, 0)
 
     async def test_expired_season_never_calls_model(self):
         self.insight["created_at"] = "2027-03-31T09:12:00+05:30"
-        self.assertEqual((await self.execute()).reason, "no_valid_season_window")
+        self.assertEqual((await self.execute()).reason, "window_after_season")
 
-    def test_window_matches_worked_example(self):
-        window = send_window(self.insight, self.deps.rules)
-        self.assertEqual(window["not_before"], "2026-12-06T07:00:00+05:30")
-        self.assertEqual(window["not_after"], "2026-12-09T19:00:00+05:30")
-
-    def test_same_day_is_normalized_and_respects_action_window(self):
-        self.insight["verification"]["timing"] = "same_day"
-        self.insight["action_window_days"] = 5
-        window = send_window(self.insight, self.deps.rules)
-        self.assertEqual(window["not_before"], "2026-12-09T07:00:00+05:30")
-        self.assertEqual(window["not_after"], "2026-12-11T19:00:00+05:30")
+    async def test_accepted_survey_uses_the_decided_window(self):
+        result = await self.execute()
+        self.assertEqual(result.rule, "R8")
+        self.assertEqual(
+            result.survey["send_window"],
+            {"not_before": "2026-12-06T09:00:00+05:30", "not_after": "2026-12-09T19:00:00+05:30"},
+        )
 
     def test_changed_prompt_changes_resume_fingerprint(self):
         before = self.bundle.fingerprint(b"input", "us-east-1")

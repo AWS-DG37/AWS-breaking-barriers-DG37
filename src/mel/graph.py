@@ -15,10 +15,12 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.usage import RunUsage, UsageLimits
 from pydantic_graph import BaseNode, End, Graph, GraphRunContext
 
+from mel.bundle import Bundle
 from mel.config import AgentConfig
 from mel.contracts import Contracts
+from mel.decision import CropCalendar, Decision, DecisionEngine
+from mel.handoff import handoff
 from mel.models import Outcome, Review
-from mel.policy import eligibility, handoff, send_window
 
 
 @dataclass
@@ -28,6 +30,7 @@ class State:
     now: datetime
     attempts: int = 0
     feedback: list[str] = field(default_factory=list)
+    decision: Decision | None = None
     survey: dict | None = None
     window: dict | None = None
     review: Review | None = None
@@ -39,10 +42,23 @@ class State:
 class Dependencies:
     config: AgentConfig
     rules: dict
-    calendar: list[dict]
+    calendar: CropCalendar
     contracts: Contracts
+    decisions: DecisionEngine
     generator: Agent
     reviewer: Agent
+
+    @classmethod
+    def from_bundle(cls, bundle: Bundle, generator: Agent, reviewer: Agent) -> Dependencies:
+        return cls(
+            bundle.config,
+            bundle.snapshot["rules"],
+            bundle.calendar(),
+            bundle.contracts,
+            bundle.decision_engine(),
+            generator,
+            reviewer,
+        )
 
 
 def finish(state: State, status: str, **kwargs) -> End[Outcome]:
@@ -50,6 +66,7 @@ def finish(state: State, status: str, **kwargs) -> End[Outcome]:
         Outcome(
             insight_id=state.insight["insight_id"],
             status=status,
+            rule=state.decision.rule if state.decision else None,
             attempts=state.attempts,
             input_tokens=state.usage.input_tokens,
             output_tokens=state.usage.output_tokens,
@@ -69,33 +86,36 @@ def check_usage(state: State, result) -> None:
                 state.usage_complete = False
 
 
+def no_survey(insight: dict, decision: Decision) -> dict | None:
+    """The pack's no_survey contract object, for the reasons that contract can carry."""
+    if decision.no_survey_code is None:
+        return None
+    return {
+        "insight_id": insight["insight_id"],
+        "farmer_id": insight["farmer_id"],
+        "decision": "no_survey",
+        "reason_code": decision.no_survey_code,
+        "reason": decision.explanation,
+    }
+
+
 @dataclass
 class Select(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> Generate | End[Outcome]:
         s, d = ctx.state, ctx.deps
-        if s.insight.get("quality_flag") == "junk":
-            return finish(s, "skipped", reason="junk_insight")
-        errors = d.contracts.errors("insight", s.insight)
-        if errors:
-            return finish(s, "skipped", reason="invalid_insight: " + "; ".join(errors))
-        reason = eligibility(s.insight, d.rules)
-        if reason:
-            no_survey = None
-            # Pack v1's no_survey schema cannot represent junk/invalid/verification skips.
-            if reason in ("generic_information", "needs_more_context"):
-                no_survey = {
-                    "insight_id": s.insight["insight_id"],
-                    "farmer_id": s.insight["farmer_id"],
-                    "decision": "no_survey",
-                    "reason_code": reason,
-                    "reason": d.rules["survey_by_resolution"][reason]["asks"],
-                }
-                d.contracts.validate("no_survey", no_survey)
-            return finish(s, "skipped", reason=reason, no_survey=no_survey)
-        try:
-            s.window = send_window(s.insight, d.rules)
-        except ValueError as error:
-            return finish(s, "skipped", reason=str(error))
+        decision = s.decision = d.decisions.decide(s.insight)
+        if not decision.survey:
+            contract = no_survey(s.insight, decision)
+            if contract is not None:
+                d.contracts.validate("no_survey", contract)
+            return finish(
+                s,
+                "skipped",
+                reason=decision.reason_code,
+                detail=decision.explanation,
+                no_survey=contract,
+            )
+        s.window = decision.window.to_contract()
         return Generate()
 
 
@@ -104,8 +124,7 @@ class Generate(BaseNode[State, Dependencies, Outcome]):
     async def run(self, ctx: GraphRunContext[State, Dependencies]) -> ReviewSurvey:
         s, d = ctx.state, ctx.deps
         s.attempts += 1
-        crop = s.insight["asset"]["name"]
-        calendar = [row for row in d.calendar if row["crop"] == crop]
+        calendar = d.calendar.rows_for(s.insight["asset"]["name"])
         result = await d.generator.run(
             json.dumps(
                 {

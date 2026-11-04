@@ -9,6 +9,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from mel.bundle import local_bundle
+from mel.worker import DEFAULT_ROW_LIMIT
 
 
 def main():
@@ -26,7 +27,7 @@ def main():
     parser.add_argument(
         "--full",
         action="store_true",
-        help="Process the entire input; default is only the first 3 nonblank rows",
+        help=f"Process the entire input; default is the first {DEFAULT_ROW_LIMIT} nonblank rows",
     )
     args = parser.parse_args()
     run_id = str(UUID(args.run_id)) if args.run_id else str(uuid4())
@@ -85,7 +86,7 @@ def main():
         "task_arn": task["taskArn"],
         "task_definition": outputs["WorkerTaskDefinitionArn"],
         "config_version": snapshot["config"]["version"],
-        "selection": "full" if args.full else "first_3",
+        "selection": "full" if args.full else f"first_{DEFAULT_ROW_LIMIT}",
         "log_group": outputs["WorkerLogGroup"],
         "results": f"s3://{bucket}/outputs/{run_id}/results.jsonl",
         "launch_manifest": str(manifest_path),

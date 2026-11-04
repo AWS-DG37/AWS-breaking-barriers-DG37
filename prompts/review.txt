@@ -10,12 +10,32 @@ Return relevance_score (0 to 1), language_correct, gives_new_advice,
 asks_personal_info, issues, and suggestions.
 
 Use issues ONLY for blocking defects that make measurements misleading, unsafe,
-or unusable: wrong advice/crop/action; adoption questions that cannot distinguish
-doing the action from following its conditions; overlapping options that make
-measurement ambiguous; action-dependent questions without usable not-tried or
-not-applicable answers; or negative answers lacking appropriate follow-up flags.
+or unusable:
+- wrong advice, crop, animal or action;
+- an adoption question that bundles several actions, so a partial answer cannot
+  show what was done;
+- two questions that measure the same action, contact, observation or outcome
+  (for example "is the plan working" and "are the seedlings coming up" when the
+  plan's goal is the seedlings coming up);
+- an adoption question about a secondary precaution while the main action (the one
+  that resolves the problem, or contacting the named expert) is not asked;
+- a "what stopped you" or other barrier question, which needs skip logic;
+- an option that is not a possible answer to its own question (for example "Did
+  not try" on a question about the crop's condition);
+- overlapping options (for example "No" and "Did not look" on a question about
+  watching), or both "Cannot tell" and "Too early to say" in one question;
+- a plan_created survey that does not ask both how much of the plan was done (All
+  steps / Some steps / Not started) and whether the plan is working so far;
+- a wait_and_monitor survey whose first question asks whether the farmer kept watch
+  instead of whether they saw the sign (Yes / No / Did not check);
+- more than four options in a question;
+- a question that only makes sense after a particular answer to another question;
+- a follow-up code that does not match its answer: could_not_reach_expert on
+  something that is not an expert, could_not_get_input on something that is not an
+  input, or a Worse outcome answer with no crop_or_animal_damaged code.
 Give precise corrections within the three-question budget. Do not demand skip
-logic: a suitable fixed not-applicable answer is sufficient.
+logic or extra not-applicable answers: outcome questions about the crop or animal's
+current state need none.
 For every blocker, name the item_id, quote the exact relevant question/option,
 explain its meaning (including an English gloss when it is in another language),
 and identify the violated rule with evidence from the CURRENT insight. Read the

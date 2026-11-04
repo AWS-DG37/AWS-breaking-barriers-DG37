@@ -15,7 +15,7 @@ from pydantic_ai.models.test import TestModel
 
 from mel.config import Settings, load_config
 from mel.models import Review, SurveyDraft
-from mel.worker import preview
+from mel.worker import DEFAULT_ROW_LIMIT, preview
 
 
 def fake_agents():
@@ -53,7 +53,7 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
             config=config,
         )
 
-    async def test_default_three_rows_without_database_or_s3(self):
+    async def test_default_ten_rows_without_database_or_s3(self):
         with tempfile.TemporaryDirectory() as directory:
             with (
                 patch("mel.worker.build_agents", return_value=fake_agents()),
@@ -67,12 +67,17 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
             results = [json.loads(s) for s in (run / "results.jsonl").read_text().splitlines()]
             summary = json.loads((run / "summary.json").read_text())
             manifest = json.loads((run / "run.json").read_text())
-            self.assertEqual(len(results), 3)
-            self.assertEqual(len({r["survey"]["survey_id"] for r in results}), 3)
-            self.assertEqual(summary["counts"], {"accepted": 3})
+            self.assertEqual(len(results), DEFAULT_ROW_LIMIT)
+            surveys = {r["survey"]["survey_id"] for r in results if "survey" in r}
+            self.assertEqual(len(surveys), 6)
+            self.assertEqual(summary["counts"], {"accepted": 6, "skipped": 4})
+            self.assertEqual(
+                sorted(r["rule"] for r in results if r["status"] == "skipped"),
+                ["R2", "R3", "R5", "R7"],
+            )
             self.assertEqual(manifest["status"], "completed")
             self.assertEqual(manifest["mode"], "local_preview")
-            self.assertEqual(manifest["selection"], "first_3")
+            self.assertEqual(manifest["selection"], f"first_{DEFAULT_ROW_LIMIT}")
             self.assertTrue((run / "bundle.json").exists())
 
     async def test_full_is_explicit_and_includes_no_survey_example(self):
@@ -83,7 +88,7 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
             ):
                 self.assertEqual(await preview(self.args(directory, full=True), Settings()), 0)
             summary = json.loads(next(Path(directory).glob("*/summary.json")).read_text())
-            self.assertEqual(summary["counts"], {"accepted": 5, "skipped": 1})
+            self.assertEqual(summary["counts"], {"accepted": 6, "skipped": 4})
 
     async def test_prompt_edits_are_loaded_on_every_new_run(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -117,7 +122,7 @@ class PreviewTests(unittest.IsolatedAsyncioTestCase):
             ):
                 self.assertEqual(await preview(self.args(directory), Settings()), 1)
             summary = json.loads(next(Path(directory).glob("*/summary.json")).read_text())
-            self.assertEqual(summary["counts"], {"failed": 3})
+            self.assertEqual(summary["counts"], {"failed": 6, "skipped": 4})
             self.assertFalse(summary["usage_complete"])
             self.assertIsNone(summary["input_tokens"])
 
