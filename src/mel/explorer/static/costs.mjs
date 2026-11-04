@@ -9,7 +9,8 @@ export function costSummary(costs,runId) {
   if (!costs?.available) return el('p',{class:'small muted'},'Cost unavailable: this run predates request accounting.');
   const summary=el('section',{class:'run-costs'},el('p',{},
     `Estimated spend ${money(costs.estimated_usd)}${!costs.complete?` · known subtotal ${money(costs.known_estimated_usd)}`:''} · budget ${costs.budget_usd===null?'No limit':money(costs.budget_usd)} · committed ${money(costs.committed_usd)}`),
-    el('p',{class:'small muted'},`${costs.complete_calls}/${costs.call_count} requests fully priced. Known tokens: ${costs.known_input_tokens} input / ${costs.known_output_tokens} output. Figures use saved model prices.`));
+    el('p',{class:'small muted'},`${costs.complete_calls}/${costs.call_count} requests fully priced. Known tokens: ${costs.known_input_tokens} input / ${costs.known_output_tokens} output. Figures use saved model prices.`),
+    !costs.complete?el('p',{class:'small muted'},'Committed includes held reservations for requests whose final costs are unresolved. It is not confirmed spend; a zero known subtotal does not mean those requests were free.'):null);
   if (costs.stop_reason) summary.append(el('p',{class:'notice error'},costs.stop_reason));
   const body=el('div',{}), details=el('details',{},el('summary',{},'Request costs and price sources'),body);
   let loaded=false, offset=0;

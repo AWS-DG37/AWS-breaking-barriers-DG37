@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import asynccontextmanager, contextmanager
 from contextvars import ContextVar
+from dataclasses import asdict
 from datetime import date
 from decimal import Decimal
 from typing import Literal
@@ -15,6 +17,8 @@ from pydantic import Field, model_validator
 from pydantic_ai.models.wrapper import WrapperModel
 
 from mel.config import StrictModel
+
+logger = logging.getLogger(__name__)
 
 
 class CostRefused(Exception):
@@ -270,7 +274,7 @@ class RunCosts:
                     inputs,
                     outputs,
                     estimate,
-                    Jsonb(usage.model_dump()) if usage else None,
+                    Jsonb(asdict(usage)) if usage else None,
                     response.provider_response_id if response else None,
                     error,
                     key,
@@ -357,6 +361,7 @@ class CostedModel(WrapperModel):
         except asyncio.CancelledError:
             raise
         except Exception as failure:
+            logger.exception("Could not settle request accounting for call %s", key)
             try:
                 await asyncio.to_thread(self.costs.stop, "Request accounting failed")
             except Exception:
