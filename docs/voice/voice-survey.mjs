@@ -68,11 +68,19 @@ async function speak(text) {
   const name = await clipName(state.survey.language, text);
   if (speech !== state.speech) return false;
   const ended = await new Promise(resolve => {
+    // A missing clip fires both onerror and the play() rejection; settle only once, so the
+    // browser voice reads the line one time.
+    let settled = false;
+    const settle = outcome => {
+      if (settled) return;
+      settled = true;
+      resolve(outcome());
+    };
     const audio = new Audio(`audio/${name}`);
     state.audio = audio;
-    audio.onended = () => resolve(true);
-    audio.onerror = () => resolve(speakWithBrowser(text, speech));
-    audio.play().catch(() => resolve(speakWithBrowser(text, speech)));
+    audio.onended = () => settle(() => true);
+    audio.onerror = () => settle(() => speakWithBrowser(text, speech));
+    audio.play().catch(() => settle(() => speakWithBrowser(text, speech)));
   });
   return ended && speech === state.speech;
 }
