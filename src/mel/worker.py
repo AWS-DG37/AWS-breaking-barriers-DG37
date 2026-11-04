@@ -27,9 +27,10 @@ from mel.evaluation import (
     score_decisions,
     score_surveys,
 )
-from mel.graph import Dependencies, Select, State, survey_graph
+from mel.graph import Dependencies, Select, State, record_voice, survey_graph
 from mel.models import Outcome
 from mel.store import Store
+from mel.voice import recorder as voice_recorder
 
 logger = logging.getLogger("mel")
 
@@ -65,6 +66,11 @@ async def process_insight(
         async with asyncio.timeout(deps.config.graph.insight_timeout_seconds):
             result = await survey_graph.run(Select(), state=state, deps=deps)
         outcome = result.output
+        if deps.voice is not None and outcome.status == "accepted":
+            # Outside the time limit above. VoiceRecorder bounds its own time and, when it
+            # fails, the survey keeps its other channels.
+            outcome.handoff = await record_voice(state, deps.voice, outcome.handoff)
+            outcome.events = list(state.events)
     except CostRefused:
         raise
     except Exception as error:
@@ -136,12 +142,14 @@ async def execute_run(
     budget_usd=None,
     retry_failed: bool = False,
     agent_factory=build_agents,
+    voice_factory=voice_recorder,
     on_progress=None,
 ) -> list[dict]:
     """One persisted handoff run: checkpointed, resumable, bounded by batch concurrency.
 
     The CLI `run` command and batch jobs both use this. `on_progress(done, total)` is
-    called from a worker thread after each checkpoint.
+    called from a worker thread after each checkpoint. Each accepted survey gets its
+    speech recorded (`voice_factory`), because these handoffs go to the scheduler.
     """
     config = bundle.config
     generator = reviewer = None
@@ -150,7 +158,7 @@ async def execute_run(
         generator, reviewer = agent_factory(
             config, settings.aws_region, bundle.snapshot["prompts"], settings.bedrock_project_id
         )
-        deps = Dependencies.from_bundle(bundle, generator, reviewer)
+        deps = Dependencies.from_bundle(bundle, generator, reviewer, voice_factory(settings))
         store.start_run(
             run_id,
             bundle.fingerprint(fingerprint_body, settings.aws_region),

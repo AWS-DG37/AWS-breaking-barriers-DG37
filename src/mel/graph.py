@@ -6,8 +6,10 @@ Prompts live in prompts/. Domain timing/channel rules live in rules.json.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -21,9 +23,12 @@ from mel.config import AgentConfig
 from mel.contracts import Contracts
 from mel.costs import request_scope
 from mel.decision import CropCalendar, Decision, DecisionEngine
-from mel.handoff import handoff
+from mel.handoff import handoff, without_channel
 from mel.models import Outcome, QuestionEvidence, Review, TraceEvent
 from mel.survey_checks import survey_issues
+from mel.voice import VoiceOff, VoiceRecorder, VoiceRecordingFailed
+
+logger = logging.getLogger("mel")
 
 
 @dataclass
@@ -64,9 +69,19 @@ class Dependencies:
     decisions: DecisionEngine
     generator: Agent
     reviewer: Agent
+    # Records the speech of accepted surveys (mel.worker.process_insight, after the
+    # graph). Only runs that hand surveys to the scheduler set it; previews and
+    # comparisons leave it None and record nothing.
+    voice: VoiceRecorder | VoiceOff | None = None
 
     @classmethod
-    def from_bundle(cls, bundle: Bundle, generator: Agent, reviewer: Agent) -> Dependencies:
+    def from_bundle(
+        cls,
+        bundle: Bundle,
+        generator: Agent,
+        reviewer: Agent,
+        voice: VoiceRecorder | VoiceOff | None = None,
+    ) -> Dependencies:
         return cls(
             bundle.config,
             bundle.snapshot["rules"],
@@ -75,6 +90,7 @@ class Dependencies:
             bundle.decision_engine(),
             generator,
             reviewer,
+            voice,
         )
 
 
@@ -104,6 +120,38 @@ def check_usage(state: State, result) -> None:
         if isinstance(message, ModelResponse):
             if message.usage.input_tokens == 0 and message.usage.output_tokens == 0:
                 state.usage_complete = False
+
+
+async def record_voice(state: State, voice: VoiceRecorder | VoiceOff, payload: dict) -> dict:
+    """Record the accepted survey's speech. A survey without all of its audio is taken
+    off the voice channel, and the trace and the log say why.
+
+    The worker calls this after the graph, outside its time limit: a slow recording must
+    not fail a survey that can still go out on its other channels."""
+    try:
+        recording = await asyncio.to_thread(voice.record, state.survey)
+    except VoiceRecordingFailed as error:
+        voice_listed = any(c["channel"] == "voice" for c in payload["channel_order"])
+        state.record(
+            "voice",
+            "runtime",
+            status="failed",
+            error=str(error),
+            voice_channel_removed=voice_listed,
+        )
+        logger.error(
+            json.dumps(
+                {
+                    "event": "voice_recording_failed",
+                    "survey_id": state.survey["survey_id"],
+                    "voice_channel_removed": voice_listed,
+                    "error": str(error),
+                }
+            )
+        )
+        return without_channel(payload, "voice") if voice_listed else payload
+    state.record("voice", "runtime", status="recorded", **recording)
+    return payload
 
 
 def no_survey(insight: dict, decision: Decision) -> dict | None:
