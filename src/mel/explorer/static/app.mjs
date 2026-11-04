@@ -70,7 +70,7 @@ function renderExperiment() {
       el('div',{},el('h2',{},d.job?.status==='failed'?'The comparison did not start':'Starting the comparison'),
         el('p',{class:'muted'},d.job?.status==='failed'?(d.job.error || 'The job failed before any version ran.'):'Hosted comparisons start a worker task, which takes about a minute. Each version then runs every insight in turn.'),
         el('ul',{},(d.spec.candidates || []).map(c=>el('li',{},c.label))))));
-    sections.push(disclosure('Comparison inputs',d.spec));
+    sections.push(disclosure('Comparison inputs',d.spec,EVERYTHING));
     $('content').replaceChildren(...sections);
     return;
   }
