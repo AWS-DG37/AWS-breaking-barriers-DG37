@@ -83,6 +83,71 @@ def test_voice_demo_changes_text_and_audio_independently_without_losing_answers(
     assert after["items"][0]["raw_input"] == "हाँ"
 
 
+def test_voice_demo_waits_for_survey_before_enabling_controls(demo_page):
+    page, base = demo_page
+    errors = []
+    pending = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    page.route(f"**/generated/{GENERATED}", lambda route: pending.append(route))
+    for visit in (lambda: page.goto(f"{base}/docs/voice/?scenario=gen:{GENERATED}"),
+                  page.reload):
+        visit()
+        page.wait_for_function("document.querySelector('#scenario').options.length > 0")
+        expect(page.locator("#english-text")).to_be_disabled()
+        expect(page.locator("#english-audio")).to_be_disabled()
+        expect(page.locator("#voice")).to_be_disabled()
+        assert pending
+        pending.pop().fulfill(
+            path=ROOT / "docs/voice/generated" / GENERATED,
+            content_type="application/json",
+        )
+        page.get_by_role("checkbox", name="English text", exact=True).check()
+        expect(page.locator("#card h2")).to_have_text("Did you spray the recommended insecticide?")
+        expect(page.locator("#voice")).to_be_enabled()
+    assert errors == []
+
+
+def test_voice_demo_disables_controls_during_replacement_and_failed_load(demo_page):
+    page, base = demo_page
+    page.goto(f"{base}/docs/voice/?scenario=gen:{GENERATED}")
+    page.get_by_role("checkbox", name="English text", exact=True).check()
+    pending = []
+    page.route("**/survey.*-IN.json", lambda route: pending.append(route))
+    page.locator("#scenario").select_option("ref:1-mustard-aphid-spray")
+    expect(page.locator("#english-text")).to_be_disabled()
+    expect(page.locator("#english-audio")).to_be_disabled()
+    expect(page.locator("#voice")).to_be_disabled()
+    page.wait_for_timeout(50)
+    assert pending
+    pending.pop().fulfill(status=503, body="unavailable")
+    expect(page.get_by_role("alert")).to_contain_text("Could not load the survey (503)")
+    expect(page.locator("#english-text")).to_be_disabled()
+    expect(page.locator("#voice")).to_be_disabled()
+    page.locator("#scenario").select_option(f"gen:{GENERATED}")
+    expect(page.locator("#english-text")).to_be_enabled()
+    expect(page.locator("#english-text")).to_be_checked()
+    expect(page.locator("#english-audio")).not_to_be_checked()
+
+
+@pytest.mark.parametrize("language,native_english", [("bn-IN", False), ("en-IN", True)])
+def test_voice_demo_native_english_controls_follow_survey_metadata(
+    demo_page, language, native_english
+):
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    survey["language"] = language
+    page.route(base + "/custom-survey.json", lambda route: route.fulfill(json=survey))
+    page.goto(f"{base}/docs/voice/?survey=/custom-survey.json")
+    expect(page.locator("#card h2")).to_have_text(survey["items"][0]["prompt"])
+    for control in ("#english-text", "#english-audio"):
+        expect(page.locator(control)).to_be_disabled()
+        expect(page.locator(control)).to_be_checked(checked=native_english)
+    expect(page.locator("#translation-note")).to_have_text(
+        "This survey is already in English." if native_english else
+        "English demo translation is unavailable for this survey."
+    )
+
+
 def mount_console_player(page, base, survey):
     page.goto(base + "/docs/participant-pack/README.txt")
     page.evaluate("""async ({survey, base}) => {
