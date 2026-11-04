@@ -13,12 +13,15 @@ const SCENARIOS = {
 const COPY = {
   en: {
     start: 'Read aloud', stop: 'Stop voice', back: 'Back', next: 'Next', finish: 'Finish',
-    you: 'Your answer', followUp: 'FarmerChat will follow up on this answer.', of: 'of', thanks: 'Thank you',
+    you: 'Your answer', followUp: 'FarmerChat will follow up on this answer.', thanks: 'Thank you',
+    progress: (n, total) => `${n} of ${total}`,
     off: 'Voice off. Tap to answer', reading: 'Reading', waiting: 'Waiting for a tap', answered: 'Answered',
   },
   hi: {
     start: 'सुनें', stop: 'आवाज़ बंद', back: 'पीछे', next: 'आगे', finish: 'पूरा करें',
-    you: 'आपका जवाब', followUp: 'FarmerChat इस जवाब पर आपसे फिर बात करेगा।', of: 'में से', thanks: 'धन्यवाद',
+    you: 'आपका जवाब', followUp: 'FarmerChat इस जवाब पर आपसे फिर बात करेगा।', thanks: 'धन्यवाद',
+    // "3 में से 1" is "1 of 3": the total comes first, as in the pack's step_label.
+    progress: (n, total) => `${total} में से ${n}`,
     off: 'आवाज़ बंद। जवाब छूएँ', reading: 'पढ़ रहे हैं', waiting: 'जवाब का इंतज़ार', answered: 'जवाब मिला',
   },
 };
@@ -26,8 +29,9 @@ const COPY = {
 const $ = id => document.getElementById(id);
 // speech counts playbacks. A finished or failed clip whose number is no longer current was
 // cut off by a tap, a page change or Stop, and must not start the repeat timer.
+// load counts survey loads the same way: only the latest choice may install its survey.
 const state = {lang: 'en', generated: [], survey: null, session: null, index: 0, done: false, finishStatus: undefined,
-  voiceOn: false, speech: 0, audio: null, timer: null, repeats: 0, mode: 'off', caption: ''};
+  voiceOn: false, speech: 0, load: 0, audio: null, timer: null, repeats: 0, mode: 'off', caption: ''};
 
 function h(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -138,11 +142,14 @@ function surveySource() {
     note: "Reference survey from Digital Green's participant pack. The MEL agent did not write it."};
 }
 
-async function loadSurvey() {
+// Returns false when a newer survey choice replaced this load while it was in flight.
+async function loadSurvey(load) {
   const {url, generated, note} = surveySource();
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Could not load the survey (${response.status}) from ${url}`);
-  state.survey = await response.json();
+  const survey = await response.json();
+  if (load !== state.load) return false;
+  state.survey = survey;
   state.lang = voiceLanguage(state.survey);
   document.querySelector(`input[name=lang][value=${state.lang}]`).checked = true;
   document.querySelector('.lang').disabled = Boolean(generated);
@@ -152,6 +159,7 @@ async function loadSurvey() {
   markShown(state.session, currentItem().item_id);
   document.documentElement.lang = state.survey.language;
   render();
+  return true;
 }
 
 function goTo(index) {
@@ -214,7 +222,7 @@ function renderCard() {
       h('button', {type: 'button', class: 'next', disabled: !chosen,
         onClick: () => (last ? finish('completed') : goTo(state.index + 1))}, last ? c.finish : c.next)),
   ].filter(Boolean));
-  $('progress').textContent = `${state.index + 1} ${c.of} ${state.survey.items.length}`;
+  $('progress').textContent = c.progress(state.index + 1, state.survey.items.length);
 }
 
 function renderVoice() {
@@ -256,13 +264,13 @@ function showError(message) {
 }
 
 async function restart() {
+  const load = ++state.load;
   silence();
   $('log').replaceChildren(h('li', {class: 'muted'}, 'Each reading, repeat and tap appears here.'));
   try {
-    await loadSurvey();
-    if (state.voiceOn) startVoice();
+    if ((await loadSurvey(load)) && state.voiceOn) startVoice();
   } catch (error) {
-    showError(error.message);
+    if (load === state.load) showError(error.message);
   }
 }
 
