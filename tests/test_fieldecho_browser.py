@@ -1,5 +1,3 @@
-"""Real offline browser smoke against the exact CI image, never a model call."""
-
 import os
 import time
 import urllib.error

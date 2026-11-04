@@ -1,5 +1,3 @@
-"""Operator boundary tests; only Cognito's external side effects are replaced."""
-
 import json
 from copy import deepcopy
 

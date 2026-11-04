@@ -60,7 +60,6 @@ def read_addresses(path: Path) -> list[str]:
             )
         ):
             raise AccessError("Account list contains an invalid address")
-        # Preserve local-part spelling; compare case-insensitively for this pool.
         addresses.append(f"{local}@{domain.lower()}")
     if len({email.casefold() for email in addresses}) != len(addresses):
         raise AccessError("Account list contains duplicate addresses")
@@ -127,7 +126,6 @@ def provision(client, path, *, pool_id, client_id, account_id, region, send_invi
                     "Pool has unexpected accounts; review membership before provisioning"
                 )
             existing[address] = user["Username"]
-        # Read every membership before writes, including pagination.
         memberships = {
             username: {
                 group["GroupName"]
@@ -211,7 +209,6 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     try:
-        # File validation precedes even client creation/credential discovery.
         read_addresses(args.users_file)
         result = provision(
             boto3.client("cognito-idp", region_name=args.region),
