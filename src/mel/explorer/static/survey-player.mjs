@@ -29,12 +29,38 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     : 'This answer needs follow-up. This is a preview; no contact has been scheduled.';
   const completionCopy=language=>copyFor(language).complete
     + (survey.items.some(followUpFor) ? ` ${followUpCopy(language)}` : '');
-  let copy=copyFor(survey.language), displayed=survey, utterance=null, clip=null;
+  let copy=copyFor(survey.language), displayed=survey, utterance=null, clip=null, cueFrame=0, cueTimer=0;
+  // Voice cues: as the voice reaches each answer, its tile glows briefly, so a farmer who
+  // listens can see which tile to tap. The glow never selects anything.
+  function glow(index) {
+    const tiles=body.querySelectorAll('.answers label');
+    tiles.forEach(tile=>tile.classList.remove('voice-cue'));
+    clearTimeout(cueTimer);
+    const tile=tiles[index];
+    if(!tile) return;
+    tile.classList.add('voice-cue');
+    cueTimer=setTimeout(()=>tile.classList.remove('voice-cue'),700);
+  }
+  // Returns a function that takes the voice's position in the text and glows every answer it
+  // has reached since the last call.
+  function cueTracker(cues) {
+    let next=0;
+    return position=>{
+      while(next<cues.length && cues[next].at<=position) glow(cues[next++].index);
+    };
+  }
+  function stopCues() {
+    cancelAnimationFrame(cueFrame);
+    clearTimeout(cueTimer);
+    cueFrame=0;
+    body.querySelectorAll('.voice-cue').forEach(tile=>tile.classList.remove('voice-cue'));
+  }
   const stopAudio=()=>{
     if(utterance) globalThis.speechSynthesis?.cancel();
     clip?.pause();
     utterance=null;
     clip=null;
+    stopCues();
     readButton.setAttribute('aria-label','Read aloud');
     readButton.setAttribute('aria-pressed','false');
   };
@@ -49,6 +75,19 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       : hindi ? `${item.scale_min} से ${item.scale_max} तक कोई नंबर छूएँ।` : `Tap a number from ${item.scale_min} to ${item.scale_max}.`;
     const text=session.phase==='intro' ? `${spokenCopy.intro}. ${spokenCopy.description}`
       : session.phase==='complete' ? `${spokenCopy.thanks}. ${completionCopy(spoken.language)}` : `${item.prompt} ${choices}`;
+    // Where each answer starts in the spoken text. A scale names only its two ends.
+    const cues=[];
+    if(session.phase==='questions') {
+      const named=item.options ? item.options.map((option,index)=>[index,option.label])
+        : [[0,String(item.scale_min)],[item.scale_max-item.scale_min,String(item.scale_max)]];
+      let from=item.prompt.length;
+      for(const [index,label] of named) {
+        const at=text.indexOf(label,from);
+        if(at<0) continue;
+        cues.push({index,at});
+        from=at+label.length;
+      }
+    }
     readButton.setAttribute('aria-label','Stop voice');
     readButton.setAttribute('aria-pressed','true');
     // The console makes each line with ElevenLabs (GET /api/voice), because the demo writes a
@@ -59,17 +98,29 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     const fallback=()=>{
       if(clip!==audio) return;
       clip=null;
-      speakWithBrowser(text,spoken.language);
+      stopCues();
+      speakWithBrowser(text,spoken.language,cueTracker(cues));
     };
     audio.onended=()=>{if(clip===audio) stopAudio();};
     audio.onerror=fallback;
-    audio.play().catch(fallback);
+    // ponytail: the recorded clip carries no word timings, so a cue fires when playback reaches
+    // the answer's share of the text. Long lines can drift by a fraction of a second. Upgrade
+    // path: ElevenLabs' with-timestamps endpoint returns per-character times.
+    const reach=cueTracker(cues);
+    const follow=()=>{
+      if(clip!==audio) return;
+      if(Number.isFinite(audio.duration) && audio.duration>0) reach(audio.currentTime/audio.duration*text.length);
+      cueFrame=requestAnimationFrame(follow);
+    };
+    audio.play().then(()=>{if(clip===audio && cues.length) cueFrame=requestAnimationFrame(follow);}).catch(fallback);
   }
-  function speakWithBrowser(text,language) {
+  function speakWithBrowser(text,language,reach) {
     if(!globalThis.speechSynthesis) return stopAudio();
     const line=new SpeechSynthesisUtterance(text);
     line.lang=language;
     utterance=line;
+    // The browser voice reports each word as it starts, so its cues are exact.
+    line.onboundary=event=>{if(utterance===line) reach(event.charIndex);};
     line.onend=line.onerror=()=>{if(utterance===line) stopAudio();};
     globalThis.speechSynthesis.speak(line);
   }

@@ -1,6 +1,7 @@
 import functools
 import http.server
 import json
+import re
 import threading
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -232,6 +233,50 @@ def test_console_phone_speaks_with_the_recorded_voice_not_the_browser(demo_page)
     assert page.evaluate("window.paused") > paused
     expect(page.get_by_role("button", name="Read aloud", exact=True)).to_be_visible()
     assert page.evaluate("window.spoken") == []
+
+
+def test_browser_voice_glows_each_answer_as_it_is_spoken(demo_page):
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    mount_console_player(page, base, survey)
+    page.get_by_role("button", name="Read aloud", exact=True).click()
+    page.wait_for_function("window.utterances.length > 0")
+    text = page.evaluate("window.utterances.at(-1).text")
+    labels = [option["label"] for option in survey["items"][0]["options"]]
+    tiles = page.locator(".answers label")
+    page.evaluate("window.utterances.at(-1).onboundary({charIndex: 0})")
+    expect(page.locator(".voice-cue")).to_have_count(0)
+    start = len(survey["items"][0]["prompt"])
+    for index, label in enumerate(labels):
+        at = text.index(label, start)
+        start = at + len(label)
+        page.evaluate("at => window.utterances.at(-1).onboundary({charIndex: at})", at)
+        expect(tiles.nth(index)).to_have_class(re.compile(r"\bvoice-cue\b"))
+        expect(page.locator(".voice-cue")).to_have_count(1)
+    expect(page.locator("input:checked")).to_have_count(0)
+    page.get_by_role("button", name="Stop voice", exact=True).click()
+    expect(page.locator(".voice-cue")).to_have_count(0)
+
+
+def test_recorded_voice_glows_answers_in_order_without_choosing(demo_page):
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    serve_console_voice(page)
+    mount_console_player(page, base, survey)
+    page.evaluate("""() => {
+      window.glowed = [];
+      const tiles = () => [...document.querySelectorAll('.answers label')];
+      new MutationObserver(records => records.forEach(record => {
+        if (record.target.classList?.contains('voice-cue'))
+          window.glowed.push(tiles().indexOf(record.target));
+      })).observe(document.body, {subtree: true, attributes: true, attributeFilter: ['class']});
+    }""")
+    page.get_by_role("button", name="Read aloud", exact=True).click()
+    count = len(survey["items"][0]["options"])
+    page.wait_for_function(f"window.glowed.length >= {count}", timeout=20000)
+    assert page.evaluate("window.glowed")[:count] == list(range(count))
+    assert page.evaluate("window.spoken") == []
+    expect(page.locator("input:checked")).to_have_count(0)
 
 
 def test_unknown_survey_does_not_offer_an_incorrect_translation(demo_page):

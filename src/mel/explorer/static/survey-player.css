@@ -83,6 +83,9 @@
 .survey-player .answers label:has(input:checked) { border-color:var(--action); box-shadow:inset 0 0 0 1px var(--action), 0 10px 20px -12px #00501A80; transform:translateY(-2px); }
 .survey-player .answers label:has(input:checked) .answer-mark { background:var(--action); border-color:var(--action); }
 .survey-player .answers label:has(input:checked) .answer-mark::after { opacity:1; }
+.survey-player .answers label.voice-cue { border-color:var(--brand); background:white; box-shadow:0 0 0 4px #00A03333; animation:voice-cue .7s var(--ease); }
+.survey-player .answers label.voice-cue .answer-mark { border-color:var(--brand); }
+@keyframes voice-cue { 0% { transform:none; } 30% { transform:scale(1.025); } 100% { transform:none; } }
 .survey-player .answers label:has(input:focus-visible) { outline:3px solid var(--action); outline-offset:3px; }
 .survey-player :focus-visible { outline:3px solid var(--action); outline-offset:3px; }
 .survey-player h3:focus { outline:none; }
@@ -103,7 +106,7 @@
 .survey-player .read-aloud[aria-pressed="true"] { background:var(--action); color:white; animation:read-pulse 1.4s var(--ease) infinite; }
 .survey-player .read-aloud[aria-pressed="true"]::before { width:16px; height:16px; --icon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='6' y='6' width='12' height='12' rx='2'/%3E%3C/svg%3E"); }
 @keyframes read-pulse { from { box-shadow:0 0 0 0 #007A2766; } to { box-shadow:0 0 0 10px #007A2700; } }
-@media (prefers-reduced-motion:reduce) { .survey-player .answers label, .survey-player .sheet-progress i { transition:none; } .survey-player .read-aloud[aria-pressed="true"] { animation:none; } }
+@media (prefers-reduced-motion:reduce) { .survey-player .answers label, .survey-player .sheet-progress i { transition:none; } .survey-player .read-aloud[aria-pressed="true"], .survey-player .answers label.voice-cue { animation:none; } }
 .survey-player .phone-brand { align-items:center; }
 .survey-player .language-switch { display:flex; border:1px solid #ffffff99; border-radius:999px; padding:2px; gap:2px; }
 .survey-player .language-switch button { border:0; border-radius:999px; background:transparent; color:white; font-family:inherit; font-size:12px; font-weight:600; line-height:1.4; padding:4px 10px; min-height:28px; cursor:pointer; }
