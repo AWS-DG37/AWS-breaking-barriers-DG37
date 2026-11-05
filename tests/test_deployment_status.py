@@ -324,6 +324,8 @@ def test_three_entry_pages_load_one_shared_banner_and_image_stamp():
         text = (root / "src/mel/explorer" / page).read_text()
         assert "/static/deployment-banner.css" in text
         assert "/static/deployment-banner.mjs" in text
+        assert '<link rel="icon" href="/static/assets/favicon.ico"' in text
+        assert '<link rel="apple-touch-icon" href="/static/assets/apple-touch-icon.png">' in text
     docker = (root / "Dockerfile").read_text()
     assert "ARG FIELDECHO_REVISION" in docker
     assert "/app/REVISION" in docker

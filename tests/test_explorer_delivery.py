@@ -35,6 +35,13 @@ def test_browser_resources_are_served_at_the_urls_in_the_page():
             assert resource.headers["content-type"] != "text/html; charset=utf-8"
 
 
+def test_root_favicon_serves_the_field_echo_icon():
+    with TestClient(create_app(live_enabled=False)) as client:
+        icon = client.get("/favicon.ico")
+        assert icon.status_code == 200
+        assert icon.content == Path("src/mel/explorer/static/assets/favicon.ico").read_bytes()
+
+
 def test_golden_analysis_reads_actual_nested_rows_and_preserves_case_coverage():
     path = Path("eval/golden_holdout.jsonl")
     row = json.loads(path.read_text().splitlines()[0])
