@@ -107,9 +107,11 @@ CALL_EXPOSURE = (
     "coalesce(sum(CASE WHEN c.state='complete' THEN c.estimated_usd "
     "ELSE greatest(c.reserved_usd,coalesce(c.estimated_usd,0)) END),0)"
 )
+# Console translations (mel.translate) count toward the cap whatever run they are charged
+# to, including command-line runs whose own calls stay outside it.
 CAP_EXPOSURE = (
     f"SELECT (SELECT deleted_usd FROM spend_cap)+{CALL_EXPOSURE} "
-    "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped"
+    "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped OR c.role='translate'"
 )
 
 
@@ -218,16 +220,22 @@ class RunCosts:
             )
 
     def reserve(self, model, region, role, attempt, insight_id):
+        # A console translation (mel.translate) is charged to a finished run for the record,
+        # but answers only to the console spend cap: never to the run's budget or stop reason,
+        # and the run's budget checks below never count it.
+        translating = role == "translate"
         with self.store.lock, self.store.connection.transaction():
             capped = self.store.connection.execute(
                 "SELECT capped FROM run_costs WHERE run_id=%s", (self.run_id,)
-            ).fetchone()[0]
+            ).fetchone()[0] or translating
             # Lock order is spend_cap, then run_costs, so concurrent workers cannot deadlock.
             cap_remaining = _cap_remaining(self.store.connection) if capped else None
             budget, stopped = self.store.connection.execute(
                 "SELECT budget_usd,stop_reason FROM run_costs WHERE run_id=%s FOR UPDATE",
                 (self.run_id,),
             ).fetchone()
+            if translating:
+                budget = stopped = None
             if stopped:
                 raise CostRefused(stopped)
             price_id, price = lookup(self.store, model, region)
@@ -244,7 +252,7 @@ class RunCosts:
                     "SELECT coalesce(sum(CASE WHEN state='complete' THEN estimated_usd "
                     "ELSE greatest(reserved_usd,coalesce(estimated_usd,0)) END),0), "
                     "count(*) FILTER (WHERE state IN ('unknown','overrun','unpriced')) "
-                    "FROM model_calls WHERE run_id=%s",
+                    "FROM model_calls WHERE run_id=%s AND role<>'translate'",
                     (self.run_id,),
                 ).fetchone()
                 if price is None:

@@ -15,8 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def exercise(page, phone):
     expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
-    phone.get_by_role("button", name="पीछे", exact=True).click()
+    # Back is the tab at the start of the top bar; the bottom row holds only the main button.
+    expect(phone.locator(".player-navigation button")).to_have_count(1)
+    phone.locator(".sheet-bar").get_by_role("button", name="पीछे", exact=True).click()
     expect(phone.get_by_role("heading", name="आपका अनुभव जानना चाहते हैं")).to_be_focused()
+    expect(phone.get_by_role("button", name="पीछे", exact=True)).to_be_disabled()
     phone.get_by_role("button", name="शुरू करें", exact=True).click()
     expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
     next_button = phone.get_by_role("button", name="आगे", exact=True)
@@ -40,6 +43,9 @@ def exercise(page, phone):
     phone.get_by_role("radio").first.check()
     phone.get_by_role("button", name="पूरा करें", exact=True).click()
     expect(phone.get_by_role("heading", name="धन्यवाद")).to_be_visible()
+    phone.get_by_role("button", name="पीछे", exact=True).click()
+    expect(phone.get_by_text("2 / 2", exact=True)).to_be_visible()
+    phone.get_by_role("button", name="पूरा करें", exact=True).click()
     phone.get_by_role("button", name="फिर से शुरू करें").click()
     expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
     expect(phone.locator("input:checked")).to_have_count(0)

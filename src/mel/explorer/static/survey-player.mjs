@@ -140,6 +140,8 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
   const body=el('div',{class:'player-body'}), footer=el('div',{class:'player-navigation'});
   const progress=el('i'), meta=el('div',{class:'survey-progress'});
+  // Back lives in the top bar: a short tab with a chevron, split from the progress track.
+  const backTab=el('button',{type:'button',class:'sheet-back',onClick:()=>goBack()},el('span',{'aria-hidden':true}));
   // Field sheet: the survey rises as a bottom sheet over the dimmed FarmerChat thread.
   phone.append(el('div',{class:'phone-screen'},
     el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
@@ -147,7 +149,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     el('div',{class:'phone-thread'},el('img',{class:'phone-field',src:photoUrl,alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768})),
     el('div',{class:'phone-sheet'},
       el('div',{class:'sheet-grab','aria-hidden':true}),
-      el('div',{class:'sheet-progress','aria-hidden':true},progress),
+      el('div',{class:'sheet-bar'},backTab,el('div',{class:'sheet-progress','aria-hidden':true},progress)),
       el('div',{class:'sheet-head'},meta,readButton),
       body,footer,el('div',{class:'phone-home','aria-hidden':true}))));
   host.replaceChildren(phone);
@@ -170,8 +172,13 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     render(true);
     onQuestionChange(session.question);
   }
+  // One step back: last question from the thank-you screen, the welcome from question 1.
+  function goBack() {
+    if(session.phase==='complete') return showQuestion(survey.items.length-1);
+    if(session.phase==='questions') return session.question===0 ? showWelcome() : showQuestion(session.question-1);
+  }
   const answered=item=>Object.hasOwn(session.answers,item.item_id);
-  const button=(label,action,disabled=false,kind='primary')=>el('button',{type:'button',class:`player-${kind}`,onClick:action,disabled},label);
+  const button=(label,action,disabled=false)=>el('button',{type:'button',class:'player-primary',onClick:action,disabled},label);
   const optionsOf=item=>item.options || Array.from({length:item.scale_max-item.scale_min+1},(_,i)=>({value:item.scale_min+i,label:String(item.scale_min+i)}));
   // Pick and confirm: the hint echoes the chosen answer, then any follow-up notice.
   const hintFor=item=>{
@@ -199,6 +206,8 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     footer.replaceChildren();
     const done=session.phase==='complete' ? survey.items.length : session.phase==='intro' ? 0 : session.question+1;
     progress.style.width=`${done/survey.items.length*100}%`;
+    backTab.setAttribute('aria-label',copy.back);
+    backTab.disabled=session.phase==='intro';
     meta.replaceChildren(el('span',{},copy.feedback));
     if(session.phase==='questions') meta.append(el('span',{},`${session.question+1} / ${survey.items.length}`));
     let heading;
@@ -241,7 +250,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       }
       body.append(heading,answers,hint);
       if(message) body.append(el('p',{role:'status'},message));
-      footer.append(next,button(copy.back,()=>session.question===0 ? showWelcome() : showQuestion(session.question-1),false,'back'));
+      footer.append(next);
     }
     body.scrollTop=0;
     if(focus) heading.focus({preventScroll:true});
