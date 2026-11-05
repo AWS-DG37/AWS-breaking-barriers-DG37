@@ -11,6 +11,10 @@ const short=id=>String(id || '').replace(/^(global|us)\./,'').replace(/^(anthrop
 const pct=v=>v===null || v===undefined ? '—' : `${Math.round(v*100)}%`;
 const num=(v,d=0)=>v===null || v===undefined ? '—' : Number(v).toFixed(d);
 const badge=(text,warn=false)=>el('span',{class:`badge ${warn?'warning':''}`},text);
+const LANGUAGE={'hi-IN':'Hindi', 'en-IN':'English'};
+const cap=s=>s ? s[0].toUpperCase()+s.slice(1) : s;
+const lang=i=>LANGUAGE[i.language] || i.language;
+const cropName=i=>cap(i.crop) || 'No crop';
 
 export function leaveAgents() { ++view.request; requests.cancel(); }
 
@@ -40,19 +44,33 @@ function render() {
 }
 
 function insightLabel(i) {
-  const exp=i.expected ? `expected ${i.expected.rule}${i.expected.survey?' survey':' no survey'}` : '';
-  return `${i.golden_id || i.insight_id} · ${i.language} · ${i.crop || 'no crop'} · ${(i.resolution_type || '').replaceAll('_',' ')} · ${exp}`;
+  return `${i.golden_id || i.insight_id} · ${cropName(i)} · ${lang(i)} · ${i.query_summary || ''}`;
+}
+// The picked insight as a card: the farmer's question, then what the golden set expects.
+function insightCard(i) {
+  if (!i) return [];
+  const exp=i.expected;
+  return [el('p',{class:'ag-insight-q'},i.query_summary || 'No farmer question recorded.'),
+    el('div',{class:'ag-insight-meta'},
+      el('span',{class:'ag-chip'},i.golden_id || i.insight_id),
+      el('span',{class:'ag-chip'},cropName(i)),
+      el('span',{class:'ag-chip'},lang(i)),
+      i.resolution_type ? el('span',{class:'ag-chip'},cap(i.resolution_type.replaceAll('_',' '))) : null,
+      exp ? el('span',{class:`ag-chip ${exp.survey?'ag-chip-survey':'ag-chip-none'}`},`Golden: ${exp.survey?'survey':'no survey'} · ${exp.rule}`) : null)];
 }
 
 function tryPanel() {
   const o=view.options, d=o.defaults;
   const f=view.form || (view.form={insight:view.insights.find(i=>i.expected?.survey)?.insight_id, generators:[d.generator], verifier:d.verifier, pipeline:d.pipeline, retries:d.max_retries, surveysOnly:true});
   const list=view.insights.filter(i=>!f.surveysOnly || i.expected?.survey);
-  const insight=el('select',{'aria-label':'Insight',onChange:e=>{f.insight=e.target.value;summary.replaceChildren(insightSummary());}},
-    list.map(i=>el('option',{value:i.insight_id,selected:i.insight_id===f.insight},insightLabel(i))));
-  const summary=el('p',{class:'small muted ag-summary'});
-  const insightSummary=()=>view.insights.find(i=>i.insight_id===f.insight)?.query_summary || '';
-  summary.append(insightSummary());
+  // Grouped by crop; each option leads with its golden ID, then the language and the farmer's question.
+  const crops=[...new Set(list.map(cropName))].sort((a,b)=>a==='No crop'?1:b==='No crop'?-1:a.localeCompare(b));
+  const insight=el('select',{'aria-label':'Insight',onChange:e=>{f.insight=e.target.value;summary.replaceChildren(...insightSummary());}},
+    crops.map(crop=>el('optgroup',{label:crop},list.filter(i=>cropName(i)===crop).map(i=>
+      el('option',{value:i.insight_id,selected:i.insight_id===f.insight},`${i.golden_id || i.insight_id} · ${lang(i)} · ${i.query_summary || ''}`)))));
+  const summary=el('div',{class:'ag-summary'});
+  const insightSummary=()=>insightCard(view.insights.find(i=>i.insight_id===f.insight));
+  summary.append(...insightSummary());
   const surveysOnly=el('label',{class:'ag-check'},el('input',{type:'checkbox',checked:f.surveysOnly,onChange:e=>{f.surveysOnly=e.target.checked;render();}}),'Only insights the golden set expects a survey for');
   const generators=el('fieldset',{class:'ag-models'},el('legend',{},'Generator models (pick up to 5 to compare)'),
     o.generators.map(g=>el('label',{class:'ag-check'},el('input',{type:'checkbox',value:g,checked:f.generators.includes(g),onChange:e=>{
