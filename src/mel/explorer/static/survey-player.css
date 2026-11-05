@@ -61,7 +61,16 @@
 .survey-player .phone-field { display:block; width:68%; height:72px; margin-left:auto; border-radius:14px 14px 4px 14px; object-fit:cover; object-position:50% 46%; }
 .survey-player .phone-sheet { position:relative; display:flex; flex-direction:column; flex:1 1 auto; min-height:0; margin-top:-24px; background:white; border-radius:26px 26px 0 0; box-shadow:0 -12px 30px -16px #001D0980; }
 .survey-player .sheet-grab { width:40px; height:4px; margin:10px auto 0; border-radius:999px; background:var(--line); flex-shrink:0; }
-.survey-player .sheet-progress { height:4px; margin:12px 20px 0; border-radius:999px; background:#E3EEE6; overflow:hidden; flex-shrink:0; }
+.survey-player .sheet-bar { display:flex; align-items:center; gap:6px; margin:12px 20px 0; flex-shrink:0; }
+/* The back tab looks like a short first segment of the bar; its tap area is 34 x 32 px. */
+.survey-player .sheet-back { flex:0 0 34px; height:32px; margin:-14px 0; padding:0; border:0; background:none; display:flex; align-items:center; cursor:pointer; }
+.survey-player .sheet-back span { position:relative; display:block; width:34px; height:14px; border-radius:999px; background:var(--action); }
+.survey-player .sheet-back span::after { content:''; position:absolute; left:50%; top:50%; width:5px; height:5px; border:solid white; border-width:0 0 2px 2px; transform:translate(-30%,-50%) rotate(45deg); }
+.survey-player .sheet-back:hover:not(:disabled) span { background:var(--deep); }
+.survey-player .sheet-back:disabled { cursor:default; }
+.survey-player .sheet-back:disabled span { background:#E3EEE6; }
+.survey-player .sheet-back:disabled span::after { border-color:#B6C7BB; }
+.survey-player .sheet-progress { flex:1; height:6px; border-radius:999px; background:#E3EEE6; overflow:hidden; }
 .survey-player .sheet-progress i { display:block; height:100%; width:0; background:var(--brand); transition:width .3s var(--ease); }
 .survey-player .sheet-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:8px 14px 0 20px; flex-shrink:0; }
 
@@ -95,7 +104,6 @@
 .survey-player .player-primary { width:100%; min-height:52px; border:0; border-radius:999px; padding:12px 24px; background:var(--action); color:white; font-family:inherit; font-weight:700; font-size:17px; line-height:1.4; cursor:pointer; }
 .survey-player .player-primary:hover:not(:disabled) { background:var(--deep); }
 .survey-player .player-primary:disabled { opacity:.45; cursor:default; }
-.survey-player .player-back { min-height:44px; border:0; background:none; color:#4B5F52; font-family:inherit; font-weight:600; font-size:15px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
 
 /* Read aloud: a quiet speaker icon in the sheet header; it turns into a pulsing stop while playing. */
 .survey-player .read-aloud { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; padding:0; border:0; border-radius:50%; background:var(--mint); color:var(--action); cursor:pointer; transition:background .15s, color .15s; }
