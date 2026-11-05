@@ -9,6 +9,7 @@ import json
 import os
 import re
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -278,7 +279,25 @@ def atomic_write(path, content):
             os.unlink(temporary)
 
 
-def render_compose(current, image):
+def read_live_policy(root):
+    path = root / "live-policy.json"
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or metadata.st_mode & 0o022
+    ):
+        raise ValueError("live policy must be an operator-owned file without shared write access")
+    value = json.loads(path.read_text())
+    if type(value) is not bool:
+        raise ValueError("live policy must contain one JSON boolean")
+    return value
+
+
+def render_compose(current, image, live=False):
     if set(current["services"]) != {"postgres", "explorer"}:
         raise ValueError("unexpected service; worker must be absent")
     result = json.loads(json.dumps(current))
@@ -288,7 +307,15 @@ def render_compose(current, image):
     app["healthcheck"] = {"disable": True}
     app["image"] = image
     app["network_mode"] = "host"
-    app["entrypoint"] = ["mel-explorer", "--host", "127.0.0.1", "--port", "8877", "--no-live"]
+    app["entrypoint"] = [
+        "mel-explorer",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8877",
+        "--run-jobs" if live else "--no-live",
+    ]
+    app["stop_grace_period"] = "45s"
     return result
 
 
@@ -307,24 +334,26 @@ def offline_boot_compose(current, image):
             raise ValueError("boot Compose arguments must be explicit lists")
         if any(
             arg.startswith("--")
-            and arg not in ("--allow-live", "--no-live")
+            and arg not in ("--allow-live", "--no-live", "--run-jobs")
             and any(
                 flag.startswith(arg.split("=", 1)[0]) or arg.startswith(flag)
-                for flag in ("--allow-live", "--no-live")
+                for flag in ("--allow-live", "--no-live", "--run-jobs")
             )
             for arg in args
         ):
             raise ValueError("unsupported live-mode argument")
-        app[name] = [arg for arg in args if arg not in ("--allow-live", "--no-live")]
+        app[name] = [arg for arg in args if arg not in ("--allow-live", "--no-live", "--run-jobs")]
     app["entrypoint"].append("--no-live")
     app.pop("build", None)
     app["image"] = image
     return result
 
 
-def check_readiness(proof, health_status, health_body, static_statuses, worker_present):
-    if proof.get("database") != "connected" or proof.get("live_enabled") is not False:
-        raise ValueError("database or offline-mode proof failed")
+def check_readiness(proof, health_status, health_body, static_statuses, worker_present, live=False):
+    if proof.get("database") != "connected" or proof.get("live_enabled") is not live:
+        raise ValueError("database or execution-mode proof failed")
+    if live and (not proof.get("auth_required") or proof.get("runner_ready") is not True):
+        raise ValueError("authenticated owned-runner proof failed")
     expected = 401 if proof.get("auth_required") else 200
     if health_status != expected:
         raise ValueError("unexpected authentication response")
@@ -446,32 +475,52 @@ class Host:
         self.save(recovered)
         return recovered
 
-    def activate(self, release):
+    def set_mode(self, live):
+        state = self.recover(self.read(adopt=False))
+        return self.activate(Release(**state.deployed), mode=live)
+
+    def activate(self, release, mode=None):
+        policy = read_live_policy(self.root)
+        live = policy if mode is None else mode
         state = self.recover(self.read())
         if HOST_DEADLINE:
             HOST_DEADLINE.resume()
         if state.workflow != self.target.workflow:
             raise ValueError("workflow identity changed; operator migration required")
         candidate = dataclasses.asdict(release)
-        if release.sequence < state.highest_sequence or (
-            release.sequence == state.highest_sequence and candidate != state.highest_release
+        if mode is None and (
+            release.sequence < state.highest_sequence
+            or (release.sequence == state.highest_sequence and candidate != state.highest_release)
         ):
             return self.report(state, "REFUSED_STALE")
-        if candidate == state.deployed:
-            self.runtime.smoke(candidate)
+        if candidate == state.deployed and self.runtime.applied_live() == live:
+            if live:
+                self.runtime.smoke(candidate, live=True)
+            else:
+                self.runtime.smoke(candidate)
+            if mode is not None:
+                atomic_write(self.root / "live-policy.json", json.dumps(live))
             result = self.report(state, "ALREADY_DEPLOYED")
             self.publish_status(release.sha)
             return result
-        state.highest_sequence = release.sequence
-        state.highest_release = candidate
+        if mode is None:
+            state.highest_sequence = release.sequence
+            state.highest_release = candidate
         self.save(state)
         switched = False
         try:
             if HOST_DEADLINE:
                 HOST_DEADLINE.arm()
             self.runtime.preflight(candidate)
+            if live:
+                self.runtime.live_preflight(candidate)
+            initial_enable = live and not policy
             healthy = self.runtime.compose(state.deployed)
-            next_compose = self.runtime.compose(candidate)
+            next_compose = (
+                self.runtime.compose(candidate, live=True)
+                if live
+                else self.runtime.compose(candidate)
+            )
             self.runtime.validate_compose(healthy, "healthy")
             self.runtime.validate_compose(next_compose, "candidate")
             boot = self.runtime.boot_compose(state.deployed)
@@ -488,6 +537,11 @@ class Host:
             self.checkpoint("intent")
             self.runtime.switch(healthy)
             self.runtime.smoke(state.deployed)
+            if initial_enable:
+                self.runtime.require_empty_queue(candidate)
+            if mode is not None:
+                atomic_write(self.root / "live-policy.json", json.dumps(live))
+                self.checkpoint("policy")
             state.transition["boot_compose"] = healthy
             self.save(state)
             atomic_write(self.root / "compose.yaml", healthy)
@@ -495,13 +549,16 @@ class Host:
             switched = True
             self.runtime.switch(next_compose)
             self.checkpoint("switched")
-            self.runtime.smoke(candidate)
+            if live:
+                self.runtime.smoke(candidate, live=True)
+            else:
+                self.runtime.smoke(candidate)
             atomic_write(self.root / "compose.yaml", next_compose)
             self.checkpoint("compose")
             atomic_write(self.root / "COMMIT", release.sha + "\n")
             committed = dataclasses.replace(
                 state,
-                previous=state.deployed,
+                previous=state.previous if candidate == state.deployed else state.deployed,
                 deployed=candidate,
                 transition=None,
                 last_outcome="DEPLOYED",
@@ -536,22 +593,51 @@ class Host:
             "highest_sequence": state.highest_sequence,
             "transition_pending": state.transition is not None,
             "serving_image": self.runtime.serving_image(),
+            "desired_mode": "live" if read_live_policy(self.root) else "offline",
+            "applied_mode": "live" if self.runtime.applied_live() else "offline",
+            "ready": self.runtime.ready,
         }
 
 
 DB_PROBE = """
-import json, os
+import json, os, socket
 from mel.config import Settings
 from mel.store import Store
 s=Settings(); db=Store(s)
 try:
     assert db.connection.execute("SELECT 1").fetchone()[0] == 1
     args=open('/proc/1/cmdline','rb').read().split(b'\\0')
-    assert b'--no-live' in args and b'--allow-live' not in args
+    live=b'--run-jobs' in args and b'--no-live' not in args
+    assert live or (b'--no-live' in args and b'--allow-live' not in args)
     names=('MEL_AUTH_DOMAIN','MEL_AUTH_CLIENT_ID','MEL_AUTH_ISSUER','MEL_CONSOLE_URL')
     fields=[bool(os.environ.get(k)) for k in names]
     assert all(fields) or not any(fields)
-    print(json.dumps(dict(database='connected',live_enabled=False,auth_required=all(fields))))
+    ready=False
+    if live:
+        from mel.explorer.hosted import lease_owned
+        assert all(fields) and s.job_cluster is None
+        ready=lease_owned(db.connection, 'fieldecho:'+socket.gethostname()+':1')
+        assert ready
+    print(json.dumps(dict(database='connected',live_enabled=live,
+                         auth_required=all(fields),runner_ready=ready)))
+finally: db.close()
+"""
+LIVE_PREFLIGHT = """
+import boto3, json
+from mel.config import Settings
+from mel.explorer.hosted import HostedRunner
+from mel.store import Store
+s=Settings(); HostedRunner(s)
+credentials=boto3.Session().get_credentials()
+assert credentials is not None and credentials.method == 'iam-role'
+identity=boto3.client('sts',region_name=s.aws_region).get_caller_identity()
+assert identity['Account'] == EXPECTED_ACCOUNT
+assert ':assumed-role/dg37-explorer-workshop-host/' in identity['Arn']
+db=Store(s)
+try:
+    cap=db.connection.execute('SELECT budget_usd FROM spend_cap').fetchone()
+    assert cap is not None
+    print(json.dumps(dict(instance_role=True,cap_configured=cap[0] is not None)))
 finally: db.close()
 """
 HTTP_PROBE = """
@@ -603,6 +689,7 @@ class DockerHost:
     def __init__(self, root, target):
         self.root, self.target = root, target
         self.container = PROJECT + "-explorer-1"
+        self.ready = False
         self.current = json.loads(
             self.compose_command("config", "--no-env-resolution", "--format", "json")
         )
@@ -627,12 +714,37 @@ class DockerHost:
     def serving_image(self):
         return self.inspect(self.container)["Image"]
 
+    def applied_live(self):
+        data = self.inspect(self.container)
+        args = data.get("Args", [])
+        return "--run-jobs" in args and "--no-live" not in args
+
     def worker_present(self):
+        managed = self.inspect(self.container)
         ids = command(["docker", "ps", "-aq"]).split()
         for container in ids:
             data = self.inspect(container)
             executable = " ".join([data.get("Path", "")] + data.get("Args", []))
-            if "mel-worker" in executable:
+            if (
+                "mel-worker" in executable
+                or "mel.worker" in executable
+                or (
+                    data.get("Id") != managed.get("Id")
+                    and ("mel-explorer" in executable or "mel.explorer.api" in executable)
+                    and "--run-jobs" in executable
+                )
+            ):
+                return True
+        processes = command(["ps", "-eo", "pid=,args="])
+        for line in processes.splitlines():
+            pid, _, args = line.strip().partition(" ")
+            if pid == str(managed["State"].get("Pid")):
+                continue
+            if (
+                "mel-worker" in args
+                or "mel.worker" in args
+                or (("mel.explorer.api" in args or "mel-explorer" in args) and "--run-jobs" in args)
+            ):
                 return True
         return False
 
@@ -686,8 +798,28 @@ class DockerHost:
             "assert files; assert all(p.read_bytes() for p in files)",
         )
 
-    def compose(self, release):
-        return json.dumps(render_compose(self.current, release["image"]), sort_keys=True)
+    def live_preflight(self, release):
+        self.run_image(
+            release["image"], LIVE_PREFLIGHT.replace("EXPECTED_ACCOUNT", repr(self.target.account))
+        )
+
+    def require_empty_queue(self, release):
+        self.run_image(
+            release["image"],
+            """
+from mel.config import Settings
+from mel.store import Store
+s=Store(Settings())
+try:
+    rows=s.connection.execute(
+        "SELECT 1 FROM jobs WHERE status IN ('queued','running') LIMIT 1").fetchone()
+    assert not rows, 'queued or running jobs require operator attention'
+finally: s.close()
+""",
+        )
+
+    def compose(self, release, live=False):
+        return json.dumps(render_compose(self.current, release["image"], live=live), sort_keys=True)
 
     def boot_compose(self, release):
         current = json.loads(
@@ -700,7 +832,35 @@ class DockerHost:
         atomic_write(self.root / filename, compose)
         self.compose_command("config", "--quiet", file=filename)
 
+    def stop(self):
+        self.ready = False
+        self.compose_command("stop", "--timeout", "40", "explorer")
+        data = self.inspect(self.container)
+        if data["State"]["Running"] or data["State"].get("Restarting"):
+            raise ValueError("managed explorer did not stop")
+        if self.worker_present():
+            raise ValueError("stray queue runner present; operator cleanup required")
+        self.run_image(
+            data["Image"],
+            """
+import time
+from mel.config import Settings
+from mel.store import Store
+s=Store(Settings())
+try:
+    deadline=time.monotonic()+5
+    while s.connection.execute(
+        "SELECT 1 FROM pg_locks WHERE locktype='advisory' AND granted AND classid=0 "
+        "AND objid=31890242 AND objsubid=1 AND database="
+        "(SELECT oid FROM pg_database WHERE datname=current_database())").fetchone():
+        assert time.monotonic() < deadline, 'hosted runner lease remains after stop'
+        time.sleep(.05)
+finally: s.close()
+""",
+        )
+
     def switch(self, compose):
+        self.stop()
         atomic_write(self.root / "compose.activation.json", compose)
         self.compose_command(
             "up",
@@ -713,6 +873,8 @@ class DockerHost:
         )
 
     def recover_cleanup(self, candidate):
+        self.sequence = candidate["sequence"]
+        self.stop()
         label = "fieldecho.delivery.sequence=" + str(candidate["sequence"])
         containers = command(["docker", "ps", "-aq", "--filter", "label=" + label]).split()
         if containers:
@@ -748,7 +910,7 @@ class DockerHost:
         args += ["--entrypoint", "python", image, "-c", script]
         return command(args, cwd=self.root)
 
-    def smoke(self, release, container=None, port=8877):
+    def smoke(self, release, container=None, port=8877, live=False):
         container = container or self.container
         expected_id = self.inspect(release["image"])["Id"]
         if self.inspect(container)["Image"] != expected_id:
@@ -774,7 +936,9 @@ class DockerHost:
                     responses[0][1],
                     [x[0] for x in responses[1:]],
                     self.worker_present(),
+                    live=live,
                 )
+                self.ready = True
                 return
             except ActivationInterrupted:
                 raise
@@ -800,7 +964,7 @@ class DockerHost:
         backups = self.root / "backups" / (str(release["sequence"]) + "-" + release["sha"])
         backups.mkdir(mode=0o700, parents=True, exist_ok=True)
         backup = Path(tempfile.mkdtemp(dir=backups, prefix="attempt-"))
-        self.compose_command("stop", "explorer")
+        self.stop()
         before = json.loads(self.run_image(release["image"], SNAPSHOT))
         atomic_write(backup / "before.json", json.dumps(before))
         dump = self.pg("pg_dump", "-U", user, "-d", database, "--no-owner", "--no-privileges")
@@ -886,11 +1050,14 @@ def main():
     global HOST_DEADLINE
     previous_signals = {}
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("deploy", "status", "host-activate", "host-status"))
+    parser.add_argument(
+        "action", choices=("deploy", "status", "host-activate", "host-status", "host-mode")
+    )
     parser.add_argument("--target", type=Path, default=Path("deploy/target.json"))
     parser.add_argument("--sha")
     parser.add_argument("--digest")
     parser.add_argument("--sequence", type=int)
+    parser.add_argument("--mode", choices=("live", "offline"))
     args = parser.parse_args()
     try:
         target = Target.load(args.target)
@@ -900,7 +1067,7 @@ def main():
             result = status(target)
         else:
             os.umask(0o077)
-            if args.action == "host-activate":
+            if args.action in ("host-activate", "host-mode"):
                 HOST_DEADLINE = ActivationDeadline.from_environment()
                 for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGALRM):
                     previous_signals[signum] = signal.signal(signum, interrupt_activation)
@@ -919,8 +1086,16 @@ def main():
                         target,
                     )
                     result = host.activate(release)
+                elif args.action == "host-mode":
+                    if args.mode is None:
+                        raise ValueError("host-mode requires --mode live or offline")
+                    result = host.set_mode(args.mode == "live")
                 else:
                     state = host.read(adopt=False)
+                    try:
+                        runtime.smoke(state.deployed, live=runtime.applied_live())
+                    except Exception:
+                        runtime.ready = False
                     result = host.report(state)
                     result["serving_image"] = runtime.inspect(runtime.container)["Image"]
                     result["worker_present"] = runtime.worker_present()
