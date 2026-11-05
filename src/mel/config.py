@@ -112,7 +112,7 @@ class Settings(BaseSettings):
     auth_issuer: str | None = None  # https://cognito-idp.<region>.amazonaws.com/<pool id>
     console_url: str | None = None  # https://<distribution>.cloudfront.net, no trailing slash
     # Optional shared viewer login. Kept server-side; rotating it revokes viewer sessions.
-    viewer_password: SecretStr | None = Field(default=None, min_length=16, max_length=128)
+    viewer_password: SecretStr | None = Field(default=None, min_length=10, max_length=128)
     # Survey speech (src/mel/voice.py): clips go to s3://<voice_bucket>/voice/audio/, and
     # the secret holds the ElevenLabs key. Unset, no survey goes out on the voice channel.
     voice_bucket: str | None = None

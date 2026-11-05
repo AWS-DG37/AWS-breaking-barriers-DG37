@@ -338,6 +338,17 @@ def test_viewer_password_requires_hosted_authentication_and_a_nonempty_secret():
         viewer_settings(viewer_password="")
 
 
+def test_memorable_shared_password_still_grants_only_viewer_access():
+    password = "Demo 1234!"
+    with client(settings=viewer_settings(viewer_password=password)) as http:
+        assert http.post("/api/auth/viewer", json={"password": password}).status_code == 200
+        assert http.get("/api/auth/session").json()["read_only"] is True
+        assert http.get("/api/experiments").status_code == 200
+        assert http.get("/api/agents/options").status_code == 403
+        for method, path in WRITE_ROUTES:
+            assert http.request(method, path, json={}).status_code == 403
+
+
 def test_viewers_cannot_invoke_agentcore_even_for_get_options():
     calls = []
 
