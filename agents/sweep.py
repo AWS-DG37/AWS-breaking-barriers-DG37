@@ -226,7 +226,9 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
                 "attempt": attempt + 1, "verdict": verdict["verdict"],
                 "model_verdict": verdict["model_verdict"],
                 "relevance": verdict.get("relevance"), "checks": verdict.get("checks"),
-                "issues": verdict.get("issues")})
+                "issues": verdict.get("issues"),
+                # the verifier's English reading of each question; the console shows it on request
+                "back_translation": verdict.get("back_translation")})
             if verdict["verdict"] in ("pass", "fail"):
                 break
             issues = verdict_issues(verdict)
@@ -323,9 +325,19 @@ def load_golden(path):
     return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
+def prompt_fingerprint():
+    """Short hash of the prompt files in use, so run files show which prompt version produced them."""
+    import hashlib
+    from run_one import prompt_path
+    h = hashlib.sha1()
+    for name in ("generator_prompt.md", "verifier_prompt.md", "translator_prompt.md"):
+        h.update(Path(prompt_path(name)).read_bytes())
+    return h.hexdigest()[:10]
+
+
 def run_model(model_id, verifier_model_id, golden_rows, limit, max_retries, out_dir,
               progress=None, pipeline="direct", translator_model_id=DEFAULT_TRANSLATOR,
-              use_translation_cache=True):
+              use_translation_cache=True, tag=None, golden_name=None):
     """Run one generator model over the first `limit` golden insights; write and return the run."""
     golden_by_id = {g["insight"]["insight_id"]: g for g in golden_rows}
     selected = golden_rows[:limit]
@@ -339,6 +351,10 @@ def run_model(model_id, verifier_model_id, golden_rows, limit, max_retries, out_
     run = {
         "model_id": model_id,
         "pipeline": pipeline,
+        "tag": tag,
+        "prompt_dir": os.environ.get("MEL_PROMPT_DIR"),
+        "prompt_sha": prompt_fingerprint(),
+        "golden": golden_name,
         "translator_model_id": translator_model_id if pipeline == "translate" else None,
         "verifier_model_id": verifier_model_id,
         "region": os.environ.get("AWS_REGION", "us-east-1"),
@@ -352,7 +368,8 @@ def run_model(model_id, verifier_model_id, golden_rows, limit, max_retries, out_
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", model_id)
-    path = out_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}__{pipeline}__{safe}.json"
+    label = f"{pipeline}-{re.sub(r'[^A-Za-z0-9._-]', '_', tag)}" if tag else pipeline
+    path = out_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}__{label}__{safe}.json"
     path.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
     run["_path"] = str(path)
     return run
@@ -369,7 +386,14 @@ def main():
     ap.add_argument("--max-retries", type=int, default=1, help="revise rounds after the first")
     ap.add_argument("--no-translation-cache", action="store_true")
     ap.add_argument("--out", default="runs", help="output directory for run files")
+    ap.add_argument("--prompt-dir", help="folder of prompt variants (generator_prompt.md, "
+                    "verifier_prompt.md, translator_prompt.md); missing files use the defaults")
+    ap.add_argument("--tag", help="label for this run, e.g. the prompt variant name")
     a = ap.parse_args()
+    if a.prompt_dir:
+        if not Path(a.prompt_dir).is_dir():
+            ap.error(f"--prompt-dir {a.prompt_dir} is not a folder")
+        os.environ["MEL_PROMPT_DIR"] = str(Path(a.prompt_dir).resolve())
     golden_rows = load_golden(a.golden)
 
     def progress(model, i, total, r):
@@ -381,7 +405,8 @@ def main():
     for m in a.models:
         print(f"\n=== {a.pipeline}: generator {m} ===", flush=True)
         runs.append(run_model(m, a.verifier_model, golden_rows, a.limit, a.max_retries, a.out,
-                              progress, a.pipeline, a.translator, not a.no_translation_cache))
+                              progress, a.pipeline, a.translator, not a.no_translation_cache,
+                              a.tag, Path(a.golden).name))
     print(f"\n{'generator':45} {'accept':>7} {'relev':>6} {'tok/srv':>8} {'s/srv':>6}")
     for run in runs:
         s = run["summary"]

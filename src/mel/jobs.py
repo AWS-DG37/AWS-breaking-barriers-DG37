@@ -224,18 +224,33 @@ async def run_queue(
     poll_seconds: float = 2.0,
     job_id: str | None = None,
     resume: bool = False,
+    stop: asyncio.Event | None = None,
     agent_factory=build_agents,
     improver_factory=build_improver_agents,
 ) -> int:
     """Claim and run jobs until the queue is empty (`once`) or forever. Returns how
     many jobs ran. A named `job_id` runs only that job. The caller owns `store`."""
     ran = 0
-    while True:
-        job = await asyncio.to_thread(store.claim_job, job_id, resume=resume)
+    while stop is None or not stop.is_set():
+        claim = asyncio.create_task(asyncio.to_thread(store.claim_job, job_id, resume=resume))
+        try:
+            job = await asyncio.shield(claim)
+        except asyncio.CancelledError:
+            # A cancelled await cannot stop the DB thread. The caller must not close its Store yet.
+            await claim
+            raise
+        if stop is not None and stop.is_set():
+            return ran
         if job is None:
             if once or job_id is not None:
                 return ran
-            await asyncio.sleep(poll_seconds)
+            if stop is None:
+                await asyncio.sleep(poll_seconds)
+            else:
+                try:
+                    await asyncio.wait_for(stop.wait(), poll_seconds)
+                except TimeoutError:
+                    pass
             continue
         logger.info(json.dumps({"event": "job_started", "job_id": job["job_id"]}))
         await run_job(
@@ -248,3 +263,4 @@ async def run_queue(
         ran += 1
         if job_id is not None:
             return ran
+    return ran

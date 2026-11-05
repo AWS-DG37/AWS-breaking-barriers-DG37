@@ -1,0 +1,10 @@
+# Kept out of the AgentCore code package
+.venv/
+__pycache__/
+**/__pycache__/
+.kiro/
+.bedrock_agentcore/
+runs/
+data/
+cache/
+*.pyc
