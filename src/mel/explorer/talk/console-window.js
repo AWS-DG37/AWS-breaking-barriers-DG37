@@ -78,7 +78,14 @@
     size();
   }
 
-  const full = () => ({ left: INSET, top: INSET, width: innerWidth - 2 * INSET, height: innerHeight - 2 * INSET });
+  // The deployment banner (static/deployment-banner.mjs) is fixed above everything while a
+  // release runs, so the window stays below it.
+  const bannerHeight = () =>
+    parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--deployment-banner-height')) || 0;
+  const full = () => {
+    const top = INSET + bannerHeight();
+    return { left: INSET, top, width: innerWidth - 2 * INSET, height: innerHeight - INSET - top };
+  };
 
   // The iframe always lays out at the full window's size and is scaled to the current
   // window, so the small window shows a true miniature of the desktop site.
@@ -99,7 +106,7 @@
     const width = Math.min(Math.max(360, innerWidth * 0.3), 560, f.width);
     const height = width * (f.height - CHROME) / f.width + CHROME;
     const left = Math.min(Math.max(INSET, c.left + c.width / 2 - width / 2), innerWidth - INSET - width);
-    const top = Math.min(Math.max(INSET, c.top + c.height / 2 - height / 2), innerHeight - INSET - height);
+    const top = Math.min(Math.max(f.top, c.top + c.height / 2 - height / 2), innerHeight - INSET - height);
     return { left, top, width, height };
   }
 
@@ -209,10 +216,12 @@
     if (e.key === 'Escape') closeWindow();
   }, true);
 
-  addEventListener('resize', () => {
+  const refit = () => {
     size();
     if (open && !running) place(full(), 14);
-  });
+  };
+  addEventListener('resize', refit);
+  document.addEventListener('deployment-banner-resize', refit);
 
   new MutationObserver(() => {
     if (scene.classList.contains('active')) ensureFrame();
