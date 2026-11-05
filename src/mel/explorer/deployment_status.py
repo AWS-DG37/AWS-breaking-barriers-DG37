@@ -17,7 +17,6 @@ RUNS_URL = (
 )
 REFRESH_SECONDS = 90
 ACTIVE_REFRESH_SECONDS = 15
-IDLE_REFRESH_SECONDS = 300
 QUOTA_RESERVE = 5
 MAX_BODY_BYTES = 1_000_000
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -188,16 +187,17 @@ class DeploymentStatus:
                 raise ValueError("Invalid anonymous quota")
         except (KeyError, ValueError):
             return REFRESH_SECONDS, REFRESH_SECONDS
-        # ponytail: spend the anonymous quota on active releases, keeping five requests
-        # for other host callers. If releases outlast it, report unavailable until reset.
-        # A credentialed server-side integration is the upgrade for sustained activity.
-        fresh_for = (
+        interval = (
             ACTIVE_REFRESH_SECONDS
             if self._run.state in {"queued", "running"}
-            else IDLE_REFRESH_SECONDS
+            else REFRESH_SECONDS
         )
-        delay = max(fresh_for, reset_in + 1) if remaining <= QUOTA_RESERVE else fresh_for
-        return delay, fresh_for
+        if remaining <= QUOTA_RESERVE:
+            return max(interval, reset_in + 1), interval
+        # Spread the remaining requests across the entire quota window. Quiet periods
+        # leave room for 15s checks; continuous activity stays within the shared budget.
+        delay = max(interval, reset_in / (remaining - QUOTA_RESERVE))
+        return delay, max(interval, min(delay, REFRESH_SECONDS))
 
     def _retry_delay(self, headers: httpx.Headers) -> float:
         delays = [0.0]

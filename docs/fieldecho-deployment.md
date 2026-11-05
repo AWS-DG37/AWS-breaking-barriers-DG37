@@ -102,7 +102,8 @@ Nginx configuration rewrite or authentication change.
 
 During the single-host database pause, new loads get an explicit HTTP 503 Field Echo
 maintenance page with `Cache-Control: no-store` and `Retry-After: 10`, instead of an
-Nginx 502. Healthy upstream responses, including authentication failures, pass through.
+Nginx 502. Application responses, including JSON errors and authentication failures,
+pass through unchanged; error interception remains off.
 Existing tabs retain their state and can resume requests when the app returns. The
 maintenance page does not automatically reload or retry writes. This is explicit
 maintenance availability, not uninterrupted application operation; backup, quiescence,
@@ -269,10 +270,13 @@ before claiming end-to-end delivery.
 ## Deployment banner freshness
 
 The public deployment-status route uses one process-wide single-flight GitHub cache,
-not a GitHub request per browser. Valid anonymous quota headers enable 15-second
-checks while the latest eligible main workflow is queued or running. Completed runs
-use a five-minute interval to leave quota for releases; discovering a newly queued run
-can therefore take five minutes. Visible browsers poll active local status every five
+not a GitHub request per browser. Valid anonymous quota headers enable checks as fast
+as 15 seconds while the latest eligible main workflow is queued or running. Each
+interval is at least the reset window divided by the remaining requests above the
+five-request reserve, so long releases cannot burn the budget in a short burst. With
+an otherwise unused full-hour quota, active checks are about 67 seconds apart.
+Completed runs retain the prior 90-second interval, so discovering a newly queued run
+is not slowed down. Visible browsers poll active local status every five
 seconds and other states every 20 seconds. These intervals are scheduling targets,
 not a completion-latency guarantee under upstream failure or quota pressure.
 

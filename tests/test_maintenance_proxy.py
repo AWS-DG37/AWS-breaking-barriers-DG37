@@ -29,6 +29,10 @@ def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_pa
       listen 8877;
       location / { return 200 'healthy'; }
       location /api/health { return 401; }
+      location /api/unavailable {
+        default_type application/json;
+        return 503 '{"detail":"Specific application error"}';
+      }
     }}""")
     try:
         docker(
@@ -96,6 +100,10 @@ def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_pa
         assert wait_for(200).text == "healthy"
         probe_maintenance_proxy(int(port))
         assert httpx.get(base + "/api/health").status_code == 401
+        error = httpx.get(base + "/api/unavailable")
+        assert error.status_code == 503
+        assert error.json() == {"detail": "Specific application error"}
+        assert "retry-after" not in error.headers
         assert "retry-after" not in httpx.get(base).headers
 
         docker("stop", "--time", "2", name + "-backend")

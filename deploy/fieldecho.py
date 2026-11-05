@@ -39,7 +39,6 @@ http {
 """
 MAINTENANCE_PROXY = LEGACY_PROXY.replace(
     "      proxy_pass",
-    "      proxy_intercept_errors on;\n"
     "      error_page 502 503 504 =503 @maintenance;\n"
     "      proxy_pass",
 ).replace(

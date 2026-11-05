@@ -149,7 +149,7 @@ def test_retry_after_and_rate_reset_backoff():
         assert len(calls) == 2
 
 
-def quota_response(rows, remaining=50, reset=4600):
+def quota_response(rows, remaining=50, reset=1600):
     return httpx.Response(
         200,
         json={"workflow_runs": rows},
@@ -178,15 +178,15 @@ def test_active_workflow_completion_refreshes_within_fifteen_seconds(status):
     assert len(calls) == 2
 
 
-def test_idle_budget_leaves_room_for_active_release_checks():
+def test_idle_status_keeps_original_refresh_cadence_with_quota_headers():
     now = [0]
     svc, calls = service(quota_response([run()]), clock=lambda: now[0])
     svc.wall_clock = lambda: 1000 + now[0]
     snapshot(svc)
-    now[0] = 299
+    now[0] = 89
     assert snapshot(svc)["state"] == "current"
     assert len(calls) == 1
-    now[0] = 300
+    now[0] = 90
     snapshot(svc)
     assert len(calls) == 2
 
@@ -195,7 +195,9 @@ def test_idle_budget_leaves_room_for_active_release_checks():
 def test_low_quota_survives_restart_and_does_not_leave_stale_running_status(remaining):
     now = [0]
     svc, calls = service(
-        quota_response([run(status="in_progress", conclusion=None)], remaining=remaining),
+        quota_response(
+            [run(status="in_progress", conclusion=None)], remaining=remaining, reset=4600
+        ),
         clock=lambda: now[0],
     )
     svc.wall_clock = lambda: 1000 + now[0]
@@ -209,6 +211,34 @@ def test_low_quota_survives_restart_and_does_not_leave_stale_running_status(rema
     now[0] = 3601
     snapshot(svc)
     assert len(calls) == 2
+
+
+def test_active_checks_pace_quota_and_still_notice_a_long_release_finishing():
+    now, remaining = [0], [60]
+
+    def wire():
+        remaining[0] -= 1
+        active = now[0] < 1800
+        return quota_response(
+            [
+                run(
+                    status="in_progress" if active else "completed",
+                    conclusion=None if active else "success",
+                )
+            ],
+            remaining=remaining[0],
+            reset=4600,
+        )
+
+    svc, calls = service(wire, clock=lambda: now[0])
+    svc.wall_clock = lambda: 1000 + now[0]
+    for second in range(0, 1891, 5):
+        now[0] = second
+        result = snapshot(svc)
+        assert result["state"] != "unknown"
+    assert result["state"] == "current"
+    assert remaining[0] > 5
+    assert len(calls) <= 30
 
 
 def test_faster_active_polling_is_still_one_request_for_all_browsers():
