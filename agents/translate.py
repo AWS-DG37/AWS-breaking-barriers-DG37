@@ -25,8 +25,11 @@ CACHE_DIR = Path(os.environ.get("MEL_CACHE_DIR", ROOT / "cache")) / "translation
 
 
 def load_prompts():
-    """Return (system, user_template, retry_template) from translator_prompt.md."""
-    blocks = re.findall(r"```\n(.*?)```", PROMPT.read_text(encoding="utf-8"), flags=re.S)
+    """Return (system, user_template, retry_template) from translator_prompt.md
+    (or from MEL_PROMPT_DIR when it holds a translator_prompt.md variant)."""
+    override = Path(os.environ["MEL_PROMPT_DIR"]) / PROMPT.name if os.environ.get("MEL_PROMPT_DIR") else None
+    path = override if override and override.is_file() else PROMPT
+    blocks = re.findall(r"```\n(.*?)```", path.read_text(encoding="utf-8"), flags=re.S)
     return blocks[0], blocks[1], blocks[2]
 
 

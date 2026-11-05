@@ -13,6 +13,12 @@ STACK_NAME="${STACK_NAME:-farmerchat-mel}"
 ASSETS_STACK="${STACK_NAME}-assets"
 IMAGE_TAG="${IMAGE_TAG:-$(date -u +%Y%m%d%H%M%S)}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
+# The survey agents on AgentCore, deployed first from agents/ (agents/README.md).
+AGENT_RUNTIME_ARN="${AGENT_RUNTIME_ARN:-$(grep -m1 'agent_arn: arn:' agents/.bedrock_agentcore.yaml 2>/dev/null | awk '{print $2}')}"
+if [[ -z "$AGENT_RUNTIME_ARN" ]]; then
+  echo 'Set AGENT_RUNTIME_ARN, or deploy agents/ with agentcore first.' >&2
+  exit 1
+fi
 
 aws cloudformation deploy --region "$AWS_REGION" \
   --stack-name "$ASSETS_STACK" --template-file infra/bootstrap.yaml \
@@ -37,7 +43,7 @@ sam deploy --region "$AWS_REGION" --stack-name "$STACK_NAME" \
   --image-repository "$REPOSITORY" \
   --no-fail-on-empty-changeset \
   --parameter-overrides "ContainerImage=$IMAGE" "BedrockModelId=$BEDROCK_MODEL_ID" \
-  "BedrockAllowedModelIds=$BEDROCK_ALLOWED_MODEL_IDS"
+  "BedrockAllowedModelIds=$BEDROCK_ALLOWED_MODEL_IDS" "AgentRuntimeArn=$AGENT_RUNTIME_ARN"
 
 # Publish the console UI, then refresh CloudFront. /api/* reaches the API through the
 # same distribution, so the UI needs no API address or sign-in settings.
@@ -48,6 +54,12 @@ output() {
 # The image omits datasets; the console loads the participant pack from the data bucket.
 aws s3 cp docs/participant-pack/data/insights.jsonl \
   "s3://$(output DataBucketName)/datasets/participant-pack/insights.jsonl"
+# Agents tab: model sweep summaries from agents/runs (run files stay out of the image).
+SUMMARIES="$(mktemp)"
+PYTHONPATH=src python3 -m mel.explorer.agent_runtime agents/runs "$SUMMARIES"
+aws s3 cp "$SUMMARIES" "s3://$(output DataBucketName)/agent-sweeps/summaries.json" \
+  --content-type application/json
+rm -f "$SUMMARIES"
 UI_BUCKET="$(output UiBucketName)"
 STATIC=src/mel/explorer/static
 aws s3 sync "$STATIC" "s3://$UI_BUCKET/static" --delete --exclude '*.test.mjs' --exclude index.html

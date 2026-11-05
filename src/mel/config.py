@@ -111,6 +111,14 @@ class Settings(BaseSettings):
     auth_client_id: str | None = None
     auth_issuer: str | None = None  # https://cognito-idp.<region>.amazonaws.com/<pool id>
     console_url: str | None = None  # https://<distribution>.cloudfront.net, no trailing slash
+    # The Strands survey agents (agents/) deployed on Bedrock AgentCore Runtime. Unset hides
+    # live runs in the console's Agents view; saved sweep results still show.
+    agent_runtime_arn: str | None = None
+    agent_runs_dir: Path = Path("agents/runs")
+    # Hosted: where background agent runs save results (s3://bucket/prefix), and the sweep
+    # summary file deploy.sh uploads. Unset locally: results in memory, summaries from runs dir.
+    agent_results_uri: str | None = None
+    agent_summaries_uri: str | None = None
 
     @model_validator(mode="after")
     def complete_sign_in(self):

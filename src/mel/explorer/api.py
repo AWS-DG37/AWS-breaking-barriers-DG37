@@ -45,7 +45,7 @@ from mel.experiments import (
     compare_runs,
     validate_assessment,
 )
-from mel.explorer import auth
+from mel.explorer import agent_runtime, auth
 from mel.improvement import ImprovementSpec, ReviewComment, review_target
 from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
@@ -256,11 +256,13 @@ def create_app(
     dispatcher=dispatch,
     auth_verifier=None,
     auth_exchange=None,
+    agent_invoker=None,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
     app = FastAPI(title="FarmerChat MEL console")
     auth.install(app, settings, verifier=auth_verifier, exchange=auth_exchange)
+    agent_runtime.install(app, settings, invoker=agent_invoker)
 
     @app.exception_handler(CostRefused)
     async def costs_refused(request, error):
