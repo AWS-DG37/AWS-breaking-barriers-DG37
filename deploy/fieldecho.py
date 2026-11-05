@@ -415,7 +415,6 @@ class Host:
         if HOST_DEADLINE:
             HOST_DEADLINE.recover()
             if "boot_compose" in state.transition:
-                # Reserve half the remaining absolute budget for the offline boot fallback.
                 HOST_DEADLINE.attempt_by = time.monotonic() + HOST_DEADLINE.remaining() / 2
             HOST_DEADLINE.arm()
         cleanup_complete = False
