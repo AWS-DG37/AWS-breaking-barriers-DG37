@@ -270,6 +270,32 @@ def test_admins_label_cannot_carry_iam_role(private_list):
     assert aws.mutations == []
 
 
+def test_explicit_console_origin_validates_callbacks_and_emits_matching_env(private_list):
+    aws = Cognito()
+    origin = "https://personal.cloudfront.net"
+    aws.client["CallbackURLs"] = [origin + "/api/auth/callback"]
+    aws.client["LogoutURLs"] = [origin + "/"]
+    assert run(aws, private_list, console_url=origin)["environment"]["MEL_CONSOLE_URL"] == origin
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://example.test",
+        "https://example.test/",
+        "https://example.test/path",
+        "https://user@example.test",
+        "https://example.test?query=x",
+        "https://example.test\n",
+    ],
+)
+def test_invalid_console_origin_cannot_mutate_pool(private_list, origin):
+    aws = Cognito()
+    with pytest.raises(admins.AccessError):
+        run(aws, private_list, console_url=origin)
+    assert aws.mutations == []
+
+
 def test_cli_failure_output_contains_no_private_data(private_list, monkeypatch, capsys):
     class Failed(Cognito):
         def admin_create_user(self, **kw):
