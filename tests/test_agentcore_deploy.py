@@ -299,3 +299,89 @@ def test_package_refuses_runtime_unreadable_file(package):
         archive.writestr("unreadable.py", "private mode")
     with pytest.raises(ValueError, match="permissions"):
         a.validate_package(package, SHA)
+
+
+@pytest.mark.parametrize("same_package", [False, True])
+def test_failed_update_can_fix_forward_even_with_same_package(
+    target, package, monkeypatch, same_package
+):
+    cloud = Cloud(target, package)
+    cloud.current["status"] = "UPDATE_FAILED"
+    if same_package:
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        cloud.current["agentRuntimeArtifact"]["codeConfiguration"]["code"]["s3"].update(
+            prefix=f"releases/{SHA}/{digest}.zip", versionId="failed-version"
+        )
+
+    def aws(t, service, operation, **params):
+        result = cloud(t, service, operation, **params)
+        if operation == "get-agent-runtime" and not params.get("agent_runtime_version"):
+            return {**result, "status": "UPDATE_FAILED"}
+        return result
+
+    monkeypatch.setattr(a, "aws", aws)
+    monkeypatch.setattr(a, "main_head", lambda t: SHA)
+    monkeypatch.setattr(a, "smoke", lambda *args: None)
+    assert a.deploy(target, package, SHA)["outcome"] == "DEPLOYED"
+    assert len([op for _, op, _ in cloud.calls if op == "update-agent-runtime"]) == 1
+
+
+@pytest.mark.parametrize(
+    "status", ["CREATING", "UPDATING", "DELETING", "CREATE_FAILED", "DELETE_FAILED"]
+)
+def test_runtime_transitions_and_other_failures_refuse_update(target, package, monkeypatch, status):
+    cloud = Cloud(target, package)
+
+    def aws(t, service, operation, **params):
+        result = cloud(t, service, operation, **params)
+        if operation == "get-agent-runtime":
+            return {**result, "status": status}
+        return result
+
+    monkeypatch.setattr(a, "aws", aws)
+    monkeypatch.setattr(a, "main_head", lambda t: SHA)
+    with pytest.raises(ValueError):
+        a.deploy(target, package, SHA)
+    assert not any(op == "update-agent-runtime" for _, op, _ in cloud.calls)
+
+
+@pytest.mark.parametrize("explicit_arn", [None, ARN])
+def test_legacy_sam_deploy_requires_explicit_runtime_without_reading_deleted_config(
+    tmp_path, explicit_arn
+):
+    import os
+    import subprocess
+
+    binary = tmp_path / "aws"
+    marker = tmp_path / "aws-called"
+    binary.write_text('#!/bin/sh\ntouch "$AWS_CALLED"\nexit 42\n')
+    binary.chmod(0o755)
+    env = {
+        **os.environ,
+        "PATH": str(tmp_path) + ":" + os.environ["PATH"],
+        "AWS_CALLED": str(marker),
+        "AWS_REGION": "us-east-1",
+    }
+    env.pop("AGENT_RUNTIME_ARN", None)
+    if explicit_arn:
+        env["AGENT_RUNTIME_ARN"] = explicit_arn
+    result = subprocess.run(
+        ["bash", "scripts/deploy.sh"], env=env, capture_output=True, text=True, timeout=10
+    )
+    if explicit_arn:
+        assert result.returncode == 42 and marker.exists()
+    else:
+        assert result.returncode == 1 and not marker.exists()
+        assert "Set AGENT_RUNTIME_ARN explicitly" in result.stderr
+        assert "docs/fieldecho-deployment.md" in result.stderr
+
+
+def test_release_timeout_covers_agent_and_console_poll_windows():
+    import math
+
+    import yaml
+
+    workflow = yaml.safe_load(Path(".github/workflows/main.yml").read_text())
+    # Agent READY, DEFAULT propagation, console SSM polling, then ten-minute command buffer.
+    minimum = math.ceil((600 + 300 + 1950) / 60) + 10
+    assert workflow["jobs"]["release"]["timeout-minutes"] >= minimum

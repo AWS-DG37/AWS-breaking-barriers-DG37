@@ -184,7 +184,7 @@ def deploy(target, package, sha):
     if (
         current["agentRuntimeArn"] != target.runtime_arn
         or current["roleArn"] != target.execution_role_arn
-        or current["status"] != "READY"
+        or current["status"] not in ("READY", "UPDATE_FAILED")
     ):
         raise ValueError("runtime target identity, role or readiness mismatch")
     previous = current["agentRuntimeVersion"]
@@ -193,7 +193,8 @@ def deploy(target, package, sha):
     old_code = current["agentRuntimeArtifact"].get("codeConfiguration", {})
     location = old_code.get("code", {}).get("s3", {})
     if (
-        location.get("bucket") == target.package_bucket
+        current["status"] == "READY"
+        and location.get("bucket") == target.package_bucket
         and location.get("prefix") == key
         and location.get("versionId") not in (None, "", "null")
     ):

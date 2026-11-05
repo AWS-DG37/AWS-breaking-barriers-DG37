@@ -343,10 +343,17 @@ metadata and checksum before reusing that version. The update preserves the
 runtime's existing network, environment, protocol and other configuration. A
 fresh remote-main check immediately precedes the update. Superseded runs perform
 no runtime update. A same-package rerun verifies the running endpoint and returns
-`ALREADY_DEPLOYED` without another upload or runtime version.
+`ALREADY_DEPLOYED` without another upload or runtime version. A runtime in
+`UPDATE_FAILED` is eligible for a fix-forward update after its underlying problem
+has been corrected, including when the tested package is unchanged. Other failed
+states and in-progress transitions are refused. The [UpdateAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateAgentRuntime.html)
+documents no READY-only prerequisite; the service remains the authority and any
+rejection exits nonzero. Failed-state recovery is covered at the client boundary,
+without deliberately breaking a live runtime to exercise the service.
 
-Release logs record the prior runtime version before an update. The new version
-must become READY, match the exact versioned package, and be served by the READY
+The release job allows 60 minutes for the aggregate agent, endpoint and console
+polling windows plus command overhead. Release logs record the prior runtime
+version before an update. The new version must become READY, match the exact versioned package, and be served by the READY
 DEFAULT endpoint. A new-session `options` invocation must return a successful
 application response. Any failed state, timeout or smoke exits nonzero and blocks
 console delivery. Prior runtime versions and immutable packages are retained for

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates AWS resources and pushes the image only when explicitly run by an operator.
+# Legacy SAM provisioning; existing Field Echo delivery uses .github/workflows/main.yml.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -13,10 +13,10 @@ STACK_NAME="${STACK_NAME:-farmerchat-mel}"
 ASSETS_STACK="${STACK_NAME}-assets"
 IMAGE_TAG="${IMAGE_TAG:-$(date -u +%Y%m%d%H%M%S)}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
-# The survey agents on AgentCore, deployed first from agents/ (agents/README.md).
-AGENT_RUNTIME_ARN="${AGENT_RUNTIME_ARN:-$(grep -m1 'agent_arn: arn:' agents/.bedrock_agentcore.yaml 2>/dev/null | awk '{print $2}')}"
-if [[ -z "$AGENT_RUNTIME_ARN" ]]; then
-  echo 'Set AGENT_RUNTIME_ARN, or deploy agents/ with agentcore first.' >&2
+# This creates separate SAM infrastructure; never infer its target from toolkit state.
+if [[ -z "${AGENT_RUNTIME_ARN:-}" ]]; then
+  echo 'Set AGENT_RUNTIME_ARN explicitly to run legacy SAM provisioning.' >&2
+  echo 'For existing Field Echo delivery, use docs/fieldecho-deployment.md and deploy/agentcore-target.json.' >&2
   exit 1
 fi
 
