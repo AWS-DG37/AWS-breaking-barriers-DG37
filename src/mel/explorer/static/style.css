@@ -1059,12 +1059,6 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .dash-bar-value { font-variant-numeric:tabular-nums; color:var(--muted); font-size:13px; white-space:nowrap; text-align:right; }
 .dash-follow { margin-bottom:6px; }
 .dash-follow .dash-bar { margin-bottom:0; }
-.dash-trend { width:100%; height:auto; display:block; margin-top:6px; }
-.dash-trend-bar { fill:var(--aqua-soft); stroke:var(--aqua); stroke-width:1; }
-.dash-trend-line { fill:none; stroke:var(--green); stroke-width:3; stroke-linejoin:round; }
-.dash-trend-dot { fill:white; stroke:var(--green); stroke-width:2.5; }
-.dash-trend-axis { font-size:11px; fill:var(--muted); }
-.dash-trend-value { font-size:13px; font-weight:700; fill:var(--deep); }
 .dash-table { width:100%; border-collapse:collapse; font-size:14px; margin-top:8px; }
 .dash-table th,.dash-table td { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
 .dash-table td { font-variant-numeric:tabular-nums; }
@@ -1076,3 +1070,15 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .dash-learning small { color:var(--deep); font-weight:600; font-size:12px; }
 @media (max-width:1280px) { .dash-tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } .dash-learnings { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:800px) { .dash-tiles,.dash-grid,.dash-learnings,.dash-funnel { grid-template-columns:1fr; } .dash-step-bar { display:none; } }
+.dash-cost-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:28px; margin-top:6px; }
+.dash-cost-total { display:flex; align-items:baseline; gap:10px; margin:4px 0 2px; }
+.dash-cost-total strong { font-size:44px; line-height:1; color:var(--deep); font-variant-numeric:tabular-nums; }
+.dash-cost-total span { font-weight:600; }
+.dash-cost-pers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
+.dash-cost-per { background:var(--surface); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; }
+.dash-cost-per strong { font-size:22px; font-variant-numeric:tabular-nums; }
+.dash-cost-per span { font-size:12px; color:var(--muted); }
+.dash-cost h3 { margin-top:4px; }
+.dash-bar-fill.muted { background:var(--control); }
+.dash-cost-note { margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); }
+@media (max-width:1000px) { .dash-cost-grid,.dash-cost-pers { grid-template-columns:1fr; } }
