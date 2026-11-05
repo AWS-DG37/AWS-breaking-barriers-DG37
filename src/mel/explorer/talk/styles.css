@@ -95,6 +95,13 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
 .punch.big{font-size:clamp(1.6rem,3.2vw,2.7rem);margin-top:clamp(20px,3.5vh,36px)}
 .punch.sm-punch{font-size:clamp(1.05rem,1.9vw,1.45rem);margin-top:clamp(16px,2.5vh,26px)}
 
+/* small centered source citation */
+.footnote{display:block;width:100%;margin:clamp(16px,2.4vh,24px) 0 0;padding:0 clamp(10px,4vw,60px);
+  font-size:.7rem;color:var(--mut);line-height:1.5;opacity:.6;
+  text-align:center;font-style:italic;letter-spacing:.01em}
+.footnote a{color:var(--mut);text-decoration:underline;text-underline-offset:2px}
+.footnote a:hover{color:var(--g)}
+
 /* timing callout on the pipeline slide */
 .timing-note{display:flex;gap:12px;align-items:center;margin-top:clamp(16px,2.5vh,24px);
   padding:clamp(11px,1.6vh,15px) 18px;background:var(--bg2);border:1px solid var(--line);
@@ -289,11 +296,3 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   .scene,.scene .content>*,.scene-head>*,.cards>*,.steps li,.bullets li,
   .flow>*,.rules .rule,.cases>*{opacity:1;transform:none;filter:none}
 }
-
-/* ─── slide 4: AWS deployment diagram ───
-   The SVG is generated from docs/aws-deployment.html by scripts/build_talk_diagram.py and
-   carries its own namespaced styles. This slide only gives it room: it widens past the
-   1040px column and keeps 16:9 inside the space between the bar and the footer. */
-.scene.scene-arch{padding:clamp(8px,1.5vh,20px) max(16px,2vw)}
-.content.arch{max-width:none;width:min(100%,calc((100vh - 92px - 10vh) * 16 / 9))}
-.arch svg{display:block;width:100%;height:auto}
