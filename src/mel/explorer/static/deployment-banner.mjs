@@ -34,7 +34,7 @@ export function pollDeploymentStatus(doc, render, {
     pending = true;
     controller = new AbortController();
     const timeout = setTimer(() => controller?.abort(), 8000);
-    let view;
+    let view, state;
     try {
       const response = await fetchImpl('/api/deployment-status', {
         cache:'no-store', signal:controller.signal, credentials:'same-origin',
@@ -42,7 +42,9 @@ export function pollDeploymentStatus(doc, render, {
       if (!response.ok) throw new Error('Unavailable');
       const text = await response.text();
       if (text.length > 16384) throw new Error('Oversized status');
-      view = bannerView(JSON.parse(text));
+      const value = JSON.parse(text);
+      view = bannerView(value);
+      state = value?.state;
     } catch {
       view = unknown();
     } finally {
@@ -53,7 +55,9 @@ export function pollDeploymentStatus(doc, render, {
     if (stopped) return;
     disabled = Boolean(view.disabled);
     render(view);
-    if (!disabled && !doc.hidden) timer = setTimer(poll, 20000);
+    if (!disabled && !doc.hidden) {
+      timer = setTimer(poll, state === 'queued' || state === 'running' ? 5000 : 20000);
+    }
   }
   const visibility = () => { clear(); if (!doc.hidden) void poll(); };
   doc.addEventListener('visibilitychange', visibility);

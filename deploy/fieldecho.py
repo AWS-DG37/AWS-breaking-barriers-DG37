@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import fcntl
+import http.client
 import json
 import os
 import re
@@ -23,6 +24,44 @@ ROOT = Path("/opt/dg37")
 PROJECT = "dg37-explorer-cloud"
 AUTH_ENV = ("MEL_AUTH_DOMAIN", "MEL_AUTH_CLIENT_ID", "MEL_AUTH_ISSUER", "MEL_CONSOLE_URL")
 HOST_DEADLINE = None
+LEGACY_PROXY = """events {}
+http {
+  server {
+    listen 80 default_server;
+    location / {
+      proxy_pass http://127.0.0.1:8877;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+}
+"""
+MAINTENANCE_PROXY = LEGACY_PROXY.replace(
+    "      proxy_pass",
+    "      proxy_intercept_errors on;\n"
+    "      error_page 502 503 504 =503 @maintenance;\n"
+    "      proxy_pass",
+).replace(
+    "    location / {",
+    """    location = /__fieldecho_maintenance__ {
+      error_page 503 =503 @maintenance;
+      return 503;
+    }
+    location @maintenance {
+      default_type text/html;
+      add_header Cache-Control "no-store" always;
+      add_header Retry-After "10" always;
+      return 503 '<!doctype html><html lang="en"><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Field Echo temporarily unavailable</title><body><main>
+        <h1>Field Echo is temporarily unavailable</h1>
+        <p>A site update may be in progress. Please try again shortly.</p>
+        <p>If you already have Field Echo open, leave that tab open to keep your work.</p>
+        <p><a href="/">Try again</a></p></main></body></html>';
+    }
+    location / {""",
+)
 
 
 class ActivationInterrupted(RuntimeError):
@@ -295,6 +334,54 @@ def read_live_policy(root):
     if type(value) is not bool:
         raise ValueError("live policy must contain one JSON boolean")
     return value
+
+
+def prepare_maintenance_proxy(root, path=Path("/etc/nginx/nginx.conf")):
+    metadata = path.lstat()
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or metadata.st_mode & 0o022
+    ):
+        raise ValueError("proxy must be an operator-owned regular file")
+    original = path.read_text()
+    if original not in (LEGACY_PROXY, MAINTENANCE_PROXY):
+        raise ValueError("custom proxy requires a separate reviewed maintenance configuration")
+    backup = root / "nginx.before-maintenance.conf"
+    if not backup.exists():
+        atomic_write(backup, original)
+    staged = root / "nginx.maintenance.conf"
+    atomic_write(staged, MAINTENANCE_PROXY)
+    command(["nginx", "-t", "-c", str(staged)])
+    atomic_write(path, MAINTENANCE_PROXY)
+    try:
+        # Reload even on exact replay: a prior process may have died after the write.
+        command(["systemctl", "reload", "nginx"])
+        probe_maintenance_proxy()
+    except Exception:
+        atomic_write(path, original)
+        raise
+
+
+def probe_maintenance_proxy(port=80):
+    for _ in range(20):
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+        try:
+            connection.request("GET", "/__fieldecho_maintenance__")
+            response = connection.getresponse()
+            if (
+                response.status == 503
+                and response.getheader("Cache-Control") == "no-store"
+                and response.getheader("Retry-After") == "10"
+                and b"Field Echo is temporarily unavailable" in response.read(4096)
+            ):
+                return
+        except (OSError, http.client.HTTPException):
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.1)
+    raise ValueError("maintenance proxy did not become ready before application stop")
 
 
 def render_compose(current, image, live=False):
@@ -797,6 +884,7 @@ class DockerHost:
             "from pathlib import Path; files=list(Path('migrations').glob('*.sql')); "
             "assert files; assert all(p.read_bytes() for p in files)",
         )
+        prepare_maintenance_proxy(self.root)
 
     def live_preflight(self, release):
         self.run_image(

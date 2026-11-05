@@ -149,6 +149,84 @@ def test_retry_after_and_rate_reset_backoff():
         assert len(calls) == 2
 
 
+def quota_response(rows, remaining=50, reset=4600):
+    return httpx.Response(
+        200,
+        json={"workflow_runs": rows},
+        headers={
+            "X-RateLimit-Limit": "60",
+            "X-RateLimit-Remaining": str(remaining),
+            "X-RateLimit-Reset": str(reset),
+        },
+    )
+
+
+@pytest.mark.parametrize("status", ["queued", "in_progress"])
+def test_active_workflow_completion_refreshes_within_fifteen_seconds(status):
+    now = [0]
+    wire = [quota_response([run(status=status, conclusion=None)])]
+    svc, calls = service(lambda: wire[0], clock=lambda: now[0])
+    svc.wall_clock = lambda: 1000 + now[0]
+    assert snapshot(svc)["state"] in {"queued", "running"}
+    now[0] = 14
+    snapshot(svc)
+    assert len(calls) == 1
+    # Same SHA success is required; matching the running SHA never means completion.
+    wire[0] = quota_response([run()])
+    now[0] = 15
+    assert snapshot(svc)["state"] == "current"
+    assert len(calls) == 2
+
+
+def test_idle_budget_leaves_room_for_active_release_checks():
+    now = [0]
+    svc, calls = service(quota_response([run()]), clock=lambda: now[0])
+    svc.wall_clock = lambda: 1000 + now[0]
+    snapshot(svc)
+    now[0] = 299
+    assert snapshot(svc)["state"] == "current"
+    assert len(calls) == 1
+    now[0] = 300
+    snapshot(svc)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("remaining", [0, 1, 5])
+def test_low_quota_survives_restart_and_does_not_leave_stale_running_status(remaining):
+    now = [0]
+    svc, calls = service(
+        quota_response([run(status="in_progress", conclusion=None)], remaining=remaining),
+        clock=lambda: now[0],
+    )
+    svc.wall_clock = lambda: 1000 + now[0]
+    assert snapshot(svc)["state"] == "running"
+    now[0] = 30
+    assert snapshot(svc) == {"state": "unknown"}
+    assert len(calls) == 1
+    now[0] = 3599
+    snapshot(svc)
+    assert len(calls) == 1
+    now[0] = 3601
+    snapshot(svc)
+    assert len(calls) == 2
+
+
+def test_faster_active_polling_is_still_one_request_for_all_browsers():
+    async def scenario():
+        now = [0]
+        wire = [quota_response([run(status="in_progress", conclusion=None)])]
+        svc, calls = service(lambda: wire[0], clock=lambda: now[0])
+        svc.wall_clock = lambda: 1000 + now[0]
+        await asyncio.gather(*(svc.snapshot() for _ in range(100)))
+        now[0] = 15
+        wire[0] = quota_response([run(), run(2, status="queued", conclusion=None)])
+        results = await asyncio.gather(*(svc.snapshot() for _ in range(100)))
+        assert all(r["state"] == "queued" and r["run_number"] == 2 for r in results)
+        assert len(calls) == 2
+
+    asyncio.run(scenario())
+
+
 @pytest.mark.parametrize(
     "runs", [[], [run(sha="invalid")], [run(status="alien")], [run(conclusion=None)]]
 )

@@ -16,6 +16,75 @@ OLD_IMAGE = "sha256:" + "2" * 64
 
 
 @pytest.fixture
+def managed_proxy(tmp_path, monkeypatch):
+    from deploy import ec2_setup
+
+    installed = tmp_path / "nginx.conf"
+    monkeypatch.setattr(ec2_setup, "command", lambda *a, **kw: "")
+    original_write = ec2_setup.atomic_write
+
+    def write(path, content, mode=0o600):
+        original_write(installed if str(path) == "/etc/nginx/nginx.conf" else path, content, mode)
+
+    monkeypatch.setattr(ec2_setup, "atomic_write", write)
+    ec2_setup.DockerHost().proxy(None, tmp_path)
+    return installed
+
+
+def test_proxy_upgrade_validates_before_reload_and_preserves_original(
+    d, tmp_path, monkeypatch, managed_proxy
+):
+    original = managed_proxy.read_text()
+    calls = []
+
+    def command(args, **kwargs):
+        if args[0] == "nginx" and not calls:
+            assert managed_proxy.read_text() == original
+        calls.append(args)
+        return ""
+
+    monkeypatch.setattr(d, "command", command)
+    monkeypatch.setattr(d, "probe_maintenance_proxy", lambda: calls.append(["probe"]))
+    d.prepare_maintenance_proxy(tmp_path, managed_proxy)
+    assert (tmp_path / "nginx.before-maintenance.conf").read_text() == original
+    assert calls[0][:2] == ["nginx", "-t"]
+    assert calls[-2:] == [["systemctl", "reload", "nginx"], ["probe"]]
+    upgraded = managed_proxy.read_text()
+    assert upgraded != original
+    # Retry after a crash between writing config and reloading must reload again.
+    d.prepare_maintenance_proxy(tmp_path, managed_proxy)
+    assert managed_proxy.read_text() == upgraded
+    assert (tmp_path / "nginx.before-maintenance.conf").read_text() == original
+
+
+@pytest.mark.parametrize("failure", ["custom", "invalid", "reload", "readiness"])
+def test_proxy_upgrade_failure_preserves_working_configuration(
+    d, tmp_path, monkeypatch, managed_proxy, failure
+):
+    if failure == "custom":
+        managed_proxy.write_text(
+            managed_proxy.read_text().replace("location /", "location /private")
+        )
+    original = managed_proxy.read_text()
+
+    def command(args, **kwargs):
+        if args[0] == "nginx" and failure == "invalid":
+            raise RuntimeError("bad syntax")
+        if args[0] == "systemctl" and failure == "reload":
+            raise RuntimeError("reload failed")
+        return ""
+
+    monkeypatch.setattr(d, "command", command)
+    def probe():
+        if failure == "readiness":
+            raise ValueError("proxy did not become ready")
+    monkeypatch.setattr(d, "probe_maintenance_proxy", probe)
+    with pytest.raises((ValueError, RuntimeError)):
+        d.prepare_maintenance_proxy(tmp_path, managed_proxy)
+    assert managed_proxy.read_text() == original
+
+
+@pytest.fixture
 def d():
     return importlib.import_module("deploy.fieldecho")
 
@@ -1057,6 +1126,7 @@ def test_real_compose_accepts_supported_host_and_rejects_bridge_before_image_run
     }
     (tmp_path / "compose.yaml").write_text(json.dumps(compose))
     runtime = d.DockerHost(tmp_path, target)
+    monkeypatch.setattr(d, "prepare_maintenance_proxy", lambda root: None)
     monkeypatch.setattr(runtime, "worker_present", lambda: False)
     monkeypatch.setattr(
         runtime,
