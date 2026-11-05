@@ -8,9 +8,11 @@ from fastapi.testclient import TestClient
 from memory_configs import MemoryConfigs
 from postgres import database, requires_postgres  # noqa: F401  (pytest fixture)
 from pydantic_ai import Agent
+from pydantic_ai.models.function import FunctionModel
 from pydantic_ai.models.test import TestModel
 
-from mel.costs import CapUpdate, cap_view, set_cap
+from mel.config import ModelConfig
+from mel.costs import CapUpdate, RunCosts, cap_view, set_cap
 from mel.explorer.api import create_app
 from mel.models import Outcome
 from mel.translate import SurveyTranslation, english_items, request_text, survey_key
@@ -186,6 +188,46 @@ def test_translation_is_charged_to_the_run_under_the_console_cap(database):  # n
     assert database.translation(survey_key(SURVEY))["items"][0]["prompt"] == ENGLISH["items"][0][
         "prompt"
     ]
+
+
+@requires_postgres
+def test_a_failed_translation_never_blocks_a_budgeted_run(database):  # noqa: F811
+    run = str(uuid4())
+    database.start_run(run, "translate-budget", {})
+    insight = {"insight_id": "I-1", "farmer_id": "F-1"}
+    database.save(
+        run, insight, Outcome(insight_id="I-1", status="rejected", candidate_survey=SURVEY)
+    )
+    # A console run: inside the cap, with its own budget, as every console launch has.
+    RunCosts(database, run).initialize(Decimal("5"), capped=True)
+    version = cap_view(database)["version"]
+    set_cap(database, CapUpdate(expected_version=version, budget_usd=Decimal("5")))
+    database.close = lambda: None
+
+    def outage(messages, info):
+        raise RuntimeError("provider unavailable")
+
+    def failing(model, output_type, prompt, *args):
+        return Agent(FunctionModel(outage), output_type=output_type)
+
+    path = f"/api/runs/{run}/results/I-1/english"
+    with TestClient(create_app(store_factory=lambda _: database, translation_agent=failing)) as c:
+        assert c.post(path).status_code == 502
+    with TestClient(
+        create_app(store_factory=lambda _: database, translation_agent=translator(ENGLISH, []))
+    ) as client:
+        assert client.post(path).status_code == 200  # the unsettled call does not block it
+    states = database.connection.execute(
+        "SELECT role,state FROM model_calls WHERE run_id=%s ORDER BY created_at", (run,)
+    ).fetchall()
+    assert states == [("translate", "unknown"), ("translate", "complete")]
+    stop = database.connection.execute(
+        "SELECT stop_reason FROM run_costs WHERE run_id=%s", (run,)
+    ).fetchone()[0]
+    assert stop is None
+    # The run's own next request is still allowed: translations never touch its budget.
+    luna = ModelConfig(model_id="openai.gpt-6-luna", api="responses", max_tokens=1800)
+    assert RunCosts(database, run).reserve(luna, "us-east-1", "generate", 1, "I-2")
 
 
 @requires_postgres

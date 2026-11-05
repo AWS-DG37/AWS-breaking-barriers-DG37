@@ -35,9 +35,10 @@ class SurveyTranslation(StrictModel):
 
 
 class TranslationCosts(RunCosts):
-    """Charges a translation to the run whose survey it translates, under that run's budget
-    and the console spend cap, without ever stopping the run. A refused or unsettled
-    translation must not block later translations or rewrite a finished run's stop reason."""
+    """Charges a translation to the run whose survey it translates. RunCosts.reserve holds
+    role "translate" to the console spend cap only, never the run's budget. This ledger also
+    never stops the run: a refused or unsettled translation must not block the run's own
+    requests or later translations, or rewrite its stop reason."""
 
     def stop(self, reason):
         pass
