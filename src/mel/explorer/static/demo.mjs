@@ -24,6 +24,11 @@ export const TIERS = [
   {id:'budget', label:'Lowest cost · GPT-5.5', model:'us.openai.gpt-5.5', name:'GPT-5.5'},
 ];
 const VERIFIER = {model:'global.anthropic.claude-sonnet-5-5', name:'Claude Sonnet 5.5'};
+// Who decides whether to follow up: the code rules, or a Strands classifier agent.
+export const GATES = [
+  {id:'rules', label:'Follow-up rules · instant'},
+  {id:'classifier', label:'Classifier agent · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
+];
 const RULE_TEXT = {
   R1:'This was not a real farming conversation (a greeting, or a message that could not be understood), so there is nothing to follow up on.',
   R3:'The farmer only asked for general information. They were not asked to do anything, so there is nothing to check.',
@@ -36,7 +41,7 @@ const words = value => String(value ?? '').replaceAll('_',' ');
 const cap = value => { const s=words(value); return s ? s[0].toUpperCase()+s.slice(1) : ''; };
 
 const requests=requestScope(), runs=requestScope();
-const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', run:0, mode:'live'};
+const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', gate:'rules', run:0, mode:'live'};
 
 // Shrink the whole phone, never just its height, so it stays a normal phone shape and still
 // fits beside the story without scrolling the page.
@@ -78,6 +83,8 @@ function render() {
     [...view.insights.keys()].map(id=>el('option',{value:id,selected:id===view.insightId},title(id))));
   const tier=el('select',{onChange:e=>{view.tier=e.target.value;}},
     TIERS.map(t=>el('option',{value:t.id,selected:t.id===view.tier},t.label)));
+  const gate=el('select',{onChange:e=>{view.gate=e.target.value;}},
+    GATES.map(g=>el('option',{value:g.id,selected:g.id===view.gate},g.label)));
   const go=el('button',{type:'submit',class:'primary'},'Run the follow-up');
   const live=el('div',{class:'demo-layout',id:'demo-live',hidden:view.mode!=='live'},
     el('div',{class:'demo-main'},
@@ -85,6 +92,7 @@ function render() {
         el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.')),modeSwitch()),
       el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
         el('label',{},'Conversation',insight),
+        el('label',{},'Who decides to follow up',gate),
         el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
         go),
       el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
@@ -154,20 +162,22 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 async function start() {
   runs.renew();
-  const ticket=++view.run, tier=TIERS.find(t=>t.id===view.tier);
+  const ticket=++view.run, tier=TIERS.find(t=>t.id===view.tier), gate=GATES.find(g=>g.id===view.gate);
+  const choice=gate.model ? {gate:gate.id, classifier:gate.model} : {};
   const flow=document.getElementById('demo-flow'), phoneCol=document.getElementById('demo-phone');
   phoneCol.replaceChildren();
   const steps=el('ol',{class:'demo-steps'});
   flow.replaceChildren(el('h2',{},'What FarmerChat does next'),steps);
   const alive=()=>ticket===view.run;
   try {
-    const rules=step('Reading the conversation and checking the follow-up rules…');
+    const rules=step(gate.model ? `${gate.name} is reading the conversation to decide…` : 'Reading the conversation and checking the follow-up rules…');
     steps.append(rules);
     const [{decision}]=await Promise.all([
-      runs.api('/agents/decide',{method:'POST',body:JSON.stringify({insight_id:view.insightId})}),
+      runs.api('/agents/decide',{method:'POST',body:JSON.stringify({insight_id:view.insightId,...choice})}),
       pause(1600)]);   // long enough for the audience to read the step
     if (!alive()) return;
-    finish(rules,'Rules checked',`Rule ${decision.rule}`);
+    // Label by what answered: an agent deployed before the classifier always runs the rules.
+    finish(rules,decision.gate==='classifier'?`Decided by ${gate.name}`:'Rules checked',`Rule ${decision.rule}`);
     flow.append(verdict(decision.survey,decision));
     if (!decision.survey) return;
     await pause(900);
@@ -179,12 +189,14 @@ async function start() {
     const clock=setInterval(()=>{ if(!alive()) return clearInterval(clock); write.querySelector('p').textContent=`${Math.round((Date.now()-started)/1000)} s`; },1000);
     let record;
     try {
-      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:VERIFIER.model,pipeline:'direct',max_retries:1},runs);
+      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:VERIFIER.model,pipeline:'direct',max_retries:1,...choice},runs);
     } finally { clearInterval(clock); }
     if (!alive()) return;
     const r=record.result, seconds=Math.round((Date.now()-started)/1000);
     const revisions=r.attempts>1 ? ` after ${r.attempts-1} revision${r.attempts>2?'s':''}` : '';
-    if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
+    // The run asks the classifier again; it can rarely answer differently from the first call.
+    if (r.status==='skipped') finish(write,'No survey after all',`On a second read the classifier chose rule ${r.decision_rule}${r.decision_reason?`: ${r.decision_reason}`:''}`,'warn');
+    else if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
     else finish(write,r.status==='failed'?'The survey could not be written':`${VERIFIER.name} did not approve this survey${revisions}`,r.error || `${seconds} s · showing the last draft`,'warn');
     if (r.items?.length) phoneCol.append(phone(r));
   } catch (error) {
@@ -197,7 +209,8 @@ function verdict(yes, decision) {
   return el('div',{class:`demo-verdict ${yes?'yes':'no'}`,role:'status'},
     el('span',{class:`demo-verdict-icon ${yes?'tick':'dash'}`,'aria-hidden':true}),
     el('div',{},el('strong',{},yes?'We will follow up with a survey':'No survey for this conversation'),
-      el('p',{},RULE_TEXT[decision.rule] || words(decision.reason_code))));
+      el('p',{},RULE_TEXT[decision.rule] || words(decision.reason_code)),
+      decision.reason ? el('p',{class:'small muted'},`The classifier’s reason: ${decision.reason}`) : null));
 }
 
 function phone(r) {

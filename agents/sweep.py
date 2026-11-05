@@ -84,6 +84,16 @@ def _glossary(insight, lang):
     return f"{name} = {HINDI[name]}" if lang == "hi-IN" and name in HINDI else "(not needed)"
 
 
+def gate_decision(insight, gate="rules", classifier=DEFAULT_CLASSIFIER, call=None):
+    """Survey or no survey from the chosen gate. Raises when the classifier answer is unusable.
+    call(stage, model_id, system, user) -> text; defaults to one uncounted model call."""
+    if gate != "classifier":
+        return decide(insight)
+    call = call or (lambda stage, model_id, system, user: _call(stage, model_id, system, user)[0])
+    csys, ctpl = classify.load_prompts()
+    return classify.parse(call("classify", classifier, csys, classify.build_user(ctpl, insight)))
+
+
 def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct",
                  translator=DEFAULT_TRANSLATOR, max_retries=1, use_translation_cache=True,
                  gate="rules", classifier=DEFAULT_CLASSIFIER):
@@ -120,11 +130,7 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
         return out
 
     try:
-        if gate == "classifier":
-            csys, ctpl = classify.load_prompts()
-            d = classify.parse(call("classify", classifier, csys, classify.build_user(ctpl, insight)))
-        else:
-            d = decide(insight)
+        d = gate_decision(insight, gate, classifier, call)
     except Exception as e:   # an unusable classifier answer must not turn into a survey or a skip
         out["error"] = f"{type(e).__name__}: {e}"
         return finish("failed")

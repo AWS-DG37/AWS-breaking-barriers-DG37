@@ -6,6 +6,7 @@ Request payload (JSON):
    "pipeline": "direct" | "translate", "max_retries": 0-2,  optional
    "gate": "rules" | "classifier", "classifier": "<model id>"}  optional
   {"action": "options"}  returns the allowed models and defaults
+  {"action": "decide", "insight": {...}, "gate": ..., "classifier": ...}  the gate alone
 
 Response: {"ok": true, "result": {...}} or {"ok": false, "error": "..."}.
 
@@ -33,10 +34,13 @@ def invoke(payload, context=None):
     payload = payload or {}
     if payload.get("action") == "options":
         return {"ok": True, "result": service.options()}
-    if payload.get("action") == "decide":  # the rules gate alone: code only, no model calls
+    if payload.get("action") == "decide":  # the gate alone: rules, or one classifier call
         try:
-            return {"ok": True, "result": service.decide_only(payload.get("insight"))}
-        except service.BadRequest as error:
+            result = service.decide_only(
+                payload.get("insight"), payload.get("gate", "rules"), payload.get("classifier")
+            )
+            return {"ok": True, "result": result}
+        except (service.BadRequest, service.DecisionFailed) as error:
             return {"ok": False, "error": str(error)}
     try:
         result = service.generate_survey(

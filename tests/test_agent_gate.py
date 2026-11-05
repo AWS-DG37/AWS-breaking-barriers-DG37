@@ -150,6 +150,45 @@ def test_the_service_allowlists_the_gate_and_the_classifier_model(model):
     assert service.options()["gates"] == ["rules", "classifier"]
 
 
+def test_decide_only_answers_from_the_chosen_gate(model):
+    rules = service.decide_only(INSIGHT)
+    assert (rules["rule"], rules["gate"], rules["classifier"]) == ("R8", "rules", None)
+    assert model.calls == []
+    model.classifier_says = '{"rule": "R5", "reason": "No check needed."}'
+    got = service.decide_only(INSIGHT, "classifier")
+    assert (got["rule"], got["survey"], got["reason"], got["gate"]) == (
+        "R5",
+        False,
+        "No check needed.",
+        "classifier",
+    )
+    model.classifier_says = "no idea"
+    with pytest.raises(service.DecisionFailed):
+        service.decide_only(INSIGHT, "classifier")
+
+
+def test_the_console_decide_route_passes_the_gate():
+    sent = []
+
+    def invoke(payload):
+        sent.append(payload)
+        return {"ok": True, "result": {"survey": True, "rule": "R8", "gate": payload["gate"]}}
+
+    app = FastAPI()
+    agent_runtime.install(app, Settings(), invoker=invoke)
+    with TestClient(app) as http:
+        plain = http.post("/api/agents/decide", json={"insight_id": INSIGHT["insight_id"]})
+        chosen = http.post(
+            "/api/agents/decide",
+            json={"insight_id": INSIGHT["insight_id"], "gate": "classifier", "classifier": "cls"},
+        )
+    assert plain.json()["decision"]["gate"] == "rules" and "classifier" not in sent[0]
+    assert chosen.status_code == 200 and (sent[1]["gate"], sent[1]["classifier"]) == (
+        "classifier",
+        "cls",
+    )
+
+
 def test_the_console_passes_the_gate_choice_to_agentcore():
     sent = []
 
