@@ -26,8 +26,16 @@ HINDI = {"wheat": "गेहूं", "mustard": "सरसों", "lentil": "�
 EXAMPLE_FOR = {"direct_action": "1-mustard-aphid-spray", "wait_and_monitor": "3-potato-blight-wait",
                "escalate_to_expert": "4-cow-vet-escalation", "plan_created": "5-wheat-variety-plan"}
 
+def prompt_path(name):
+    """Prompt file path. MEL_PROMPT_DIR points at a folder of prompt variants (any file it lacks
+    falls back to the skill's references), so a sweep can compare prompt versions."""
+    override = os.environ.get("MEL_PROMPT_DIR")
+    if override and os.path.isfile(os.path.join(override, name)):
+        return os.path.join(override, name)
+    return os.path.join(WRITER, "references", name)
+
 def load_prompts():
-    text = open(os.path.join(WRITER, "references", "generator_prompt.md"), encoding="utf-8").read()
+    text = open(prompt_path("generator_prompt.md"), encoding="utf-8").read()
     blocks = re.findall(r"```\n(.*?)```", text, flags=re.S)
     return blocks[0], blocks[1]   # system, user template
 
@@ -52,7 +60,7 @@ def build_user(tpl, i):
         glossary_lines=gloss, scenario_examples=example_text(i))
 
 def load_verifier_prompts():
-    text = open(os.path.join(WRITER, "references", "verifier_prompt.md"), encoding="utf-8").read()
+    text = open(prompt_path("verifier_prompt.md"), encoding="utf-8").read()
     blocks = re.findall(r"```\n(.*?)```", text, flags=re.S)
     return blocks[0], blocks[1]   # system, user template
 
@@ -95,7 +103,7 @@ def fake_model(ins):
                                      "gives_new_advice": False, "asks_personal_info": False}}, ensure_ascii=False)
 
 def load_retry_template():
-    text = open(os.path.join(WRITER, "references", "generator_prompt.md"), encoding="utf-8").read()
+    text = open(prompt_path("generator_prompt.md"), encoding="utf-8").read()
     return re.findall(r"```\n(.*?)```", text, flags=re.S)[2]   # RETRY addendum
 
 def blocking_issues(v):

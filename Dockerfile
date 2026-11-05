@@ -15,6 +15,8 @@ COPY config ./config
 COPY prompts ./prompts
 COPY migrations ./migrations
 COPY eval/golden_holdout.jsonl ./eval/golden_holdout.jsonl
+# The console's Agents tab offers golden insights from both splits.
+COPY eval/golden_dev.jsonl ./eval/golden_dev.jsonl
 COPY docs/participant-pack/json/schemas ./docs/participant-pack/json/schemas
 COPY docs/participant-pack/json/rules ./docs/participant-pack/json/rules
 COPY docs/participant-pack/data/crop_calendar_bihar_rabi.csv ./docs/participant-pack/data/
