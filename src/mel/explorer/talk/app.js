@@ -62,6 +62,8 @@
   document.addEventListener('keydown', e => {
     // While the demo video is open, its keys (space, arrows) belong to the video.
     if (document.querySelector('dialog[open]')) return;
+    // Space on the focused demo button opens the video; it must not also advance the slide.
+    if (e.key === ' ' && e.target.closest?.('[data-demo-video]')) return;
     if (e.key.toLowerCase() === 'd' && !e.metaKey && !e.ctrlKey && !e.altKey) { document.querySelector('[data-demo-video]')?.click(); return; }
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(cur - 1);
