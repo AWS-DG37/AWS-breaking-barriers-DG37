@@ -12,10 +12,10 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   if(!english) session.englishText=false;
   const copyFor=language=>language?.split('-')[0]==='hi' ? {
     feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
-    start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।'
+    start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।', chose:'आपका जवाब: '
   } : {
     feedback:'Your feedback', intro:'Tell us about your experience', description:'Answer a few short questions. This is a preview. Answers are not submitted.',
-    start:'Start', back:'Back', next:'Next', finish:'Finish', thanks:'Thank you', complete:'Preview complete. Answers remain on this page and have not been submitted.', restart:'Restart', required:'Choose an answer to continue.', missing:'Please answer the remaining questions too.'
+    start:'Start', back:'Back', next:'Next', finish:'Finish', thanks:'Thank you', complete:'Preview complete. Answers remain on this page and have not been submitted.', restart:'Restart', required:'Choose an answer to continue.', missing:'Please answer the remaining questions too.', chose:'You chose: '
   };
   const followUpFor=item=>{
     if(!Object.hasOwn(session.answers,item.item_id)) return null;
@@ -35,7 +35,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     clip?.pause();
     utterance=null;
     clip=null;
-    readButton.textContent='Read aloud';
+    readButton.setAttribute('aria-label','Read aloud');
     readButton.setAttribute('aria-pressed','false');
   };
   stopActiveAudio=stopAudio;
@@ -49,7 +49,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       : hindi ? `${item.scale_min} से ${item.scale_max} तक कोई नंबर छूएँ।` : `Tap a number from ${item.scale_min} to ${item.scale_max}.`;
     const text=session.phase==='intro' ? `${spokenCopy.intro}. ${spokenCopy.description}`
       : session.phase==='complete' ? `${spokenCopy.thanks}. ${completionCopy(spoken.language)}` : `${item.prompt} ${choices}`;
-    readButton.textContent='Stop voice';
+    readButton.setAttribute('aria-label','Stop voice');
     readButton.setAttribute('aria-pressed','true');
     // The console makes each line with ElevenLabs (GET /api/voice), because the demo writes a
     // new survey on every run. Without it (no key, a view-only session, a static copy of this
@@ -74,8 +74,8 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     globalThis.speechSynthesis.speak(line);
   }
   const nativeEnglish=survey.language?.split('-')[0]==='en';
-  const readButton=el('button',{type:'button',class:'read-aloud','aria-pressed':'false',onClick:()=>utterance||clip?stopAudio():readQuestion()},'Read aloud');
-  const controls=el('div',{class:'player-demo',lang:'en'},readButton);
+  // An icon, not a word: the speaker reads the same in every survey language.
+  const readButton=el('button',{type:'button',class:'read-aloud','aria-label':'Read aloud','aria-pressed':'false',onClick:()=>utterance||clip?stopAudio():readQuestion()});
   // The language switch on the phone sets the language of both the text and the voice.
   const languageSwitch=english && !nativeEnglish ? el('div',{class:'language-switch',role:'group','aria-label':'Survey language'},
     [[false,'हिंदी','hi'],[true,'English','en']].map(([on,label,lang])=>el('button',{type:'button',lang,'aria-pressed':String(Boolean(session.englishText)===on),onClick:()=>{
@@ -88,12 +88,18 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   function syncSwitch() { languageSwitch?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(Boolean(session.englishText)===(i===1)))); }
   const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
   const body=el('div',{class:'player-body'}), footer=el('div',{class:'player-navigation'});
+  const progress=el('i'), meta=el('div',{class:'survey-progress'});
+  // Field sheet: the survey rises as a bottom sheet over the dimmed FarmerChat thread.
   phone.append(el('div',{class:'phone-screen'},
     el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
     el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),languageSwitch || el('span',{},'Digital Green')),
-    el('img',{class:'phone-field',src:photoUrl,alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768}),
-    body,footer,el('div',{class:'phone-home','aria-hidden':true})));
-  host.replaceChildren(controls,phone);
+    el('div',{class:'phone-thread'},el('img',{class:'phone-field',src:photoUrl,alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768})),
+    el('div',{class:'phone-sheet'},
+      el('div',{class:'sheet-grab','aria-hidden':true}),
+      el('div',{class:'sheet-progress','aria-hidden':true},progress),
+      el('div',{class:'sheet-head'},meta,readButton),
+      body,footer,el('div',{class:'phone-home','aria-hidden':true}))));
+  host.replaceChildren(phone);
   const lifecycle=new AbortController();
   window.addEventListener('pagehide',stopAudio,{signal:lifecycle.signal});
   window.addEventListener('hashchange',stopAudio,{signal:lifecycle.signal});
@@ -106,7 +112,13 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     removal.disconnect();
   }
   const answered=item=>Object.hasOwn(session.answers,item.item_id);
-  const button=(label,action,disabled=false)=>el('button',{type:'button',onClick:action,disabled},label);
+  const button=(label,action,disabled=false,kind='primary')=>el('button',{type:'button',class:`player-${kind}`,onClick:action,disabled},label);
+  const optionsOf=item=>item.options || Array.from({length:item.scale_max-item.scale_min+1},(_,i)=>({value:item.scale_min+i,label:String(item.scale_min+i)}));
+  // Pick and confirm: the hint echoes the chosen answer, then any follow-up notice.
+  const hintFor=item=>{
+    const chosen=optionsOf(item).find(option=>option.value===session.answers[item.item_id]);
+    return copy.chose+chosen.label+(followUpFor(item)?` ${followUpCopy(displayed.language)}`:'');
+  };
   function showQuestion(index) {
     stopAudio();
     session.question=Math.max(0,Math.min(index,survey.items.length-1));
@@ -126,6 +138,9 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     phone.lang=displayed.language || 'en';
     body.replaceChildren();
     footer.replaceChildren();
+    const done=session.phase==='complete' ? survey.items.length : session.phase==='intro' ? 0 : session.question+1;
+    progress.style.width=`${done/survey.items.length*100}%`;
+    meta.replaceChildren(el('span',{},copy.feedback),session.phase==='questions' ? el('span',{},`${session.question+1} / ${survey.items.length}`) : null);
     let heading;
     if(session.phase==='intro') {
       heading=el('h3',{tabindex:-1},copy.intro);
@@ -140,7 +155,6 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       const last=session.question===survey.items.length-1;
       heading=el('h3',{tabindex:-1},item.prompt);
       const answers=el('div',{class:'answers',role:'radiogroup','aria-label':item.prompt,lang:displayed.language || 'en'});
-      const options=item.options || Array.from({length:item.scale_max-item.scale_min+1},(_,i)=>({value:item.scale_min+i,label:String(item.scale_min+i)}));
       const next=button(last?copy.finish:copy.next,()=>{
         stopAudio();
         if(!last) return showQuestion(session.question+1);
@@ -154,20 +168,20 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
         session.phase='complete';
         render(true);
       },!answered(item));
-      const required=el('p',{class:'player-hint',role:'status'},answered(item)
-        ? followUpFor(item)?followUpCopy(displayed.language):'' : copy.required);
-      for(const option of options) {
+      const hint=el('p',{class:'player-hint',role:'status','data-echo':answered(item)},answered(item) ? hintFor(item) : copy.required);
+      for(const option of optionsOf(item)) {
         const radio=el('input',{type:'radio',name:`answer-${item.item_id}`,value:option.value,checked:answered(item) && session.answers[item.item_id]===option.value,onChange:()=>{
           stopAudio();
           session.answers[item.item_id]=option.value;
           next.disabled=false;
-          required.textContent=followUpFor(item)?followUpCopy(displayed.language):'';
+          hint.textContent=hintFor(item);
+          hint.dataset.echo='true';
         }});
-        answers.append(el('label',{},radio,el('span',{},option.label)));
+        answers.append(el('label',{},radio,el('span',{class:'answer-mark','aria-hidden':true}),el('span',{},option.label)));
       }
-      body.append(el('div',{class:'survey-progress'},el('span',{},copy.feedback),el('span',{},`${session.question+1} / ${survey.items.length}`)),heading,answers,required);
+      body.append(heading,answers,hint);
       if(message) body.append(el('p',{role:'status'},message));
-      footer.append(button(copy.back,()=>showQuestion(session.question-1),session.question===0),next);
+      footer.append(next,button(copy.back,()=>showQuestion(session.question-1),session.question===0,'back'));
     }
     body.scrollTop=0;
     if(focus) heading.focus({preventScroll:true});
