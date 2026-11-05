@@ -152,7 +152,8 @@ def install(app: FastAPI, settings: Settings, *, verifier=None, exchange=None) -
     @app.middleware("http")
     async def require_session(request: Request, call_next):
         path = request.url.path
-        if path.startswith("/api/") and path not in OPEN_PATHS:
+        public_deployment = path == "/api/deployment-status" and request.method == "GET"
+        if path.startswith("/api/") and path not in OPEN_PATHS and not public_deployment:
             token = request.cookies.get(SESSION_COOKIE)
             try:
                 if not token:

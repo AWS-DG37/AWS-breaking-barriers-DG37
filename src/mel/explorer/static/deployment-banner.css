@@ -1,0 +1,24 @@
+:root { --deployment-banner-height:0px; }
+body { padding-top:var(--deployment-banner-height); }
+body.deployment-talk { padding-top:0; }
+#deployment-banner {
+  position:fixed;
+  inset:0 0 auto;
+  z-index:10000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  flex-wrap:wrap;
+  gap:4px 16px;
+  box-sizing:border-box;
+  padding:10px 16px;
+  background:#fff3dc;
+  color:#563a0b;
+  border-bottom:1px solid #d6b572;
+  font:500 15px/1.5 system-ui,sans-serif;
+  text-align:center;
+  overflow-wrap:anywhere;
+}
+#deployment-banner[hidden], #deployment-banner a[hidden] { display:none; }
+#deployment-banner a { color:#563a0b; text-decoration:underline; font-weight:700; }
+#deployment-banner a:focus-visible { outline:2px solid #563a0b; outline-offset:3px; }

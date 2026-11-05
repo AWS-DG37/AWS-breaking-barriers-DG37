@@ -34,6 +34,13 @@
     });
   }
 
+  function fitCurrentSlide() {
+    const sc = scenes[cur], c = sc.querySelector('.content');
+    sc.classList.toggle('overflowing', c && c.scrollHeight > sc.clientHeight - 40);
+  }
+  document.addEventListener('deployment-banner-resize', () => requestAnimationFrame(fitCurrentSlide));
+  addEventListener('resize', () => requestAnimationFrame(fitCurrentSlide));
+
   function go(i) {
     cur = Math.max(0, Math.min(scenes.length - 1, i));
     deck.style.transform = `translateX(${-cur * 100}%)`;
@@ -42,10 +49,7 @@
       if (k !== cur) s.classList.remove('active');
     });
     // let a slide scroll only if its content genuinely overflows
-    requestAnimationFrame(() => {
-      const sc = scenes[cur], c = sc.querySelector('.content');
-      sc.classList.toggle('overflowing', c && c.scrollHeight > sc.clientHeight - 40);
-    });
+    requestAnimationFrame(fitCurrentSlide);
     requestAnimationFrame(() => {
       scenes[cur].classList.add('active');
       countUp(scenes[cur]);

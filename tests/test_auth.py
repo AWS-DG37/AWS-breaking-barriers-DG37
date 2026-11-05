@@ -68,7 +68,7 @@ def test_talk_is_public_while_sign_in_guards_the_api():
         assert page.status_code == 200
         assert "Field Echo" in page.text
         for path in re.findall(r'(?:src|href)="(?!https:)([^"#?]+)', page.text):
-            resource = http.get(f"/talk/{path}")
+            resource = http.get(path if path.startswith("/") else f"/talk/{path}")
             assert resource.status_code == 200, path
             assert not resource.headers["content-type"].startswith("text/html"), path
         assert http.get("/api/experiments").status_code == 401

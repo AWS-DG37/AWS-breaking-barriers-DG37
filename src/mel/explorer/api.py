@@ -46,6 +46,7 @@ from mel.experiments import (
     validate_assessment,
 )
 from mel.explorer import agent_runtime, auth
+from mel.explorer.deployment_status import DeploymentStatus, read_image_revision
 from mel.improvement import ImprovementSpec, ReviewComment, review_target
 from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
@@ -267,6 +268,11 @@ def create_app(
     app = FastAPI(title="FarmerChat MEL console", lifespan=lifespan)
     auth.install(app, settings, verifier=auth_verifier, exchange=auth_exchange)
     agent_runtime.install(app, settings, invoker=agent_invoker)
+    deployment = DeploymentStatus(settings.console_url, read_image_revision())
+
+    @app.get("/api/deployment-status")
+    async def deployment_status():
+        return JSONResponse(await deployment.snapshot(), headers={"Cache-Control": "no-store"})
 
     @app.exception_handler(CostRefused)
     async def costs_refused(request, error):
