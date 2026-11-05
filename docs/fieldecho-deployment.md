@@ -314,3 +314,10 @@ New offline normalization strips `--run-jobs`. If the older 426 handler retains 
 flag when normalizing a new image, the new CLI accepts both flags and gives
 `--no-live` precedence, so it starts no runner. No new flag is passed to an old image.
 The policy file adds no dependency to old-image rollback.
+
+## Public talk
+
+The team presentation is static files in `src/mel/explorer/talk/`, served without
+sign-in at `https://fieldecho.org/talk/`. To change it, edit those files and merge to
+`main`. The ordinary release ships it. Keep its links relative, because the page lives
+under `/talk/`.

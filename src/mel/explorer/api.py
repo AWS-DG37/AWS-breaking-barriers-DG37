@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
 
@@ -892,6 +892,17 @@ def create_app(
         if not demo_path.is_file():
             raise HTTPException(503, "Configured recorded artifact is unavailable")
         return {"experiment_id": database_call(lambda db: import_recorded(demo_path, db))}
+
+    # The public talk: sign-in guards only /api, so these pages need no session.
+    talk = Path(__file__).parent / "talk"
+    if talk.exists():
+
+        @app.get("/talk", include_in_schema=False)
+        def talk_root():
+            # Relative, so the redirect never names the origin host behind CloudFront.
+            return RedirectResponse("/talk/", status_code=307)
+
+        app.mount("/talk", StaticFiles(directory=talk, html=True), name="talk")
 
     static = Path(__file__).parent / "static"
     if static.exists():

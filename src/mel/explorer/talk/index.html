@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Field Echo · Digital Green — AWS Breaking Barriers 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="texture" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<nav class="bar">
+  <span class="wordmark">Digital Green</span>
+  <span class="sep"></span>
+  <span class="sub">Field&nbsp;Echo</span>
+  <span class="spacer"></span>
+  <span class="team">Team 37 · AWS Breaking Barriers 2026</span>
+</nav>
+
+<div id="deck">
+
+  <!-- ══════ 1 · TITLE ══════ -->
+  <section class="scene scene-title">
+    <div class="orb orb-a" aria-hidden="true"></div>
+    <div class="orb orb-b" aria-hidden="true"></div>
+    <div class="content center">
+      <p class="over">Digital Green · FarmerChat</p>
+      <h1 class="display">A farmer gets advice.<br><span class="hl">Did it help?</span></h1>
+      <p class="lead center-lead">It's a simple question, and a hard one to answer for millions of people. Field Echo asks it gently, one farmer at a time, about the advice they were actually given.</p>
+    </div>
+  </section>
+
+  <!-- ══════ 2 · PROBLEM ══════ -->
+  <section class="scene">
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>The problem</span>
+        <h2>Giving advice is the easy part.<br><span class="hl">Knowing if it helped is not.</span></h2>
+        <p class="lead">FarmerChat answers millions of farmers in their own language. But understanding whether that advice was followed, and whether it worked, still depends on field studies that take months and only ever reach a small sample.</p>
+      </div>
+      <div class="cards three">
+        <article class="card stat-card">
+          <div class="num" data-to="2800000" data-comma>0</div>
+          <div class="lbl">farmers rely on FarmerChat</div>
+        </article>
+        <article class="card">
+          <h3 class="ctitle">Studies take months</h3>
+          <p class="ctext">A single field study runs for months and reaches only a few thousand people.</p>
+        </article>
+        <article class="card">
+          <h3 class="ctitle">One survey for all</h3>
+          <p class="ctext">Everyone gets the same questions, no matter what they actually asked about.</p>
+        </article>
+      </div>
+      <p class="punch">So most farmers are never asked, <span class="hl">and the ones who are rarely get a question that fits.</span></p>
+    </div>
+  </section>
+
+  <!-- ══════ 3 · IDEA ══════ -->
+  <section class="scene">
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>Our idea</span>
+        <h2>A follow-up that fits<br><span class="hl">the advice each farmer received.</span></h2>
+      </div>
+      <ol class="steps">
+        <li><span class="step-n">01</span><p>FarmerChat remembers each conversation, the question the farmer asked, the advice they were given, and how it was resolved.</p></li>
+        <li><span class="step-n">02</span><p>From that, the agent writes a short survey about their advice, in their language, at a point in the season when the answer will mean something.</p></li>
+        <li><span class="step-n">03</span><p>Each survey is checked before it's sent. If a conversation has nothing worth following up on, the farmer simply isn't contacted.</p></li>
+      </ol>
+      <p class="punch">A good question at the right moment, <span class="hl">and nothing more.</span></p>
+    </div>
+  </section>
+
+  <!-- ══════ 4 · PIPELINE DIAGRAM ══════ -->
+  <section class="scene">
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>How it works</span>
+        <h2>Every survey moves through<br><span class="hl">a pipeline you can inspect.</span></h2>
+      </div>
+      <div class="flow" aria-label="Pipeline: an insight flows through select, generate, review, then either accept or skip">
+        <div class="flow-node start">
+          <span class="flow-ic">◗</span>
+          <b>Insight</b>
+          <small>from a farmer's chat</small>
+        </div>
+        <span class="flow-link"></span>
+        <div class="flow-node">
+          <span class="flow-ic">⌕</span>
+          <b>Select</b>
+          <small>rules decide if it needs a survey</small>
+        </div>
+        <span class="flow-link"></span>
+        <div class="flow-node">
+          <span class="flow-ic">✎</span>
+          <b>Generate</b>
+          <small>draft the survey in the farmer's language</small>
+        </div>
+        <span class="flow-link"></span>
+        <div class="flow-node">
+          <span class="flow-ic">⚖</span>
+          <b>Review</b>
+          <small>a second model checks it</small>
+        </div>
+        <span class="flow-link"></span>
+        <div class="flow-branch">
+          <div class="flow-node accept">
+            <span class="flow-ic">✓</span>
+            <b>Accept</b>
+            <small>schedule &amp; hand off</small>
+          </div>
+          <div class="flow-node skip">
+            <span class="flow-ic">—</span>
+            <b>Skip</b>
+            <small>nothing sent</small>
+          </div>
+        </div>
+      </div>
+      <p class="timing-note"><span class="tn-ic">◴</span><span>It also picks <b>when</b> to send, the farmer's preferred time, set to local IST and kept within sensible hours and the crop's season.</span></p>
+    </div>
+  </section>
+
+  <!-- ══════ 5 · RULES ══════ -->
+  <section class="scene">
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>The rules that decide</span>
+        <h2>Before any survey is written,<br><span class="hl">plain rules check the insight.</span></h2>
+        <p class="lead">Most of these end the process early, so the common case costs nothing. Only the last one leads to a survey.</p>
+      </div>
+      <div class="rules">
+        <div class="rule"><span class="rid">R1</span><div><b>Junk or invalid insight</b><span>Broken or low-quality data is dropped.</span></div></div>
+        <div class="rule"><span class="rid">R3</span><div><b>Nothing to verify</b><span>General information with no action to follow up.</span></div></div>
+        <div class="rule"><span class="rid">R4</span><div><b>Waiting for details</b><span>The conversation isn't finished yet.</span></div></div>
+        <div class="rule"><span class="rid">R5</span><div><b>No check needed</b><span>The advice doesn't call for a follow-up.</span></div></div>
+        <div class="rule"><span class="rid">R6</span><div><b>Season has passed</b><span>No sensible send window remains before season's end.</span></div></div>
+        <div class="rule"><span class="rid">R7</span><div><b>Crop already harvested</b><span>The calendar shows the crop is done.</span></div></div>
+        <div class="rule go"><span class="rid">R8</span><div><b>Send a survey</b><span>None of the above applied, so a survey is worth writing.</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══════ 6 · TEST CASES ══════ -->
+  <section class="scene">
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>From the golden set</span>
+        <h2>Two real insights,<br><span class="hl">two honest outcomes.</span></h2>
+      </div>
+      <div class="cases">
+        <!-- CASE A: survey written — golden set I-000263 -->
+        <article class="case case-go">
+          <header class="case-top">
+            <span class="case-id">I-000263</span>
+            <span class="case-tag go">Survey written</span>
+          </header>
+          <p class="case-meta">wheat · variety · hi-IN · Nov 6, 2026</p>
+          <div class="case-row"><span class="case-k">Farmer asked</span><p>What are the options for sowing wheat late this season?</p></div>
+          <div class="case-row"><span class="case-k">Advice given</span><p>A staged plan, pick a variety suited to late sowing, raise the seed rate, then watch how the crop comes up.</p></div>
+          <div class="case-out go"><span>The survey it should produce</span><b>“How much of the plan have you done?” · “Is the plan working so far?”</b></div>
+        </article>
+        <!-- CASE B: skipped — golden set I-000837 -->
+        <article class="case case-skip">
+          <header class="case-top">
+            <span class="case-id">I-000837</span>
+            <span class="case-tag skip">Skipped · R4</span>
+          </header>
+          <p class="case-meta">mustard · pest · hi-IN · Nov 17, 2026</p>
+          <div class="case-row"><span class="case-k">Farmer asked</span><p>Black and orange bugs sucking the young mustard plants, what is wrong?</p></div>
+          <div class="case-row"><span class="case-k">Advice given</span><p>Asked for more details, like the sowing date, before giving any advice.</p></div>
+          <div class="case-out skip"><span>The right call</span><b>No advice was given yet, so there's nothing to follow up on. Nothing is sent.</b></div>
+        </article>
+      </div>
+      <p class="timing-note"><span class="tn-ic">◴</span><span>Both are real cases from Digital Green's golden set, <b>with the outcome the agent is scored against.</b></span></p>
+    </div>
+  </section>
+
+  <!-- ══════ 7 · COST / CLOSE ══════ -->
+  <section class="scene scene-close">
+    <div class="orb orb-c" aria-hidden="true"></div>
+    <div class="content">
+      <div class="scene-head">
+        <span class="kicker"><span class="kdot"></span>What it costs</span>
+        <h2>About a dollar<br><span class="hl">for a thousand surveys.</span></h2>
+      </div>
+      <div class="cards three">
+        <article class="card accent">
+          <div class="num">~$1</div>
+          <div class="lbl">for 1,000 surveys with Field Echo. Measured from a real run: 25 insights cost less than a cent.</div>
+        </article>
+        <article class="card">
+          <div class="num">$1,000s</div>
+          <div class="lbl">for one old-style field study, and it still reaches only a few thousand farmers over months.</div>
+        </article>
+        <article class="card">
+          <div class="num" data-to="2">0</div>
+          <div class="lbl">model calls per survey, and most insights are filtered out in code before any call is made.</div>
+        </article>
+      </div>
+      <p class="punch">Cheap enough to ask the whole base, <span class="hl">not just a sample.</span></p>
+    </div>
+  </section>
+
+</div>
+
+<footer class="foot">
+  <span class="keys">← → move · <kbd>F</kbd> fullscreen</span>
+  <nav id="dots" aria-label="Slides"></nav>
+  <span class="brand-mini">Field Echo</span>
+</footer>
+
+<script src="app.js?v=2"></script>
+</body>
+</html>

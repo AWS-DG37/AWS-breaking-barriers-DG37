@@ -1,6 +1,7 @@
 """Hosted console sign-in: cookies only, checked against the issuer's signing keys."""
 
 import hashlib
+import re
 import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -55,6 +56,22 @@ def client(exchange=None, *, settings=SETTINGS, store=None, agent_invoker=None):
     )
     # The cookies are Secure, so the test client must speak HTTPS to send them back.
     return TestClient(app, base_url="https://console.example", follow_redirects=False)
+
+
+def test_talk_is_public_while_sign_in_guards_the_api():
+    with client() as http:
+        bare = http.get("/talk")
+        assert bare.status_code == 307
+        # Relative, so the redirect never names the host behind CloudFront.
+        assert bare.headers["location"] == "/talk/"
+        page = http.get("/talk/")
+        assert page.status_code == 200
+        assert "Field Echo" in page.text
+        for path in re.findall(r'(?:src|href)="(?!https:)([^"#?]+)', page.text):
+            resource = http.get(f"/talk/{path}")
+            assert resource.status_code == 200, path
+            assert not resource.headers["content-type"].startswith("text/html"), path
+        assert http.get("/api/experiments").status_code == 401
 
 
 @pytest.mark.parametrize(
