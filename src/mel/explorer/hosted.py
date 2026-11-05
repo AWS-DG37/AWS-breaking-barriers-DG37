@@ -1,5 +1,3 @@
-"""One authenticated explorer process owns its hosted queue and its lifetime."""
-
 from __future__ import annotations
 
 import asyncio
