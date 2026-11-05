@@ -9,7 +9,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   stopActiveAudio();
   const english=translation?.items?.length && translation.language?.split('-')[0]==='en'
     ? {...survey, language:translation.language, items:translation.items} : englishSurvey(survey);
-  if(!english) Object.assign(session,{englishText:false,englishAudio:false});
+  if(!english) session.englishText=false;
   const copyFor=language=>language?.split('-')[0]==='hi' ? {
     feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
     start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।'
@@ -39,7 +39,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   stopActiveAudio=stopAudio;
   function readQuestion() {
     stopAudio();
-    const spoken=session.englishAudio ? english : survey;
+    const spoken=session.englishText ? english : survey;
     const item=spoken.items[session.question];
     const spokenCopy=copyFor(spoken.language);
     const hindi=spoken.language?.split('-')[0]==='hi';
@@ -56,27 +56,17 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     globalThis.speechSynthesis.speak(line);
   }
   const nativeEnglish=survey.language?.split('-')[0]==='en';
-  const textToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishText,disabled:!english || nativeEnglish,onChange:event=>{
-    session.englishText=event.target.checked;
-    syncSwitch();
-    render();
-  }});
-  const audioToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishAudio,disabled:!english || nativeEnglish,onChange:event=>{
-    const reading=Boolean(utterance);
-    stopAudio();
-    session.englishAudio=event.target.checked;
-    if(reading) readQuestion();
-  }});
-  const readButton=el('button',{type:'button','aria-pressed':'false',disabled:!globalThis.speechSynthesis,onClick:()=>utterance?stopAudio():readQuestion()},'Read aloud');
-  const controls=el('fieldset',{class:'player-demo',lang:'en'},el('legend',{},'Demo language'),
-    el('label',{},textToggle,'English text'),el('label',{},audioToggle,'English audio'),readButton,
-    el('p',{},!english?'English demo translation is unavailable for this survey.':nativeEnglish?'This survey is already in English.':'Text and audio can use different languages. Answers stay in this preview.'),
+  const readButton=el('button',{type:'button',class:'read-aloud','aria-pressed':'false',disabled:!globalThis.speechSynthesis,onClick:()=>utterance?stopAudio():readQuestion()},'Read aloud');
+  const controls=el('div',{class:'player-demo',lang:'en'},readButton,
     !globalThis.speechSynthesis?el('p',{},'Audio is unavailable in this browser.'):null);
-  // The same English-text choice as a switch on the phone itself, for showing an audience.
+  // The language switch on the phone sets the language of both the text and the voice.
   const languageSwitch=english && !nativeEnglish ? el('div',{class:'language-switch',role:'group','aria-label':'Survey language'},
     [[false,'हिंदी','hi'],[true,'English','en']].map(([on,label,lang])=>el('button',{type:'button',lang,'aria-pressed':String(Boolean(session.englishText)===on),onClick:()=>{
       if(Boolean(session.englishText)===on) return;
-      session.englishText=on; textToggle.checked=on; syncSwitch(); render(true);
+      const reading=Boolean(utterance);
+      stopAudio();
+      session.englishText=on; syncSwitch(); render(true);
+      if(reading) readQuestion();
     }},label))) : null;
   function syncSwitch() { languageSwitch?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(Boolean(session.englishText)===(i===1)))); }
   const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
