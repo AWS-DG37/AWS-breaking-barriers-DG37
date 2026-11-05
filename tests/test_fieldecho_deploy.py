@@ -16,6 +16,98 @@ OLD_IMAGE = "sha256:" + "2" * 64
 
 
 @pytest.fixture
+def included_proxy(tmp_path):
+    fixtures = Path(__file__).parent / "fixtures/nginx"
+    main = tmp_path / "nginx.conf"
+    main.write_text((fixtures / "nginx.conf").read_text())
+    directory = tmp_path / "conf.d"
+    directory.mkdir()
+    site = directory / "dg37.conf"
+    site.write_text((fixtures / "dg37.conf").read_text())
+    return main, site
+
+
+def test_included_proxy_is_validated_in_global_context_without_rewriting_global_settings(
+    d, tmp_path, monkeypatch, included_proxy
+):
+    main, site = included_proxy
+    original_main, original_site = main.read_text(), site.read_text()
+    events = []
+
+    def command(args):
+        if args[0] == "nginx":
+            if not events:
+                assert site.read_text() == original_site
+            staged = Path(args[-1]).read_text()
+            assert "events { worker_connections 1024; }" in staged
+            assert str(tmp_path / "nginx.maintenance.conf") in staged
+        events.append(args)
+        return ""
+
+    monkeypatch.setattr(d, "command", command)
+    monkeypatch.setattr(d, "probe_maintenance_proxy", lambda: events.append(["probe"]))
+    d.prepare_maintenance_proxy(tmp_path, main)
+    assert main.read_text() == original_main
+    assert (tmp_path / "nginx.site.before-maintenance.conf").read_text() == original_site
+    assert site.read_text() != original_site
+    assert events[-2:] == [["systemctl", "reload", "nginx"], ["probe"]]
+    # A restart after writing/reloading must safely replay without losing the snapshot.
+    d.prepare_maintenance_proxy(tmp_path, main)
+    assert main.read_text() == original_main
+    assert (tmp_path / "nginx.site.before-maintenance.conf").read_text() == original_site
+
+
+@pytest.mark.parametrize("change", ["auth", "extra_site", "symlink", "global"])
+def test_unknown_included_proxy_configuration_is_not_rewritten(
+    d, tmp_path, monkeypatch, included_proxy, change
+):
+    main, site = included_proxy
+    if change == "auth":
+        site.write_text(site.read_text().replace("auth_basic off;", 'auth_basic "Private";'))
+    elif change == "extra_site":
+        (site.parent / "other.conf").write_text("server {}")
+    elif change == "symlink":
+        saved = site.with_suffix(".saved")
+        site.rename(saved)
+        site.symlink_to(saved)
+    else:
+        main.write_text(main.read_text() + "# operator change\n")
+    before_main, before_site = main.read_text(), site.read_text()
+    monkeypatch.setattr(d, "command", lambda *a: pytest.fail("Unsupported config was applied"))
+    with pytest.raises(ValueError):
+        d.prepare_maintenance_proxy(tmp_path, main)
+    assert main.read_text() == before_main
+    assert site.read_text() == before_site
+    assert not (tmp_path / "nginx.site.before-maintenance.conf").exists()
+
+
+@pytest.mark.parametrize("failure", ["syntax", "reload", "readiness"])
+def test_included_proxy_failure_restores_site_without_replacing_global_configuration(
+    d, tmp_path, monkeypatch, included_proxy, failure
+):
+    main, site = included_proxy
+    before_main, before_site = main.read_text(), site.read_text()
+
+    def command(args):
+        if (args[0] == "nginx" and failure == "syntax") or (
+            args[0] == "systemctl" and failure == "reload"
+        ):
+            raise RuntimeError("proxy operation failed")
+        return ""
+
+    def probe():
+        raise ValueError("proxy did not become ready")
+
+    monkeypatch.setattr(d, "command", command)
+    monkeypatch.setattr(d, "probe_maintenance_proxy", probe)
+    with pytest.raises((RuntimeError, ValueError)):
+        d.prepare_maintenance_proxy(tmp_path, main)
+    assert main.read_text() == before_main
+    assert site.read_text() == before_site
+    assert (tmp_path / "nginx.site.before-maintenance.conf").read_text() == before_site
+
+
+@pytest.fixture
 def managed_proxy(tmp_path, monkeypatch):
     from deploy import ec2_setup
 
