@@ -21,6 +21,9 @@ function build() {
   bar.append(title, close);
   const video = document.createElement('video');
   Object.assign(video, {src: SRC, poster: POSTER, controls: true, playsInline: true, preload: 'none'});
+  // showModal() focuses the first control, which would be Close: Space would then close the player.
+  // Focus the video instead, so Space pauses and plays it.
+  video.autofocus = true;
   const note = document.createElement('p');
   note.textContent = 'Recorded live on Amazon Bedrock with synthetic data. '
     + 'Near the end, the survey is read aloud in Hindi and then in English.';
