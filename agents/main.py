@@ -3,7 +3,8 @@
 Request payload (JSON):
   {"insight": {...one insight row...},
    "generator": "<model id>", "verifier": "<model id>",      optional, allowlisted in service.py
-   "pipeline": "direct" | "translate", "max_retries": 0-2}    optional
+   "pipeline": "direct" | "translate", "max_retries": 0-2,  optional
+   "gate": "rules" | "classifier", "classifier": "<model id>"}  optional
   {"action": "options"}  returns the allowed models and defaults
 
 Response: {"ok": true, "result": {...}} or {"ok": false, "error": "..."}.
@@ -45,13 +46,16 @@ def invoke(payload, context=None):
             payload.get("pipeline", "direct"),
             payload.get("translator"),
             payload.get("max_retries", 1),
+            payload.get("gate", "rules"),
+            payload.get("classifier"),
         )
     except service.BadRequest as error:
         return {"ok": False, "error": str(error)}
     # Log ids and outcomes only; insight text and surveys stay out of the logs.
     log.info(
-        "insight=%s status=%s attempts=%s generator=%s seconds=%s",
+        "insight=%s gate=%s status=%s attempts=%s generator=%s seconds=%s",
         result.get("insight_id"),
+        result.get("gate"),
         result.get("status"),
         result.get("attempts"),
         result["models"]["generator"],

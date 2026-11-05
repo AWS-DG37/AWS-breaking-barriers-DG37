@@ -45,6 +45,8 @@ class AgentRun(StrictModel):
     generator: str | None = Field(default=None, max_length=120)
     verifier: str | None = Field(default=None, max_length=120)
     pipeline: Literal["direct", "translate"] = "direct"
+    gate: Literal["rules", "classifier"] = "rules"
+    classifier: str | None = Field(default=None, max_length=120)
     max_retries: int = Field(default=1, ge=0, le=2)
 
 
@@ -163,6 +165,8 @@ def sweep_summaries(runs_dir: Path) -> list[dict]:
                 "created_at": run.get("created_at"),
                 "model_id": run.get("model_id"),
                 "pipeline": run.get("pipeline") or "direct",
+                "gate": run.get("gate") or "rules",
+                "classifier_model_id": run.get("classifier_model_id"),
                 "tag": run.get("tag"),
                 "prompt_sha": run.get("prompt_sha"),
                 "golden": run.get("golden"),
@@ -221,6 +225,8 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
                     "verifier": value.verifier,
                     "pipeline": value.pipeline,
                     "max_retries": value.max_retries,
+                    "gate": value.gate,
+                    "classifier": value.classifier,
                 }
             )
             record = {"status": "done", "result": result, "expected": row.get("expected")}
