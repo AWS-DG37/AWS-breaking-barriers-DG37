@@ -38,3 +38,5 @@ data/pack/
 # agents local state: survey/translation caches and sweep run results
 agents/cache/
 agents/runs/
+# AgentCore starter toolkit build output
+agents/.bedrock_agentcore/

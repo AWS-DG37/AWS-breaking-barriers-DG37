@@ -20,6 +20,9 @@ Parameters:
     # left out: it does not support tools, which structured survey output needs.
     Default: us.anthropic.claude-haiku-5-5,us.anthropic.claude-sonnet-5-5,us.anthropic.claude-opus-5-5,us.amazon.nova-pro-v1:0,us.amazon.nova-2-lite-v1:0,mistral.mistral-large-3-675b-instruct,deepseek.v3.2,global.openai.gpt-5.5
     Description: Bedrock Converse model or inference-profile IDs saved versions may use.
+  AgentRuntimeArn:
+    Type: String
+    Description: ARN of the AgentCore runtime running agents/main.py (agentcore status).
   DatabaseInstanceClass:
     Type: String
     Default: db.t4g.micro
@@ -433,7 +436,10 @@ Resources:
         Command: [--host, 0.0.0.0, --port, '8080']
       Architectures: [x86_64]
       MemorySize: 1024
-      Timeout: 29
+      # API Gateway still answers web requests within 29 s. The longer limit is for the
+      # Agents tab's background runs: the function invokes itself asynchronously and waits
+      # on the AgentCore survey agent (15-60 s, up to a few minutes with revisions).
+      Timeout: 300
       VpcConfig:
         SubnetIds: [!Ref AppSubnet]
         SecurityGroupIds: [!Ref ConsoleApiSecurityGroup]
@@ -459,6 +465,10 @@ Resources:
           MEL_AUTH_ISSUER: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}'
           MEL_CONSOLE_URL: !Sub 'https://${UiDistribution.DomainName}'
           MEL_PACK_URI: !Sub 's3://${DataBucket}/datasets/participant-pack/insights.jsonl'
+          # Agents tab: the Strands survey agents on Bedrock AgentCore (agents/README.md).
+          MEL_AGENT_RUNTIME_ARN: !Ref AgentRuntimeArn
+          MEL_AGENT_RESULTS_URI: !Sub 's3://${DataBucket}/agent-runs'
+          MEL_AGENT_SUMMARIES_URI: !Sub 's3://${DataBucket}/agent-sweeps/summaries.json'
           # Saved versions may only use the models the worker's IAM policy allows.
           MEL_ALLOWED_MODELS: !Sub
             - '[{"api":"responses","model_id":"${Mantle}"},{"api":"converse","model_id":"${Converse}"}]'
@@ -485,6 +495,21 @@ Resources:
             - Effect: Allow
               Action: s3:GetObject
               Resource: !Sub '${DataBucket.Arn}/datasets/*'
+            # Agents tab
+            - Effect: Allow
+              Action: bedrock-agentcore:InvokeAgentRuntime
+              Resource: [!Ref AgentRuntimeArn, !Sub '${AgentRuntimeArn}/*']
+            - Effect: Allow
+              Action: [s3:GetObject, s3:PutObject]
+              Resource: !Sub '${DataBucket.Arn}/agent-runs/*'
+            - Effect: Allow
+              Action: s3:GetObject
+              Resource: !Sub '${DataBucket.Arn}/agent-sweeps/*'
+            # The function starts background agent runs by invoking itself. A name pattern,
+            # not GetAtt, avoids a circular reference.
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-ConsoleApiFunction-*'
 
   # Console origin: the UI from a private bucket, and /api/* from the console API, so
   # the browser sees one origin (no CORS) and session cookies stay first-party.

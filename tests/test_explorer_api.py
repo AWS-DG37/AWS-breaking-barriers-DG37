@@ -401,3 +401,36 @@ def test_failed_schema_initialization_can_be_retried():
         assert client.get("/api/configs").status_code == 200
     assert len(attempts) == 2
     assert store.closed == 3
+
+
+def test_hosted_admission_refuses_before_database_or_job_side_effects():
+    store = Store()
+    app = create_app(store_factory=lambda _: store, admission_check=lambda: False)
+    with TestClient(app) as client:
+        body = experiment(store)
+        assert client.post("/api/experiments", json=body).status_code == 503
+        assert client.post("/api/jobs/batch", json={"dataset_id": DATASET}).status_code == 503
+        body = {
+            "base_config_id": body["candidates"][0]["config_id"],
+            "compare_config_id": body["candidates"][1]["config_id"],
+            "improver": {"model_id": "test", "api": "responses"},
+            "rounds": 1,
+        }
+        assert (
+            client.post(f"/api/review-lists/{DATASET}/improvements", json=body).status_code == 503
+        )
+    assert store.jobs == [] and store.created == [] and store.closed == 0
+
+
+def test_hosted_admission_is_rechecked_immediately_before_job_insert():
+    store = Store()
+    readiness = iter([True, False])
+    app = create_app(
+        settings=Settings(bedrock_model_id="test"),
+        store_factory=lambda _: store,
+        admission_check=lambda: next(readiness),
+    )
+    with TestClient(app) as client:
+        response = client.post("/api/experiments", json=experiment(store))
+    assert response.status_code == 503 and store.jobs == []
+    assert len(store.created) == 1

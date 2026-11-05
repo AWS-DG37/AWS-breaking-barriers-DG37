@@ -1,5 +1,7 @@
 """Hosted console sign-in: cookies only, checked against the issuer's signing keys."""
 
+import hashlib
+import re
 import time
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
@@ -44,15 +46,32 @@ def token(key=KEY, **changes):
     return jwt.encode(claims, key, algorithm="RS256")
 
 
-def client(exchange=None):
+def client(exchange=None, *, settings=SETTINGS, store=None, agent_invoker=None):
     app = create_app(
-        settings=SETTINGS,
-        store_factory=lambda _: Store(),
+        settings=settings,
+        store_factory=lambda _: store if store is not None else Store(),
         auth_verifier=TokenVerifier(ISSUER, "console-client", keys=Keys()),
         auth_exchange=exchange,
+        agent_invoker=agent_invoker,
     )
     # The cookies are Secure, so the test client must speak HTTPS to send them back.
     return TestClient(app, base_url="https://console.example", follow_redirects=False)
+
+
+def test_talk_is_public_while_sign_in_guards_the_api():
+    with client() as http:
+        bare = http.get("/talk")
+        assert bare.status_code == 307
+        # Relative, so the redirect never names the host behind CloudFront.
+        assert bare.headers["location"] == "/talk/"
+        page = http.get("/talk/")
+        assert page.status_code == 200
+        assert "Field Echo" in page.text
+        for path in re.findall(r'(?:src|href)="(?!https:)([^"#?]+)', page.text):
+            resource = http.get(f"/talk/{path}")
+            assert resource.status_code == 200, path
+            assert not resource.headers["content-type"].startswith("text/html"), path
+        assert http.get("/api/experiments").status_code == 401
 
 
 @pytest.mark.parametrize(
@@ -173,3 +192,177 @@ def test_without_sign_in_settings_the_local_console_is_open():
 def test_partial_sign_in_settings_are_rejected():
     with pytest.raises(ValueError, match="auth_domain"):
         Settings(auth_domain="https://signin.example")
+
+
+VIEWER_PASSWORD = "shared-viewer-test-password"
+
+
+def viewer_settings(**changes):
+    return Settings(**{**SETTINGS.model_dump(), "viewer_password": VIEWER_PASSWORD, **changes})
+
+
+def test_viewer_password_creates_a_secure_read_only_session():
+    with client(settings=viewer_settings()) as http:
+        response = http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD})
+        assert response.status_code == 200
+        cookie = response.headers["set-cookie"]
+        assert all(p in cookie for p in ("HttpOnly", "Secure", "SameSite=strict", "Path=/api"))
+        assert VIEWER_PASSWORD not in cookie
+        assert http.get("/api/auth/session").json() == {
+            "auth": True,
+            "user": "Viewer",
+            "read_only": True,
+        }
+        assert http.get("/api/experiments").status_code == 200
+
+
+@pytest.mark.parametrize("password", ["wrong", "", "é" * 20])
+def test_incorrect_viewer_password_never_creates_a_session(password):
+    with client(settings=viewer_settings()) as http:
+        response = http.post("/api/auth/viewer", json={"password": password})
+        assert response.status_code == 401
+        assert SESSION_COOKIE not in response.headers.get("set-cookie", "")
+        assert http.get("/api/experiments").status_code == 401
+
+
+def test_viewer_login_is_disabled_until_a_password_is_configured():
+    with client() as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 404
+        assert http.get("/api/auth/options").json() == {"auth": True, "viewer": False}
+    with client(settings=viewer_settings()) as http:
+        assert http.get("/api/auth/options").json() == {"auth": True, "viewer": True}
+
+
+def test_viewer_login_is_throttled_after_repeated_wrong_passwords():
+    with client(settings=viewer_settings()) as http:
+        for _ in range(5):
+            assert http.post("/api/auth/viewer", json={"password": "wrong"}).status_code == 401
+        response = http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD})
+        assert response.status_code == 429
+        assert int(response.headers["retry-after"]) > 0
+
+
+def test_tampered_viewer_cookie_and_rotated_password_are_rejected():
+    with client(settings=viewer_settings()) as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+        original = http.cookies.get(SESSION_COOKIE)
+        http.cookies.clear()
+        http.cookies.set(SESSION_COOKIE, original[:-10] + "0123456789")
+        assert http.get("/api/experiments").status_code == 401
+    with client(settings=viewer_settings(viewer_password="a-different-shared-password")) as http:
+        http.cookies.set(SESSION_COOKIE, original)
+        assert http.get("/api/experiments").status_code == 401
+    with client() as http:
+        http.cookies.set(SESSION_COOKIE, original)
+        assert http.get("/api/experiments").status_code == 401
+
+
+def test_viewer_session_expires(monkeypatch):
+    from datetime import UTC, datetime, timedelta
+
+    class Later(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(UTC) + timedelta(hours=9)
+
+    with client(settings=viewer_settings()) as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+        monkeypatch.setattr(jwt.api_jwt, "datetime", Later)
+        assert http.get("/api/experiments").status_code == 401
+
+
+WRITE_ROUTES = [
+    (method, route.path)
+    for route in create_app(settings=SETTINGS).routes
+    for method in getattr(route, "methods", set()) - {"GET", "HEAD", "OPTIONS"}
+    if route.path.startswith("/api/") and not route.path.startswith("/api/auth/")
+]
+
+
+@pytest.mark.parametrize("method,path", WRITE_ROUTES)
+def test_viewers_cannot_reach_any_write_handler(method, path):
+    with client(settings=viewer_settings()) as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+        response = http.request(method, path, json={})
+        assert response.status_code == 403
+        assert "view-only" in response.json()["detail"].lower()
+
+
+def test_viewer_config_read_does_not_seed_or_activate_a_version():
+    store = Store()
+    with client(settings=viewer_settings(), store=store) as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+        response = http.get("/api/config")
+        assert response.status_code == 200
+        assert response.json()["active_config_id"] is None
+        assert response.json()["live_enabled"] is False
+        assert store.active_config_id() is None
+        assert store.configs == {}
+
+
+@pytest.mark.parametrize(
+    "role,read_status,write_status", [("viewer", 200, 403), ("admin", 401, 401)]
+)
+def test_password_holder_cannot_escalate_or_spend_with_a_long_lived_cookie(
+    role, read_status, write_status
+):
+    key = hashlib.sha256(f"mel-viewer-session:{VIEWER_PASSWORD}".encode()).digest()
+    cookie = jwt.encode(
+        {
+            "sub": "Viewer",
+            "role": role,
+            "aud": CONSOLE,
+            "iss": "mel-viewer",
+            "exp": int(time.time()) + 365 * 24 * 3600,
+        },
+        key,
+        algorithm="HS256",
+    )
+    with client(settings=viewer_settings()) as http:
+        http.cookies.set(SESSION_COOKIE, f"viewer.{cookie}")
+        assert http.get("/api/experiments").status_code == read_status
+        for method, path in WRITE_ROUTES:
+            assert http.request(method, path, json={}).status_code == write_status
+
+
+def test_cognito_operators_keep_write_access_with_viewer_login_enabled():
+    with client(settings=viewer_settings()) as http:
+        http.cookies.set(SESSION_COOKIE, token())
+        assert http.post("/api/configs", json={}).status_code == 422
+
+
+def test_viewer_password_requires_hosted_authentication_and_a_nonempty_secret():
+    with pytest.raises(ValueError):
+        Settings(viewer_password=VIEWER_PASSWORD)
+    with pytest.raises(ValueError):
+        viewer_settings(viewer_password="")
+
+
+def test_viewers_cannot_invoke_agentcore_even_for_get_options():
+    calls = []
+
+    def invoke(payload):
+        calls.append(payload)
+        return {"ok": True, "result": {"models": []}}
+
+    with client(settings=viewer_settings(), agent_invoker=invoke) as http:
+        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+        assert http.get("/api/agents/options").status_code == 403
+        assert http.post("/api/agents/runs", json={"insight_id": "I-004512"}).status_code == 403
+        assert http.post("/api/agents/decide", json={"insight_id": "I-004512"}).status_code == 403
+        assert calls == []
+
+
+def test_operators_keep_agentcore_option_access():
+    calls = []
+
+    def invoke(payload):
+        calls.append(payload)
+        return {"ok": True, "result": {"models": []}}
+
+    with client(settings=viewer_settings(), agent_invoker=invoke) as http:
+        http.cookies.set(SESSION_COOKIE, token())
+        response = http.get("/api/agents/options")
+        assert response.status_code == 200
+        assert response.json() == {"configured": True, "models": []}
+        assert calls == [{"action": "options"}]

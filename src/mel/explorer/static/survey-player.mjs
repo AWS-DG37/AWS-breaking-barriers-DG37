@@ -3,9 +3,12 @@ import {englishSurvey} from './demo-language.mjs';
 
 let stopActiveAudio=()=>{};
 
-export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionChange=()=>{}}) {
+// translation: optional {language, items} with the same item ids and option values (the survey
+// agents send the verifier's English reading). Without it, known wording comes from demo-language.mjs.
+export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionChange=()=>{}, translation=null}) {
   stopActiveAudio();
-  const english=englishSurvey(survey);
+  const english=translation?.items?.length && translation.language?.split('-')[0]==='en'
+    ? {...survey, language:translation.language, items:translation.items} : englishSurvey(survey);
   if(!english) Object.assign(session,{englishText:false,englishAudio:false});
   const copyFor=language=>language?.split('-')[0]==='hi' ? {
     feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
@@ -55,6 +58,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   const nativeEnglish=survey.language?.split('-')[0]==='en';
   const textToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishText,disabled:!english || nativeEnglish,onChange:event=>{
     session.englishText=event.target.checked;
+    syncSwitch();
     render();
   }});
   const audioToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishAudio,disabled:!english || nativeEnglish,onChange:event=>{
@@ -68,11 +72,18 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     el('label',{},textToggle,'English text'),el('label',{},audioToggle,'English audio'),readButton,
     el('p',{},!english?'English demo translation is unavailable for this survey.':nativeEnglish?'This survey is already in English.':'Text and audio can use different languages. Answers stay in this preview.'),
     !globalThis.speechSynthesis?el('p',{},'Audio is unavailable in this browser.'):null);
+  // The same English-text choice as a switch on the phone itself, for showing an audience.
+  const languageSwitch=english && !nativeEnglish ? el('div',{class:'language-switch',role:'group','aria-label':'Survey language'},
+    [[false,'हिंदी','hi'],[true,'English','en']].map(([on,label,lang])=>el('button',{type:'button',lang,'aria-pressed':String(Boolean(session.englishText)===on),onClick:()=>{
+      if(Boolean(session.englishText)===on) return;
+      session.englishText=on; textToggle.checked=on; syncSwitch(); render(true);
+    }},label))) : null;
+  function syncSwitch() { languageSwitch?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(Boolean(session.englishText)===(i===1)))); }
   const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
   const body=el('div',{class:'player-body'}), footer=el('div',{class:'player-navigation'});
   phone.append(el('div',{class:'phone-screen'},
     el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
-    el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),el('span',{},'Digital Green')),
+    el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),languageSwitch || el('span',{},'Digital Green')),
     el('img',{class:'phone-field',src:photoUrl,alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768}),
     body,footer,el('div',{class:'phone-home','aria-hidden':true})));
   host.replaceChildren(controls,phone);

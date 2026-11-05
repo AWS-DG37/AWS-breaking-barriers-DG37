@@ -120,6 +120,7 @@ class Runtime:
     def __init__(self, root, fail=None):
         self.root, self.fail, self.events = root, fail, []
         self.running = OLD_IMAGE
+        self.ready = True
 
     def adopt(self):
         return {"sha": OLD, "image": OLD_IMAGE, "sequence": 0}
@@ -153,6 +154,9 @@ class Runtime:
         if self.fail == "smoke" and release["sha"] == SHA:
             raise ValueError("candidate unhealthy")
         self.events.append("smoke:" + release["sha"])
+
+    def applied_live(self):
+        return False
 
     def serving_image(self):
         return self.running
@@ -383,6 +387,7 @@ def test_rehearsal_retries_preserve_each_attempt_backup(d, target, tmp_path, mon
     (tmp_path / "database.env").write_text("POSTGRES_USER=app\nPOSTGRES_DB=app\n")
     before = {"ledger": {}, "tables": {}, "columns": {}}
     dumps = iter(["first backup", "second backup"])
+    monkeypatch.setattr(runtime, "stop", lambda: None)
     monkeypatch.setattr(runtime, "compose_command", lambda *a: "")
     monkeypatch.setattr(runtime, "smoke", lambda *a: None)
     monkeypatch.setattr(d, "command", lambda *a, **kw: "")
@@ -1638,3 +1643,275 @@ def test_candidate_state_commit_failure_and_failed_render_recover_from_boot_snap
     assert h.read().transition is None
     assert h.read().highest_sequence == 30
     assert (h.root / "COMMIT").read_text() == OLD + "\n"
+
+
+@pytest.mark.parametrize("value", [None, True, False])
+def test_root_host_policy_defaults_offline_and_strict_boolean(d, tmp_path, value):
+    if value is not None:
+        d.atomic_write(tmp_path / "live-policy.json", json.dumps(value))
+    assert d.read_live_policy(tmp_path) is bool(value)
+
+
+@pytest.mark.parametrize("raw", ['"true"', "{}", '{"live":true}', "1", "null", "true false"])
+def test_malformed_host_policy_refuses(d, tmp_path, raw):
+    (tmp_path / "live-policy.json").write_text(raw)
+    with pytest.raises(ValueError):
+        d.read_live_policy(tmp_path)
+
+
+def test_host_policy_refuses_symlink_or_writable_policy(d, tmp_path):
+    policy = tmp_path / "live-policy.json"
+    target = tmp_path / "other.json"
+    target.write_text("true")
+    policy.symlink_to(target)
+    with pytest.raises(ValueError):
+        d.read_live_policy(tmp_path)
+    policy.unlink()
+    policy.write_text("true")
+    policy.chmod(0o666)
+    with pytest.raises(ValueError):
+        d.read_live_policy(tmp_path)
+
+
+def test_candidate_render_uses_explicit_policy_and_offline_normalization_strips_runner(d):
+    current = {
+        "services": {
+            "postgres": {},
+            "explorer": {
+                "entrypoint": ["mel-explorer", "--run-jobs"],
+                "command": ["--run-jobs", "--no-live"],
+            },
+        }
+    }
+    live = d.render_compose(current, OLD_IMAGE, live=True)["services"]["explorer"]
+    assert "--run-jobs" in live["entrypoint"] and "--no-live" not in live["entrypoint"]
+    offline = d.offline_boot_compose(current, OLD_IMAGE)["services"]["explorer"]
+    assert offline["entrypoint"] == ["mel-explorer", "--no-live"]
+    assert offline["command"] == []
+
+
+def test_readiness_requires_owned_runner_for_live(d):
+    proof = {
+        "database": "connected",
+        "live_enabled": True,
+        "auth_required": True,
+        "runner_ready": True,
+    }
+    d.check_readiness(proof, 401, {}, [200, 200], False, live=True)
+    for change in ({"runner_ready": False}, {"auth_required": False}, {"live_enabled": False}):
+        with pytest.raises(ValueError):
+            d.check_readiness({**proof, **change}, 401, {}, [200, 200], False, live=True)
+
+
+class LiveRuntime(Runtime):
+    def __init__(self, root):
+        super().__init__(root)
+        self.live = False
+        self.ready = True
+        self.backlog = []
+
+    def applied_live(self):
+        return self.live
+
+    def compose(self, release, live=False):
+        result = json.loads(super().compose(release))
+        if live:
+            result["services"]["explorer"]["entrypoint"] = ["mel-explorer", "--run-jobs"]
+        return json.dumps(result)
+
+    def switch(self, compose):
+        self.events.append("stop")
+        self.live = "--run-jobs" in json.loads(compose)["services"]["explorer"]["entrypoint"]
+        super().switch(compose)
+
+    def smoke(self, release, live=False):
+        assert self.live == live
+        super().smoke(release)
+        self.ready = True
+
+    def require_empty_queue(self, release):
+        self.events.append("queue-inventory")
+        assert not self.live
+        if self.backlog:
+            raise ValueError("queued or running jobs require operator attention")
+
+    def live_preflight(self, release):
+        self.events.append("live-preflight")
+
+
+@pytest.fixture
+def live_host(tmp_path, d, target):
+    runtime = LiveRuntime(tmp_path)
+    (tmp_path / "compose.yaml").write_text(runtime.compose(runtime.adopt()))
+    h = d.Host(tmp_path, target, runtime)
+    assert h.activate(d.Release(SHA, target.registry + "@" + DIGEST, 40))["outcome"] == "DEPLOYED"
+    runtime.events.clear()
+    return h, runtime
+
+
+def test_same_image_live_enable_disable_uses_journal_and_keeps_fence(d, live_host):
+    h, r = live_host
+    before = h.read()
+    assert h.set_mode(True)["outcome"] == "DEPLOYED"
+    assert r.live and d.read_live_policy(h.root)
+    after = h.read()
+    assert after.deployed == before.deployed
+    assert after.previous == before.previous
+    assert after.highest_sequence == before.highest_sequence
+    assert after.highest_release == before.highest_release
+    assert "queue-inventory" in r.events
+    assert h.report(after)["desired_mode"] == "live"
+    assert h.report(after)["applied_mode"] == "live"
+    assert h.set_mode(False)["outcome"] == "DEPLOYED"
+    assert not r.live and not d.read_live_policy(h.root)
+
+
+@pytest.mark.parametrize("status", ["queued", "running"])
+def test_initial_enable_refuses_backlog_without_policy_or_row_mutation(d, live_host, status):
+    h, r = live_host
+    r.backlog = [{"status": status, "job_id": "retained"}]
+    original = copy.deepcopy(r.backlog)
+    result = h.set_mode(True)
+    assert result["outcome"] == "FAILED_BEFORE_SWITCH"
+    assert r.backlog == original and not r.live
+    assert not d.read_live_policy(h.root)
+    assert h.read().transition is None
+
+
+def test_live_policy_survives_next_release_and_failed_candidate_recovers_offline(d, live_host):
+    h, r = live_host
+    assert h.set_mode(True)["outcome"] == "DEPLOYED"
+    release = d.Release("c" * 40, r.running.rsplit("@", 1)[0] + "@sha256:" + "3" * 64, 41)
+    assert h.activate(release)["outcome"] == "DEPLOYED"
+    assert r.live
+    r.fail = "migration"
+    failed = d.Release("d" * 40, release.image, 42)
+    assert h.activate(failed)["outcome"] == "FAILED_BEFORE_SWITCH"
+    report = h.report(h.read())
+    assert report["desired_mode"] == "live" and report["applied_mode"] == "offline"
+    assert d.read_live_policy(h.root)
+    r.fail = None
+    assert h.set_mode(True)["outcome"] == "DEPLOYED"
+    assert r.live and h.read().highest_sequence == 42
+
+
+@pytest.mark.parametrize("window", ["intent", "policy", "switched", "compose"])
+def test_mode_crash_recovers_offline_and_preserves_wire_state(d, live_host, window):
+    h, r = live_host
+
+    class Crash(BaseException):
+        pass
+
+    def crash(name):
+        if name == window:
+            raise Crash()
+
+    h.checkpoint = crash
+    with pytest.raises(Crash):
+        h.set_mode(True)
+    raw = json.loads(h.state_path.read_text())
+    assert set(raw["transition"]) == {"healthy_compose", "candidate", "boot_compose"}
+    h = d.Host(h.root, h.target, r)
+    state = h.recover(h.read())
+    assert state.transition is None and state.highest_sequence == 40
+    assert not r.live
+    assert d.read_live_policy(h.root) == (window != "intent")
+    boot = json.loads((h.root / "compose.yaml").read_text())
+    assert "--run-jobs" not in boot["services"]["explorer"]["entrypoint"]
+
+
+def test_stop_waits_for_managed_container_and_checks_lease_before_replacement(
+    d, tmp_path, monkeypatch
+):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.container = tmp_path, "managed"
+    events = []
+    monkeypatch.setattr(runtime, "compose_command", lambda *a, **kw: events.append(a))
+    monkeypatch.setattr(
+        runtime, "inspect", lambda _: {"Image": OLD_IMAGE, "State": {"Running": False}}
+    )
+    monkeypatch.setattr(runtime, "worker_present", lambda: events.append("inventory") or False)
+    monkeypatch.setattr(runtime, "run_image", lambda image, script: events.append("lease-proof"))
+    runtime.switch('{"services":{}}')
+    assert events == [
+        ("stop", "--timeout", "40", "explorer"),
+        "inventory",
+        "lease-proof",
+        ("up", "-d", "--no-build", "--no-deps", "--force-recreate", "explorer"),
+    ]
+    assert not runtime.ready
+
+
+@pytest.mark.parametrize("failure", ["running", "stray", "lease"])
+def test_unproven_quiescence_never_replaces_app(d, tmp_path, monkeypatch, failure):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.container = tmp_path, "managed"
+    calls = []
+    monkeypatch.setattr(runtime, "compose_command", lambda *a, **kw: calls.append(a))
+    monkeypatch.setattr(
+        runtime,
+        "inspect",
+        lambda _: {"Image": OLD_IMAGE, "State": {"Running": failure == "running"}},
+    )
+    monkeypatch.setattr(runtime, "worker_present", lambda: failure == "stray")
+
+    def lease(*args):
+        if failure == "lease":
+            raise ValueError("lease remains")
+
+    monkeypatch.setattr(runtime, "run_image", lease)
+    with pytest.raises(ValueError):
+        runtime.switch('{"services":{}}')
+    assert len(calls) == 1
+    assert not (tmp_path / "compose.activation.json").exists()
+
+
+@pytest.mark.parametrize(
+    "commandline,expected",
+    [
+        ("mel-worker jobs", True),
+        ("python -m mel.worker jobs", True),
+        ("mel-explorer --run-jobs", True),
+        ("python -m mel.explorer.api --run-jobs", True),
+        ("mel-explorer --no-live", False),
+        ("python unrelated.py", False),
+    ],
+)
+def test_native_runner_inventory_excludes_only_managed_pid(d, monkeypatch, commandline, expected):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.container = "managed"
+    monkeypatch.setattr(runtime, "inspect", lambda _: {"Id": "managed-id", "State": {"Pid": 100}})
+    monkeypatch.setattr(
+        d,
+        "command",
+        lambda args: (
+            "" if args[0] == "docker" else "100 mel-explorer --run-jobs\n101 " + commandline
+        ),
+    )
+    assert runtime.worker_present() == expected
+
+
+def test_stray_integrated_container_is_not_mistaken_for_owned_runner(d, monkeypatch):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.container = "managed"
+    containers = {
+        "managed": {"Id": "managed-id", "State": {"Pid": 100}},
+        "managed-id": {"Id": "managed-id", "Path": "mel-explorer", "Args": ["--run-jobs"]},
+        "stray-id": {"Id": "stray-id", "Path": "mel-explorer", "Args": ["--run-jobs"]},
+    }
+    monkeypatch.setattr(runtime, "inspect", lambda name: containers[name])
+    monkeypatch.setattr(d, "command", lambda args: "managed-id stray-id")
+    assert runtime.worker_present()
+
+
+def test_recovery_stops_candidate_before_cleanup_and_switch(d, tmp_path, monkeypatch):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root = tmp_path
+    (tmp_path / "database.env").write_text("POSTGRES_USER=mel\n")
+    events = []
+    monkeypatch.setattr(runtime, "stop", lambda: events.append("stop"))
+    monkeypatch.setattr(d, "command", lambda args: events.append("cleanup") or "")
+    monkeypatch.setattr(runtime, "pg", lambda *args: events.append("drop-rehearsal"))
+    runtime.recover_cleanup({"sequence": 50})
+    assert events == ["stop", "cleanup", "drop-rehearsal"]
+    assert runtime.sequence == 50

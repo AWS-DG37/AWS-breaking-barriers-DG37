@@ -34,3 +34,50 @@ Options: `--verifier-model` (default Sonnet 5.5; keep it fixed and different fro
 - `translate`: the generator writes English, then a translator model writes the farmer's language (`translate.py`, `translator_prompt.md`). Code keeps ids, answer values and follow_up codes from the English survey and takes only the text from the translator. Verified translations are cached in `cache/translations/`.
 
 Each run file records per insight: decision, verdict, relevance, attempts, tokens and seconds per stage, every verifier review, and the final survey.
+
+### Comparing prompt versions
+
+Copy any of `generator_prompt.md`, `verifier_prompt.md` or `translator_prompt.md` into a folder, edit
+it, and pass the folder. Files the folder lacks use the defaults in `skills/mel-survey-writer/references/`.
+
+```bash
+python sweep.py --golden ../eval/golden_dev.jsonl --models global.anthropic.claude-haiku-5-5 \
+  --limit 75 --out runs/dev --prompt-dir prompts/shorter-labels --tag shorter-labels
+```
+
+Each run file records `tag`, `prompt_dir`, `prompt_sha` (hash of the three prompt files) and `golden`,
+so the console's Agents tab can tell prompt versions apart. Only compare rows with the same golden file.
+
+## Deployed on Bedrock AgentCore Runtime
+
+`main.py` wraps `service.generate_survey()` (the same `sweep.run_pipeline` code the sweep scores) as an
+AgentCore HTTP agent. `service.py` holds the model allowlist; the runtime's IAM role allows only those
+models. The deployed generator runs without the AWS MCP documentation tools, like the sweep.
+
+```bash
+# deploy or update (direct code deploy: no Docker; config in .bedrock_agentcore.yaml)
+.venv/bin/agentcore deploy --env AWS_REGION=us-east-1 --env MEL_CACHE_DIR=/tmp/mel-cache
+.venv/bin/agentcore status
+.venv/bin/agentcore invoke '{"action": "options"}'
+# local copy of the same entry point
+PORT=8081 .venv/bin/python main.py
+```
+
+Payload: `{"insight": {...}, "generator": "...", "verifier": "...", "pipeline": "direct"|"translate",
+"max_retries": 0-2}`. Reply: `{"ok": true, "result": {...one sweep result...}}` or `{"ok": false, "error": ...}`.
+
+If you add a model to `service.GENERATORS`, also add it to the `BedrockModelInvocation` statement of the
+runtime role (`AmazonBedrockAgentCoreSDKRuntime-us-east-1-*`), then redeploy.
+
+### MEL console
+
+The console's **Agents** tab calls the deployed agent. Start it with:
+
+```bash
+MEL_AGENT_RUNTIME_ARN=<agent arn from agentcore status> uv run mel-explorer --port 8765
+```
+
+Open `http://127.0.0.1:8765/#agents`, pick a golden insight and one or more generator models, and
+the surveys come back side by side in the phone preview. The tab also lists every saved sweep in
+`agents/runs/`. A call takes 15-60 seconds, so it works from a locally run console; the hosted console's
+API Gateway and Lambda stop at 29 seconds.

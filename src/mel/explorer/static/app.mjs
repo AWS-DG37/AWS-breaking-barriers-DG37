@@ -1,10 +1,12 @@
 import {budgetInput, capPanel, costSummary, money} from './costs.mjs';
 import {el, skeleton} from './dom.mjs';
-import {signedIn, signOut} from './auth.mjs';
+import {isReadOnly, signedIn, signOut} from './auth.mjs';
 import {api as globalApi, requestScope} from './api.mjs';
 import {showGenerate, showRuns, leaveGenerate} from './generate.mjs';
 import {showConfigure, leaveConfigure} from './configure.mjs';
 import {showReview, leaveReview, addToReviewList} from './review.mjs';
+import {showAgents, leaveAgents} from './agents.mjs';
+import {showDemo, leaveDemo} from './demo.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 import {insightJourney} from './journey.mjs';
@@ -148,7 +150,7 @@ function renderSurvey(outcome) {
   survey.items.forEach((q,i)=>tabs.append(el('button',{type:'button',onClick:()=>player.showQuestion(i)},`Question ${i+1}`)));
   panel.append(tabs,el('figure',{class:'phone-stage'},host,el('figcaption',{},'Survey preview · answers are not submitted',el('span',{},'Illustrative field photo, unrelated to the selected case. ',el('a',{href:'https://unsplash.com/photos/a-person-standing-in-a-field-of-yellow-flowers-u5Jb5tTfSa4',target:'_blank',rel:'noreferrer'},'Abhi Verma / Unsplash')))),analysis);
   updateAnalysis(rehearsalSession.question);
-  if(chosenRun.run_id) panel.append(addToReviewList(chosenRun.run_id,chosenResult.insight_id,survey));
+  if(chosenRun.run_id && !isReadOnly()) panel.append(addToReviewList(chosenRun.run_id,chosenResult.insight_id,survey));
   return panel;
 }
 function renderQuestionAnalysis(outcome,item) {
@@ -184,6 +186,7 @@ function renderComparison(d) {
 }
 // A comparison runs saved configuration versions over the same insights.
 async function renderComposer() {
+  if (isReadOnly()) return;
   requests.renew();
   clearTimeout(poll); const ticket=++state.request;
   $('content').hidden=true; $('composer').hidden=false;
@@ -261,21 +264,28 @@ $('import').addEventListener('click',async()=>{const b=$('import');b.disabled=tr
 let compareLoaded=false;
 let activeTab=null;
 function route() {
-  const hash=location.hash || '#generate';
-  const tab=['runs','compare','review','configure'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
+  let hash=location.hash || (isReadOnly()?'#runs':'#generate');
+  const requested=hash.slice(1).split('/')[0];
+  if (isReadOnly() && ['generate','agents','demo'].includes(requested)) {
+    hash=requested==='generate'?hash.replace(/^#generate/,'#runs'):'#runs';
+    history.replaceState(null,'',hash);
+  }
+  const tab=['runs','compare','review','configure','agents','demo'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
   if (tab!==activeTab) {
-    leaveGenerate(); leaveConfigure(); leaveReview();
+    leaveGenerate(); leaveConfigure(); leaveReview(); leaveAgents(); leaveDemo();
     clearTimeout(poll); ++state.request; requests.renew();
     activeTab=tab;
   }
   applyDetail(tab);
-  for (const name of ['generate','runs','compare','review','configure']) $(`${name}-view`).hidden=name!==tab;
+  for (const name of ['generate','runs','compare','review','configure','agents','demo']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
   if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
   if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),hash); return; }
   leaveGenerate();
   if (tab==='configure') { clearTimeout(poll); showConfigure($('configure-view'),hash); return; }
   if (tab==='review') { clearTimeout(poll); showReview($('review-view'),hash); return; }
+  if (tab==='agents') { clearTimeout(poll); showAgents($('agents-view')); return; }
+  if (tab==='demo') { clearTimeout(poll); showDemo($('demo-view')); return; }
   const id=hash.split('/')[1];
   if (!compareLoaded) { compareLoaded=true; bootCompare(id); }
   else if (id) openExperiment(id,id===state.detail?.experiment_id);
@@ -285,7 +295,14 @@ function route() {
 async function boot() {
   try {
     const session=await globalApi('/auth/session');
-    if (session.auth) { signedIn(); $('sign-out').hidden=false; }
+    signedIn(session);
+    if (session.auth) $('sign-out').hidden=false;
+    $('viewer-notice').hidden=!isReadOnly();
+    if (isReadOnly()) {
+      for (const name of ['generate','agents','demo']) document.querySelector(`[data-tab="${name}"]`).hidden=true;
+      $('new').hidden=true;
+      $('import').hidden=true;
+    }
   } catch(error) { $('health').textContent='Sign-in unavailable'; $('generate-view').replaceChildren(el('p',{class:'notice error'},error.message)); return; }
   globalApi('/health').then(h=>{$('health').textContent=`Database ${h.database}`;}).catch(()=>{$('health').textContent='Server unavailable';});
   window.addEventListener('hashchange',route);
@@ -301,11 +318,11 @@ async function bootCompare(id) {
   if(experiments.status==='rejected') notice(`Cannot read experiments. ${experiments.reason.message} Use Refresh to try again.`,true);
   else if(id) await openExperiment(id);
   else if(state.experiments.length) await openExperiment(state.experiments[0].experiment_id);
-  else $('content').replaceChildren(el('p',{class:'empty-note'},'No comparisons yet. Import the recorded run, or create a new comparison.'));
+  else $('content').replaceChildren(el('p',{class:'empty-note'},isReadOnly()?'No saved comparisons yet.':'No comparisons yet. Import the recorded run, or create a new comparison.'));
 }
 mountDial($('detail-dial'));
 boot();
-window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();});
+window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();leaveAgents();leaveDemo();});
 $('sign-out').addEventListener('click',signOut);
 // The skip link focuses the visible section; a hash link would switch tabs.
-document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','review-view','configure-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','review-view','configure-view','agents-view','demo-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});

@@ -5,6 +5,9 @@ Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 The [MEL Console](docs/explorer.md) generates surveys, browses saved runs, compares
 configuration versions and inspects recorded decisions and question evidence. Run it
 locally with Docker or deploy the authenticated console to AWS.
+To test with your own workshop account and credits before a PR, follow
+[Run locally with your own workshop AWS account](docs/local-bedrock.md).
+
 The [voice survey](voice/README.md) reads a survey the MEL agent wrote aloud in an
 ElevenLabs voice. The farmer taps each answer, and the page builds a `response.schema.json`
 record.

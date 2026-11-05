@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -111,16 +111,28 @@ class Settings(BaseSettings):
     auth_client_id: str | None = None
     auth_issuer: str | None = None  # https://cognito-idp.<region>.amazonaws.com/<pool id>
     console_url: str | None = None  # https://<distribution>.cloudfront.net, no trailing slash
+    # Optional shared viewer login. Kept server-side; rotating it revokes viewer sessions.
+    viewer_password: SecretStr | None = Field(default=None, min_length=16, max_length=128)
     # Survey speech (src/mel/voice.py): clips go to s3://<voice_bucket>/voice/audio/, and
     # the secret holds the ElevenLabs key. Unset, no survey goes out on the voice channel.
     voice_bucket: str | None = None
     voice_key_secret_arn: str | None = None
+    # The Strands survey agents (agents/) deployed on Bedrock AgentCore Runtime. Unset hides
+    # live runs in the console's Agents view; saved sweep results still show.
+    agent_runtime_arn: str | None = None
+    agent_runs_dir: Path = Path("agents/runs")
+    # Hosted: where background agent runs save results (s3://bucket/prefix), and the sweep
+    # summary file deploy.sh uploads. Unset locally: results in memory, summaries from runs dir.
+    agent_results_uri: str | None = None
+    agent_summaries_uri: str | None = None
 
     @model_validator(mode="after")
     def complete_sign_in(self):
         fields = (self.auth_domain, self.auth_client_id, self.auth_issuer, self.console_url)
         if any(fields) and not all(fields):
             raise ValueError("set all of auth_domain, auth_client_id, auth_issuer, console_url")
+        if self.viewer_password is not None and not all(fields):
+            raise ValueError("viewer_password requires hosted sign-in settings")
         return self
 
 
