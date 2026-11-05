@@ -60,8 +60,8 @@ Resources:
       SupportedIdentityProviders: [COGNITO]
       CallbackURLs: [!Sub '${ConsoleUrl}/api/auth/callback']
       LogoutURLs: [!Sub '${ConsoleUrl}/']
-      AccessTokenValidity: 1
-      IdTokenValidity: 1
+      AccessTokenValidity: 8
+      IdTokenValidity: 8
       TokenValidityUnits:
         AccessToken: hours
         IdToken: hours
