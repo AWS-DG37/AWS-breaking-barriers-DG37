@@ -106,6 +106,23 @@ function start() {
   results.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+// English for the phone's language switch. Translate pipeline: the English survey the translator
+// started from. Direct pipeline: the verifier's back-translation of the final survey, laid over
+// the farmer's items so ids and answer values stay the same.
+function englishVersion(r) {
+  if (!r.items?.length || String(r.language).startsWith('en')) return null;
+  if (r.items_en?.length) return {language:'en-IN', items:r.items_en};
+  const back=new Map(((r.reviews || []).at(-1)?.back_translation || []).map(b=>[b.item_id,b]));
+  if (!back.size) return null;
+  return {language:'en-IN', items:r.items.map(item=>{
+    const b=back.get(item.item_id);
+    if (!b) return item;
+    const labels=b.labels_en || [];
+    return {...item, prompt:b.prompt_en || item.prompt,
+      options:item.options?.map((o,i)=>({...o, label:(labels.length===item.options.length && labels[i]) || o.label}))};
+  })};
+}
+
 function resultCard(generator,{result:r,expected}) {
   const tokens=Object.values(r.stages || {}).reduce((s,x)=>s+(x.input_tokens||0)+(x.output_tokens||0),0);
   const decisionOk=expected ? (r.decision_survey===expected.survey) : null;
@@ -121,7 +138,7 @@ function resultCard(generator,{result:r,expected}) {
   if (r.items?.length) {
     const host=el('div',{class:'survey-player'});
     out.push(el('figure',{class:'phone-stage'},host));
-    mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
+    mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},translation:englishVersion(r),session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
   } else if (r.status!=='skipped') out.push(el('p',{class:'muted'},'No survey questions came back.'));
   for (const issue of r.code_errors || []) out.push(el('p',{class:'missing small'},`Code check: ${issue}`));
   const last=(r.reviews || []).at(-1);

@@ -75,3 +75,7 @@
 .survey-player .player-navigation button { flex:1; border:1px solid #007a27; border-radius:10px; padding:10px 12px; background:#007a27; color:white; font-family:inherit; font-weight:600; font-size:15px; line-height:1.5; cursor:pointer; min-height:44px; }
 .survey-player .player-navigation button:disabled { opacity:.5; cursor:default; }
 .survey-player .player-hint { min-height:22px; color:#53635a; }
+.survey-player .phone-brand { align-items:center; }
+.survey-player .language-switch { display:flex; border:1px solid #ffffff99; border-radius:999px; padding:2px; gap:2px; }
+.survey-player .language-switch button { border:0; border-radius:999px; background:transparent; color:white; font-family:inherit; font-size:12px; font-weight:600; line-height:1.4; padding:4px 10px; min-height:28px; cursor:pointer; }
+.survey-player .language-switch button[aria-pressed="true"] { background:white; color:var(--deep); }

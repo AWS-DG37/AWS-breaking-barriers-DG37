@@ -1,26 +1,40 @@
 import {el} from './dom.mjs';
 
-export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionChange=()=>{}}) {
-  const hindi=survey.language?.split('-')[0]==='hi';
-  const copy=hindi ? {
-    feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
-    start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।'
-  } : {
-    feedback:'Your feedback', intro:'Tell us about your experience', description:'Answer a few short questions. This is a preview. Answers are not submitted.',
-    start:'Start', back:'Back', next:'Next', finish:'Finish', thanks:'Thank you', complete:'Preview complete. Answers remain on this page and have not been submitted.', restart:'Restart', required:'Choose an answer to continue.', missing:'Please answer the remaining questions too.'
-  };
-  const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
+const COPY={
+  hi:{feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
+    start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।'},
+  en:{feedback:'Your feedback', intro:'Tell us about your experience', description:'Answer a few short questions. This is a preview. Answers are not submitted.',
+    start:'Start', back:'Back', next:'Next', finish:'Finish', thanks:'Thank you', complete:'Preview complete. Answers remain on this page and have not been submitted.', restart:'Restart', required:'Choose an answer to continue.', missing:'Please answer the remaining questions too.'},
+};
+const LANGUAGE_NAMES={hi:'हिंदी', en:'English'};
+const base=language=>String(language || 'en').split('-')[0];
+
+// translation: optional {language, items} with the same item ids and option values, shown
+// through a switch in the header so viewers can read the survey in either language.
+export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionChange=()=>{}, translation=null}) {
+  const versions=[survey, ...(translation?.items?.length && base(translation.language)!==base(survey.language) ? [translation] : [])];
+  let shown=versions[0];
+  let copy=COPY[base(shown.language)] || COPY.en;
+  const languageSwitch=versions.length>1 ? el('div',{class:'language-switch',role:'group','aria-label':'Survey language'},
+    versions.map(version=>el('button',{type:'button',lang:version.language,'aria-pressed':String(version===shown),onClick:()=>{
+      if(version===shown) return;
+      shown=version; copy=COPY[base(shown.language)] || COPY.en;
+      phone.setAttribute('lang',shown.language || 'en');
+      [...languageSwitch.children].forEach(button=>button.setAttribute('aria-pressed',String(button.lang===shown.language)));
+      render(true);
+    }},LANGUAGE_NAMES[base(version.language)] || version.language))) : null;
+  const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:shown.language || 'en'});
   const body=el('div',{class:'player-body'}), footer=el('div',{class:'player-navigation'});
   phone.append(el('div',{class:'phone-screen'},
     el('div',{class:'phone-status','aria-hidden':true},el('span',{},'9:41'),el('span',{class:'phone-camera'}),el('span',{class:'phone-reception'},el('i'),el('i'),el('i'),el('i'),el('span',{class:'phone-battery'}))),
-    el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),el('span',{},'Digital Green')),
+    el('div',{class:'phone-brand'},el('strong',{},'FarmerChat'),languageSwitch || el('span',{},'Digital Green')),
     el('img',{class:'phone-field',src:photoUrl,alt:'Mustard flowers in a field in Rajasthan, India',width:960,height:768}),
     body,footer,el('div',{class:'phone-home','aria-hidden':true})));
   host.replaceChildren(phone);
   const answered=item=>Object.hasOwn(session.answers,item.item_id);
   const button=(label,action,disabled=false)=>el('button',{type:'button',onClick:action,disabled},label);
   function showQuestion(index) {
-    session.question=Math.max(0,Math.min(index,survey.items.length-1));
+    session.question=Math.max(0,Math.min(index,shown.items.length-1));
     session.phase='questions';
     render(true);
     onQuestionChange(session.question);
@@ -43,14 +57,14 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       body.append(heading,el('p',{},copy.complete));
       footer.append(button(copy.restart,reset));
     } else {
-      const item=survey.items[session.question];
-      const last=session.question===survey.items.length-1;
+      const item=shown.items[session.question];
+      const last=session.question===shown.items.length-1;
       heading=el('h3',{tabindex:-1},item.prompt);
-      const answers=el('div',{class:'answers',role:'radiogroup','aria-label':item.prompt,lang:survey.language || 'en'});
+      const answers=el('div',{class:'answers',role:'radiogroup','aria-label':item.prompt,lang:shown.language || 'en'});
       const options=item.options || Array.from({length:item.scale_max-item.scale_min+1},(_,i)=>({value:item.scale_min+i,label:String(item.scale_min+i)}));
       const next=button(last?copy.finish:copy.next,()=>{
         if(!last) return showQuestion(session.question+1);
-        const missing=survey.items.findIndex(question=>!answered(question));
+        const missing=shown.items.findIndex(question=>!answered(question));
         if(missing!==-1) {
           session.question=missing;
           render(true,copy.missing);
@@ -69,7 +83,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
         }});
         answers.append(el('label',{},radio,el('span',{},option.label)));
       }
-      body.append(el('div',{class:'survey-progress'},el('span',{},copy.feedback),el('span',{},`${session.question+1} / ${survey.items.length}`)),heading,answers,required);
+      body.append(el('div',{class:'survey-progress'},el('span',{},copy.feedback),el('span',{},`${session.question+1} / ${shown.items.length}`)),heading,answers,required);
       if(message) body.append(el('p',{role:'status'},message));
       footer.append(button(copy.back,()=>showQuestion(session.question-1),session.question===0),next);
     }

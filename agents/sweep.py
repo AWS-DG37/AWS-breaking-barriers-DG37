@@ -226,7 +226,9 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
                 "attempt": attempt + 1, "verdict": verdict["verdict"],
                 "model_verdict": verdict["model_verdict"],
                 "relevance": verdict.get("relevance"), "checks": verdict.get("checks"),
-                "issues": verdict.get("issues")})
+                "issues": verdict.get("issues"),
+                # the verifier's English reading of each question; the console shows it on request
+                "back_translation": verdict.get("back_translation")})
             if verdict["verdict"] in ("pass", "fail"):
                 break
             issues = verdict_issues(verdict)
