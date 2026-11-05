@@ -71,8 +71,11 @@
         };
         show();
         page.addEventListener('hashchange', show);
-        // Focus sits inside the console once it opens; the console has no Escape action of its own.
-        page.addEventListener('keydown', e => { if (e.key === 'Escape') closeWindow(); });
+        // Focus sits inside the console once it opens. Escape closes the window, unless the
+        // console has a modal open (the sign-in page's demo video): Escape closes that first.
+        page.addEventListener('keydown', e => {
+          if (e.key === 'Escape' && !page.document.querySelector('dialog[open]')) closeWindow();
+        });
       } catch { /* Not same-origin (local preview): keep the static address. */ }
     });
     view.append(frame);

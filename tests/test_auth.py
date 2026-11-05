@@ -3,6 +3,7 @@
 import hashlib
 import re
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
@@ -72,6 +73,35 @@ def test_talk_is_public_while_sign_in_guards_the_api():
             assert resource.status_code == 200, path
             assert not resource.headers["content-type"].startswith("text/html"), path
         assert http.get("/api/experiments").status_code == 401
+
+
+def test_sign_in_page_and_its_demo_video_are_public():
+    with client() as http:
+        page = http.get("/static/sign-in.html")
+        assert page.status_code == 200
+        assert "data-demo-video" in page.text
+        for path in re.findall(r'(?:src|href)="(/static/[^"#?]+)', page.text):
+            resource = http.get(path)
+            assert resource.status_code == 200, path
+        # Browsers fetch video in ranges; Safari will not play an MP4 without them.
+        video = http.get("/static/assets/demo-video.mp4", headers={"Range": "bytes=0-1023"})
+        assert video.status_code == 206
+        assert video.headers["content-type"] == "video/mp4"
+        assert len(video.content) == 1024
+        assert http.get("/api/experiments").status_code == 401
+
+
+def test_demo_video_opens_from_the_deck_and_the_sign_in_page():
+    root = Path(__file__).parents[1] / "src/mel/explorer"
+    for page in ("static/sign-in.html", "talk/index.html"):
+        text = (root / page).read_text()
+        assert '<link rel="stylesheet" href="/static/demo-video.css">' in text, page
+        assert '<script type="module" src="/static/demo-video.mjs"></script>' in text, page
+        assert text.count("data-demo-video") == 1, page
+    module = (root / "static/demo-video.mjs").read_text()
+    for asset in re.findall(r"'/static/(assets/demo-video[^']+)'", module):
+        assert (root / "static" / asset).stat().st_size > 0, asset
+    assert (root / "static/assets/demo-video.mp4").stat().st_size < 10_000_000
 
 
 @pytest.mark.parametrize(
