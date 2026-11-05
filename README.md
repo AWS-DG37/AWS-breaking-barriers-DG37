@@ -16,6 +16,9 @@ maps these extensions to the team documents and module boundaries.
 
 - System diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/system-diagram.html
   (source: [docs/system-diagram.html](docs/system-diagram.html), published by GitHub Pages from `main` `/docs`)
+- AWS deployment diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/aws-deployment.html
+  (source: [docs/aws-deployment.html](docs/aws-deployment.html), slide export [docs/aws-deployment.png](docs/aws-deployment.png);
+  update steps are in a comment at the top of the source)
 
 ## What runs today
 
