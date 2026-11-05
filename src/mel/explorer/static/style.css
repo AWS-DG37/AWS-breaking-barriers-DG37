@@ -1070,15 +1070,3 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .dash-learning small { color:var(--deep); font-weight:600; font-size:12px; }
 @media (max-width:1280px) { .dash-tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } .dash-learnings { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media (max-width:800px) { .dash-tiles,.dash-grid,.dash-learnings,.dash-funnel { grid-template-columns:1fr; } .dash-step-bar { display:none; } }
-.dash-cost-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:28px; margin-top:6px; }
-.dash-cost-total { display:flex; align-items:baseline; gap:10px; margin:4px 0 2px; }
-.dash-cost-total strong { font-size:44px; line-height:1; color:var(--deep); font-variant-numeric:tabular-nums; }
-.dash-cost-total span { font-weight:600; }
-.dash-cost-pers { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:14px; }
-.dash-cost-per { background:var(--surface); border-radius:10px; padding:10px 12px; display:flex; flex-direction:column; }
-.dash-cost-per strong { font-size:22px; font-variant-numeric:tabular-nums; }
-.dash-cost-per span { font-size:12px; color:var(--muted); }
-.dash-cost h3 { margin-top:4px; }
-.dash-bar-fill.muted { background:var(--control); }
-.dash-cost-note { margin:14px 0 0; padding-top:10px; border-top:1px solid var(--line); }
-@media (max-width:1000px) { .dash-cost-grid,.dash-cost-pers { grid-template-columns:1fr; } }

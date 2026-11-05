@@ -105,39 +105,6 @@ function channels(m) {
     m.channels.map(c => bar(c.name, c.answered, c.sent, `${pct(c.answered, c.sent)}% of ${n(c.sent)}`)));
 }
 
-// Cost: the one MEASURED part of this page. Token counts come from the real model comparison
-// runs (agents/runs/dev and holdout: 102 generated surveys per model, 52 for Sonnet), priced
-// at Bedrock on-demand rates in USD per million tokens. AI model cost only.
-export const COST = {
-  prices: 'Opus 5.5 $4 / $20, Sonnet 5.5 $2 / $10, Haiku 5.5 $0.10 / $0.50, GPT-5.5 (US) $5.50 / $33 per million input / output tokens',
-  models: [   // per 1,000 surveys, every survey checked by Claude Sonnet 5.5
-    {name:'Claude Haiku 5.5', writer:1.45, checker:25.98, accepted:'96%'},
-    {name:'Claude Opus 5.5', writer:41.08, checker:20.90, accepted:'100%', used:true},
-    {name:'GPT-5.5', writer:62.37, checker:25.06, accepted:'96%'},
-  ],
-};
-
-function costs(m, c = COST) {
-  const used = c.models.find(x => x.used), total = used.writer + used.checker;
-  const money = v => v >= 10 ? `$${Math.round(v)}` : `$${v.toFixed(2)}`;
-  const max = Math.max(...c.models.map(x => x.writer + x.checker));
-  const per = (label, count) => el('div', {class:'dash-cost-per'}, el('strong', {}, `$${(total / count).toFixed(2)}`), el('span', {}, label));
-  return el('section', {class:'dash-card dash-wide dash-cost'},
-    el('h2', {}, 'What the AI costs'),
-    el('div', {class:'dash-cost-grid'},
-      el('div', {},
-        el('p', {class:'dash-cost-total'}, el('strong', {}, money(total)), el('span', {}, `for ${n(m.sent)} surveys`)),
-        el('p', {class:'small muted'}, `${used.name} writes each survey (${money(used.writer)}) and Claude Sonnet 5.5 checks it (${money(used.checker)}). About ${Math.round(total / m.sent * 100)} cents a survey.`),
-        el('div', {class:'dash-cost-pers'},
-          per('per farmer who answered', m.answered), per('per farmer who acted', m.acted), per('per farmer whose problem got better', m.outcome.improved))),
-      el('div', {},
-        el('h3', {}, 'Cost of 1,000 surveys by writer model'),
-        c.models.map(x => bar(x.name, x.writer + x.checker, max, `${money(x.writer + x.checker)} · ${x.accepted} approved`, x.used ? '' : 'muted')),
-        el('p', {class:'small muted'}, 'The checker is most of the cost for the cheaper writers: Haiku 5.5 itself costs about $1.45 per 1,000 surveys.'))),
-    el('p', {class:'small muted dash-cost-note'}, el('strong', {}, 'Measured, not mock: '),
-      `token use from today’s real test runs on golden-set insights, priced at ${c.prices}. AI model cost only: SMS, WhatsApp and voice-call fees and hosting are not included.`));
-}
-
 function districts(m) {
   const rows = [...m.districts].sort((a, b) => b.followUps / b.sent - a.followUps / a.sent);
   const avg = sum(m.districts.map(d => d.followUps)) / sum(m.districts.map(d => d.sent));
@@ -166,7 +133,7 @@ export function renderDashboard(m = MOCK) {
   const followUpTotal = sum(m.followUps.map(f => f.count));
   return [
     el('p', {class:'dash-mock', role:'note'}, el('strong', {}, 'Illustrative mock data. '),
-      'This shows what the dashboard could look like after 1,000 surveys. No farmer answered these surveys. Only the AI cost is measured.'),
+      'This shows what the dashboard could look like after 1,000 surveys. No farmer answered these surveys.'),
     el('div', {class:'dash-tiles'},
       tile(n(m.sent), 'Surveys sent', `${n(m.conversations)} conversations reviewed`),
       tile(`${pct(m.answered, m.sent)}%`, 'Answered', `${n(m.answered)} farmers · median ${m.medianDaysToAnswer} days`),
@@ -174,6 +141,6 @@ export function renderDashboard(m = MOCK) {
       tile(`${pct(m.outcome.improved, m.acted)}%`, 'Problem got better', `${n(m.outcome.improved)} farmers`),
       tile(n(followUpTotal), 'Sent to a person', `${pct(followUpTotal, m.answered)}% of answers`),
       tile(`${Math.round(m.hindiShare * 100)}%`, 'Answered in Hindi', `${Math.round((1 - m.hindiShare) * 100)}% English`)),
-    el('div', {class:'dash-grid'}, funnel(m), outcomes(m), followUps(m), costs(m), channels(m), districts(m), learnings()),
+    el('div', {class:'dash-grid'}, funnel(m), outcomes(m), followUps(m), channels(m), districts(m), learnings()),
   ];
 }
