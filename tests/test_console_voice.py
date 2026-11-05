@@ -2,7 +2,8 @@
 
 The demo writes a new survey on every run, so no recording can exist in advance: the
 console makes each line when the phone asks for it, and keeps recent lines so a replay is
-free. Each call spends ElevenLabs credits, so view-only users cannot make one.
+free. Each new line spends ElevenLabs credits, so view-only users share a small hourly
+allowance of new lines; replays never count against it.
 """
 
 from fastapi.testclient import TestClient
@@ -27,12 +28,13 @@ class Speaker:
         return MP3
 
 
-def client(speaker=None, settings=SETTINGS):
+def client(speaker=None, settings=SETTINGS, **options):
     app = create_app(
         settings=settings,
         store_factory=lambda _: Store(),
         auth_verifier=TokenVerifier(ISSUER, "console-client", keys=Keys()),
         speaker=speaker,
+        **options,
     )
     return TestClient(app, base_url="https://console.example", follow_redirects=False)
 
@@ -109,12 +111,71 @@ def test_a_failed_line_is_not_remembered():
     assert speaker.texts == [LINE, LINE]
 
 
-def test_voice_needs_a_session_and_viewers_cannot_spend_credits():
+def test_voice_needs_a_session():
     speaker = Speaker()
     with client(speaker, viewer_settings()) as http:
         assert speak(http).status_code == 401
-        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
-        response = speak(http)
-        assert response.status_code == 403
-        assert "view-only" in response.json()["detail"].lower()
     assert speaker.texts == []
+
+
+def viewer(http):
+    assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+    return http
+
+
+def test_a_viewer_hears_the_elevenlabs_voice_and_a_replay_is_free():
+    speaker = Speaker()
+    with client(speaker, viewer_settings()) as http:
+        first = speak(viewer(http))
+        assert first.status_code == 200
+        assert first.content == MP3
+        assert speak(http).content == MP3
+    assert speaker.texts == [LINE]
+
+
+def test_viewers_share_a_capped_allowance_of_new_lines():
+    speaker = Speaker()
+    with client(speaker, viewer_settings(), viewer_voice_lines_per_hour=2) as http:
+        viewer(http)
+        assert speak(http, "one").status_code == 200
+        assert speak(http, "two").status_code == 200
+        refused = speak(http, "three")
+        assert refused.status_code == 429
+        assert int(refused.headers["retry-after"]) > 0
+        # A line already made is a replay, not a new line.
+        assert speak(http, "one").status_code == 200
+        # Signed-in users are not limited by the viewers' allowance.
+        http.cookies.clear()
+        assert speak(signed_in(http), "three").status_code == 200
+    assert speaker.texts == ["one", "two", "three"]
+
+
+def test_a_failed_viewer_line_still_uses_the_allowance():
+    # ElevenLabs may charge before a later step fails, so a retry is a new spend.
+    speaker = Speaker(fail=True)
+    with client(speaker, viewer_settings(), viewer_voice_lines_per_hour=1) as http:
+        assert speak(viewer(http)).status_code == 502
+        speaker.fail = False
+        assert speak(http).status_code == 429
+    assert speaker.texts == [LINE]
+
+
+def test_an_evicted_line_is_a_new_line_for_viewers():
+    # A replay is free only while the clip is still cached; making it again is a spend.
+    speaker = Speaker()
+    app = create_app(
+        settings=viewer_settings(),
+        store_factory=lambda _: Store(),
+        auth_verifier=TokenVerifier(ISSUER, "console-client", keys=Keys()),
+        speaker=speaker,
+        viewer_voice_lines_per_hour=2,
+    )
+    route = next(r.endpoint for r in app.routes if getattr(r, "path", None) == "/api/voice")
+    spoken = route.__closure__[route.__code__.co_freevars.index("spoken")].cell_contents
+    spoken.limit = 1
+    with TestClient(app, base_url="https://console.example") as http:
+        viewer(http)
+        assert speak(http, "one").status_code == 200
+        assert speak(http, "two").status_code == 200  # evicts "one"
+        assert speak(http, "one").status_code == 429
+    assert speaker.texts == ["one", "two"]

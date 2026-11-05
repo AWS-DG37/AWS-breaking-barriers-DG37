@@ -224,12 +224,15 @@ class SpokenLines:
         self._clips: OrderedDict[str, bytes] = OrderedDict()
         self._lock = Lock()
 
-    def audio(self, language: str, text: str) -> bytes:
+    def audio(self, language: str, text: str, admit: Callable[[], None] = lambda: None) -> bytes:
+        """The line's clip. A line not in the cache calls `admit` first, which may raise to
+        refuse the spend; nothing else reaches `speak`."""
         name = clip_name(language, text)
         with self._lock:
             if name in self._clips:
                 self._clips.move_to_end(name)
                 return self._clips[name]
+        admit()
         audio = self.speak(text)
         if not audio:
             raise RuntimeError("text to speech returned no audio")

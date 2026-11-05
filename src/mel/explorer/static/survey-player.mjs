@@ -91,8 +91,8 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     readButton.setAttribute('aria-label','Stop voice');
     readButton.setAttribute('aria-pressed','true');
     // The console makes each line with ElevenLabs (GET /api/voice), because the demo writes a
-    // new survey on every run. Without it (no key, a view-only session, a static copy of this
-    // page), the browser's own voice reads the line.
+    // new survey on every run. Without it (no key, a view-only session past its hourly
+    // allowance of new lines, a static copy of this page), the browser's own voice reads it.
     const audio=new Audio(`/api/voice?${new URLSearchParams({language:spoken.language,text})}`);
     clip=audio;
     const fallback=()=>{

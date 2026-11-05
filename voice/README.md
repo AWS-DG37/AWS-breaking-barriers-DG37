@@ -146,8 +146,13 @@ last 300 lines in memory, so a replay costs no credits.
 - **Turn it on:** add `MEL_VOICE_API_KEY=<key>` to `explorer.env` on the console host, then
   deploy or restart the explorer container. Without the key the endpoint returns 503.
 - **Fallback:** the phone uses the browser's own voice when the endpoint is not available:
-  no key, a view-only session (403, because each line spends credits), an ElevenLabs
-  error, or a static copy of the page such as the architecture viewer.
+  no key, a view-only session past its allowance (429), an ElevenLabs error, or a static
+  copy of the page such as the architecture viewer.
+- **View-only sessions:** viewers hear the same ElevenLabs voice. All viewers share 60 new
+  lines an hour (`viewer_voice_lines_per_hour` in `create_app`); a replay of a line the
+  console already made is free. The worker's saved clips in `voice/audio/` do not cover
+  the console: they hold only accepted surveys from the graph worker, only in the survey's
+  own language, and not the welcome, thank-you or English-translation lines.
 - **Cost:** one line is about 50 to 150 characters. The hackathon key has a
   300,000-character cap and expires on 2026-11-11.
 
