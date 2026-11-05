@@ -1,5 +1,5 @@
 import {el} from './dom.mjs';
-// Demo dashboard: what a Digital Green programme team could see after 1,000 follow-up surveys.
+// Demo dashboard: what a Digital Green team could see after 1,000 follow-up surveys.
 // ILLUSTRATIVE MOCK DATA. No farmer answered these surveys; the page says so on screen.
 // The numbers are hand-made to be internally consistent: every breakdown adds up to the
 // same 1,000 surveys sent, 640 answered and 455 farmers who acted on the advice.
@@ -121,7 +121,7 @@ function districts(m) {
 
 function learnings() {
   const card = (title, body, action) => el('div', {class:'dash-learning'}, el('strong', {}, title), el('p', {}, body), el('small', {}, action));
-  return el('section', {class:'dash-card dash-wide'}, el('h2', {}, 'What the programme team learns'),
+  return el('section', {class:'dash-card dash-wide'}, el('h2', {}, 'What the team learns'),
     el('div', {class:'dash-learnings'},
       card('Mustard aphids in Saran', '1 in 3 farmers who sprayed say the insects increased, twice the rate elsewhere.', 'Check spray quality or resistance. Send a KVK agronomist.'),
       card('Inputs are the bottleneck', '38 farmers could not get the recommended input; 24 of them are in Gaya and Saran.', 'Share with input dealers before the next spray window.'),

@@ -92,7 +92,7 @@ function render() {
     el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'}));
   const dashboard=el('div',{class:'demo-dashboard',id:'demo-dashboard',hidden:view.mode!=='dashboard'},
     el('div',{class:'heading'},el('div',{},el('h1',{},'After 1,000 surveys'),
-      el('p',{class:'muted'},'What a Digital Green programme team could see once farmers answer their follow-ups.')),modeSwitch()),
+      el('p',{class:'muted'},'What a Digital Green team could see once farmers answer their follow-ups.')),modeSwitch()),
     ...renderDashboard());
   view.root.replaceChildren(live,dashboard);
 }
