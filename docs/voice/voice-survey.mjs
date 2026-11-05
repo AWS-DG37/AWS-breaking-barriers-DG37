@@ -90,12 +90,28 @@ async function speak(text) {
   return ended && speech === state.speech;
 }
 
+// The browser's voice for a language, or null. Without one, the browser reads the line with
+// its default voice: an English voice skips Hindi script and says only the "?" ("question mark").
+function browserVoice(language) {
+  const voices = globalThis.speechSynthesis?.getVoices?.() || [];
+  const base = tag => String(tag || '').replace('_', '-').split('-')[0].toLowerCase();
+  return voices.find(voice => voice.lang === language)
+    || voices.find(voice => base(voice.lang) === base(language)) || null;
+}
+
 function speakWithBrowser(text, speech) {
   if (speech !== state.speech || !globalThis.speechSynthesis) return false;
+  const language = audioSurvey().language;
+  const voice = browserVoice(language);
+  if (!voice) {
+    addEvent(`No recording for this line, and this browser has no ${language} voice`);
+    return false;
+  }
   addEvent('No recording for this line: using the browser voice');
   return new Promise(resolve => {
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = audioSurvey().language;
+    utterance.lang = language;
+    utterance.voice = voice;
     utterance.onend = () => resolve(true);
     utterance.onerror = () => resolve(false);
     speechSynthesis.speak(utterance);

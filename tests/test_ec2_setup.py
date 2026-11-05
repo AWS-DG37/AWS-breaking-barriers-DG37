@@ -447,6 +447,15 @@ def test_auth_template_preserves_shared_default_and_selects_new_origin():
     assert properties["LogoutURLs"] == [{"Fn::Sub": "${ConsoleUrl}/"}]
 
 
+def test_auth_template_keeps_staff_signed_in_for_a_working_session():
+    # The console stores no refresh token, so token validity is the whole login length.
+    template, _ = decode("deploy/auth-bootstrap.yaml")
+    properties = template["Resources"]["UserPoolClient"]["Properties"]
+    assert properties["AccessTokenValidity"] == 8
+    assert properties["IdTokenValidity"] == 8
+    assert properties["TokenValidityUnits"] == {"AccessToken": "hours", "IdToken": "hours"}
+
+
 @pytest.mark.parametrize(
     "case", ["valid", "wrong-account", "open-signup", "wrong-callback", "secret"]
 )
