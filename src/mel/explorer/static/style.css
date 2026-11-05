@@ -66,6 +66,7 @@ body:has(> main.sign-in) {
   box-shadow:0 30px 80px -24px rgba(0,0,0,.55);
   animation:demo-in .5s var(--ease-out) both;
 }
+.sign-in-logo { display:block; margin:0 auto 18px; }
 .sign-in .brand-parent { display:block; border:0; padding:0; font-size:15px; letter-spacing:.01em; }
 .sign-in h1 { margin:6px 0 10px; }
 .sign-in > .muted { margin:20px 0 12px; }

@@ -10,6 +10,9 @@ Used under the [Unsplash License](https://unsplash.com/license), which allows
 downloading, copying, modification and distribution for commercial and
 noncommercial purposes. Resized to 960 × 768 and encoded as WebP; the viewer
 crops it for the field header. The visible credit links to the source.
+`deploy/cognito-branding/page-background.jpg` is a further derivative for the
+Cognito sign-in page: cropped to 1920 × 1200, lightly blurred and covered with
+the console's green sign-in veil.
 
 This is illustrative photography. The pictured person and field are unrelated
 to the synthetic participant-pack records and recorded experiment. The image
