@@ -325,5 +325,6 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
 .cw-view{position:relative;flex:1;min-height:0;overflow:hidden;background:#fff;transition:opacity .35s ease}
 .cw-frame{position:absolute;top:0;left:0;border:0;transform-origin:0 0;background:#fff}
 .cw-loading{position:absolute;inset:0;margin:0;display:grid;place-items:center;color:#52635A;font-size:.9rem}
+.cw[hidden]{display:none}
 .cw.cw-card .cw-chrome,.cw.cw-card .cw-view{opacity:0}
 @container (max-width:640px){.cw-tab{display:none}}

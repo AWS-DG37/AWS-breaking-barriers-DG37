@@ -37,6 +37,9 @@ def test_console_card_opens_the_live_console_from_the_talk():
     assert '<script src="console-window.js' in page
     script = (builder.TALK / "console-window.js").read_text(encoding="utf-8")
     assert "getElementById('ad-console')" in script and "'/#demo'" in script
+    # .cw sets display:flex, which would override [hidden] and leave a closed window on screen.
+    styles = (builder.TALK / "styles.css").read_text(encoding="utf-8")
+    assert ".cw[hidden]{display:none}" in styles
 
 
 def test_diagram_classes_and_ids_are_namespaced():

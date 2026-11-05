@@ -138,6 +138,7 @@
     await morph(c, miniRect(c), 560, 8, 12);
     await pause(240);
     await morph(miniRect(c), full(), 760, 12, 14);
+    place(full(), 14);  // the viewport may have changed during the animation
     busy = false;
     frame.focus();
   }
@@ -159,7 +160,8 @@
 
   card.addEventListener('click', openWindow);
   card.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWindow(); }
+    // Stop here: the deck reads Space as "next slide" on the document.
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openWindow(); }
   });
   card.addEventListener('pointerenter', ensureFrame);
   card.addEventListener('focus', ensureFrame);
