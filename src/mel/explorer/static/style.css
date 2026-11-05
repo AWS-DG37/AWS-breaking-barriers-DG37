@@ -961,10 +961,12 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .ag-card pre { max-height:360px; overflow:auto; font-size:12px; }
 .ag-badges { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
 /* Demo: one insight as a story */
-.demo-controls { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,1.4fr) auto; gap:12px 20px; align-items:end; max-width:none; margin-bottom:20px; }
+.demo-controls { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1.3fr) auto; gap:12px 20px; align-items:end; max-width:none; margin-bottom:20px; }
 .demo-controls > label { margin:0; }
 .demo-verifier { font-weight:400; }
-.demo-stage { display:grid; grid-template-columns:minmax(260px,320px) minmax(300px,1fr) 380px; gap:24px; align-items:start; }
+.demo-layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; align-items:start; }
+.demo-phone-col { position:sticky; top:12px; }
+.demo-stage { display:grid; grid-template-columns:minmax(260px,320px) minmax(300px,1fr); gap:24px; align-items:start; }
 #demo-view { padding-top:20px; }
 #demo-view .heading { margin-bottom:12px; }
 #demo-view .heading p { margin-top:4px; }
@@ -1001,16 +1003,12 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .demo-verdict-icon.dash::after { width:18px; height:4px; border-radius:2px; background:var(--gold-ink); }
 .demo-phone { animation:demo-in .5s ease-out both; }
 .demo-phone .phone-stage { padding:12px 10px 10px; }
-/* The phone shrinks with the window so it fits on screen next to the story. */
-.demo-phone .survey-player .phone-screen { height:clamp(400px, calc(100vh - 360px), 680px); }
-.demo-phone .survey-player .phone-field { height:clamp(64px, calc((100vh - 600px) / 3), 126px); }
-.demo-phone .survey-player .player-body { padding:12px 18px; }
-/* On laptop-height screens the field photo gives its room to the question and answers. */
-@media (max-height:1000px) { .demo-phone .survey-player .phone-field { display:none; } }
+/* The phone keeps real proportions; demo.mjs scales it as a whole to fit the window. */
+.demo-phone .survey-phone { transform-origin:top center; }
 .demo-phone .phone-stage figcaption { margin-top:10px; }
 @keyframes demo-in { from { opacity:0; transform:translateY(8px); } }
 @keyframes demo-pop { from { opacity:0; transform:scale(.92); } }
 @media (prefers-reduced-motion:reduce) { .demo-step,.demo-verdict,.demo-phone { animation:none; } .demo-step.active .demo-step-mark { animation-duration:3s; } }
-@media (max-width:1360px) { .demo-stage { grid-template-columns:minmax(230px,270px) minmax(260px,1fr) 360px; gap:18px; } }
-@media (max-width:1100px) { .demo-stage { grid-template-columns:minmax(240px,300px) 1fr; } .demo-phone-col { grid-column:2; } }
-@media (max-width:1000px) { .demo-stage,.demo-controls { grid-template-columns:1fr; } .demo-phone-col { grid-column:auto; } }
+@media (max-width:1360px) { .demo-layout { grid-template-columns:minmax(0,1fr) 360px; gap:18px; } .demo-stage { grid-template-columns:minmax(220px,260px) minmax(240px,1fr); gap:18px; } .demo-controls { grid-template-columns:1fr 1fr; } .demo-controls > label:first-child { grid-column:1/-1; } }
+@media (max-width:1100px) { .demo-layout { grid-template-columns:1fr; } .demo-phone-col { position:static; } }
+@media (max-width:1000px) { .demo-stage,.demo-controls { grid-template-columns:1fr; } }

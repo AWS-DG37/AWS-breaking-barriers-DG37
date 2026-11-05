@@ -37,6 +37,20 @@ const cap = value => { const s=words(value); return s ? s[0].toUpperCase()+s.sli
 const requests=requestScope(), runs=requestScope();
 const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', run:0};
 
+// Shrink the whole phone, never just its height, so it stays a normal phone shape and still
+// fits beside the story without scrolling the page.
+function fitPhone(wrap) {
+  const phone=wrap.querySelector('.survey-phone');
+  if (!phone || !wrap.isConnected) return;
+  phone.style.transform=''; wrap.style.height='';
+  const full=phone.offsetHeight, top=Math.max(12, phone.getBoundingClientRect().top);
+  const caption=wrap.querySelector('figcaption')?.offsetHeight || 0;
+  const scale=Math.max(0.55, Math.min(1, (window.innerHeight-top-caption-36)/full));
+  phone.style.transform=`scale(${scale})`;
+  phone.style.marginBottom=`${-(full*(1-scale))}px`;   // give back the space the scale removed
+}
+window.addEventListener('resize',()=>{ const wrap=document.querySelector('.demo-phone'); if (wrap) fitPhone(wrap); });
+
 export function leaveDemo() { ++view.request; requests.cancel(); }
 
 export async function showDemo(root) {
@@ -64,16 +78,17 @@ function render() {
   const tier=el('select',{onChange:e=>{view.tier=e.target.value;}},
     TIERS.map(t=>el('option',{value:t.id,selected:t.id===view.tier},t.label)));
   const go=el('button',{type:'submit',class:'primary'},'Run the follow-up');
-  view.root.replaceChildren(
-    el('div',{class:'heading'},el('div',{},el('h1',{},'Demo'),
-      el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.'))),
-    el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
-      el('label',{},'Conversation',insight),
-      el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
-      go),
-    el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
-      el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'}),
-      el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'})));
+  view.root.replaceChildren(el('div',{class:'demo-layout'},
+    el('div',{class:'demo-main'},
+      el('div',{class:'heading'},el('div',{},el('h1',{},'Demo'),
+        el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.'))),
+      el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
+        el('label',{},'Conversation',insight),
+        el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
+        go),
+      el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
+        el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'}))),
+    el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'})));
 }
 
 function reset() {
@@ -168,6 +183,7 @@ function phone(r) {
   const host=el('div',{class:'survey-player'}), english=englishVersion(r);
   const wrap=el('div',{class:'demo-phone'},el('figure',{class:'phone-stage'},host,
     el('figcaption',{},`What the farmer sees.${english?' Use the switch at the top to read it in English.':''} Answers are not sent.`)));
+  requestAnimationFrame(()=>fitPhone(wrap));
   mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},translation:english,
     session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
   return wrap;
