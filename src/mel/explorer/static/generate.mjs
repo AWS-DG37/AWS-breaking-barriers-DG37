@@ -4,6 +4,7 @@ import {requestScope} from './api.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {insightJourney} from './journey.mjs';
 import {addToReviewList} from './review.mjs';
+import {isReadOnly} from './auth.mjs';
 import {summarizeCounts} from './domain.mjs';
 import {atLevel} from './detail.mjs';
 // Generate: pick insights, see what the rules will do, run the agent, inspect results.
@@ -56,7 +57,9 @@ export function describeSelection(selection) {
   return s.limit?`${scope} · first ${number(s.limit)}`:scope;
 }
 
-export function showGenerate(root, hash) { return showScreen(root,hash,'generate'); }
+export function showGenerate(root, hash) {
+  return isReadOnly()?showRuns(root,hash.replace(/^#generate/,'#runs')):showScreen(root,hash,'generate');
+}
 export function showRuns(root, hash) { return showScreen(root,hash,'runs'); }
 
 function showScreen(root, hash, section) {
@@ -322,7 +325,7 @@ function runHeader(summary) {
       el('p',{class:'gen-summary'},summarizeCounts(counts)),
       el('p',{class:'muted small','data-level':2},`Started ${when(summary.created_at)} · configuration ${summary.config_id?.slice(0,8) || 'not recorded'} · ${number(summary.input_tokens+summary.output_tokens)} tokens`)),
       el('div',{class:'gen-run-actions'},el('span',{class:`badge status-${summary.status}`},words(summary.status)),
-        ['running','queued'].includes(summary.status)?null:el('button',{type:'button',class:'quiet danger','data-level':3,onClick:()=>deleteRun(summary)},'Delete run'))),
+        isReadOnly() || ['running','queued'].includes(summary.status)?null:el('button',{type:'button',class:'quiet danger','data-level':3,onClick:()=>deleteRun(summary)},'Delete run'))),
   ];
   head.push(costSummary(summary.costs,summary.run_id));
   if (summary.status==='running' && total) {
@@ -447,7 +450,7 @@ async function showDetail(panel,runId,insightId) {
       el('h3',{},'Advice given'),el('p',{},insight.advice_summary || 'Not recorded'),
       atLevel(insightJourney(outcome),2));
     sections.push(disclosure('Full insight',insight,{'data-level':3}),disclosure('Full outcome',outcome,{'data-level':3}));
-    panel.replaceChildren(...sections);
+    panel.replaceChildren(...sections.filter(Boolean));
     panel.scrollTop=0;  // A newly selected insight opens at its survey preview.
   } catch(error) {
     if (signal.aborted) return;

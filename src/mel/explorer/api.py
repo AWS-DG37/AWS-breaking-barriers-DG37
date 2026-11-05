@@ -13,7 +13,7 @@ from threading import Lock
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
@@ -357,13 +357,16 @@ def create_app(
             return {"status": "ok", "database": "unavailable", "detail": error.detail}
 
     @app.get("/api/config")
-    def configuration():
+    def configuration(request: Request):
         try:
-            config_id, _ = database_call(lambda db: active_config(db, settings))
+            read_only = getattr(request.state, "read_only", False)
+            config_id = database_call(
+                lambda db: db.active_config_id() if read_only else active_config(db, settings)[0]
+            )
             return {
                 "active_config_id": config_id,
                 "flow": FLOW,
-                "live_enabled": live_enabled,
+                "live_enabled": live_enabled and not read_only,
                 "allowed_models": [m.model_dump() for m in settings.allowed_models],
             }
         except HTTPException:

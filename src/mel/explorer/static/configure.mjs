@@ -1,6 +1,7 @@
 import {budgetInput} from './costs.mjs';
 import {el, skeleton} from './dom.mjs';
 import {requestScope} from './api.mjs';
+import {isReadOnly} from './auth.mjs';
 import {changedPaths, lineDiff, read, write} from './domain.mjs';
 // Configure: view versions, edit a draft step by step, test it against its parent, save
 // it as a named (runnable) version, and make it active.
@@ -40,7 +41,7 @@ export function showConfigure(root, hash) {
     return;
   }
   if (mode!=='edit') { view.dirty=false; view.draft=null; }
-  return render(id || null, mode==='edit');
+  return render(id || null, mode==='edit' && !isReadOnly());
 }
 
 async function render(id, editing) {
@@ -59,7 +60,7 @@ async function render(id, editing) {
     if (ticket!==view.request) return;
     const main=el('div',{class:'cfg-main'});
     view.root.replaceChildren(el('div',{class:'cfg'},sidebar(key),main));
-    if (!record) { main.append(el('p',{class:'empty-note'},'No configuration versions yet. Open Generate once to seed the baseline.')); return; }
+    if (!record) { main.append(el('p',{class:'empty-note'},isReadOnly()?'No saved configuration versions yet.':'No configuration versions yet. Open Generate once to seed the baseline.')); return; }
     if (editing) editor(main,record); else details(main,record);
   } catch(error) {
     if (ticket===view.request) view.root.replaceChildren(message(`Cannot load configurations. ${error.message}`,true));
@@ -91,7 +92,7 @@ function details(main,record) {
       el('h1',{},versionName(record)),
       el('p',{class:'muted small'},[record.version,`created ${when(record.created_at)}`,parent?`from ${versionName(parent)}`:null].filter(Boolean).join(' · ')),
       record.note?el('p',{},record.note):null),statusBadge(record)),
-    actions,
+    isReadOnly()?null:actions,
     parent?changesFrom(parent,record):null,
     rulesCheck(record.config_id),
     tests(record.config_id),

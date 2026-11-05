@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · FarmerChat MEL Console</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/sign-in.mjs"></script>
+</head>
+<body>
+  <main class="sign-in">
+    <span class="brand-parent">Digital Green · FarmerChat</span>
+    <h1>Sign in</h1>
+    <p>Explore saved runs, comparisons and survey previews with the shared viewer password.</p>
+    <form id="viewer-login" hidden>
+      <label for="viewer-password">Viewer password</label>
+      <input id="viewer-password" name="password" type="password" autocomplete="current-password" maxlength="128" required>
+      <button type="submit" class="primary">View only</button>
+    </form>
+    <p id="login-error" class="notice error" role="alert" hidden></p>
+    <p class="muted small">View-only access cannot start runs, spend on models, or change saved data.</p>
+    <a class="button secondary" href="/api/auth/login">Sign in for full access</a>
+  </main>
+</body>
+</html>
