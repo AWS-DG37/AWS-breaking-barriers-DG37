@@ -1,0 +1,9 @@
+{
+  "account": "047640882913",
+  "region": "us-east-1",
+  "runtime_arn": "arn:aws:bedrock-agentcore:us-east-1:047640882913:runtime/FieldEchoAgentCore_melSurveyAgent-yPjQst6NQ2",
+  "execution_role_arn": "arn:aws:iam::047640882913:role/FieldEchoSurveyAgentCore-RuntimeRole-lQkoL8xwMMyl",
+  "package_bucket": "dg37-agentcore-code-047640882913-us-east-1",
+  "package_prefix": "releases",
+  "github_repository": "AWS-DG37/AWS-breaking-barriers-DG37"
+}
