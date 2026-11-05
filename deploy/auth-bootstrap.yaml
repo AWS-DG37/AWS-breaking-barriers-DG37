@@ -44,6 +44,8 @@ Resources:
     Properties:
       UserPoolId: !Ref UserPool
       Domain: !Ref HostedDomainPrefix
+      # Managed login shows the FieldEcho style from deploy/cognito_branding.py.
+      ManagedLoginVersion: 2
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     DeletionPolicy: Retain

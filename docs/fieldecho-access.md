@@ -36,6 +36,17 @@ aws cloudformation describe-stacks --stack-name fieldecho-auth --region REGION \
   --query 'Stacks[0].Outputs'
 ```
 
+The stack puts the domain on Cognito managed login, which shows a FieldEcho-styled
+sign-in page. Apply that style with the pool and client IDs from the stack outputs,
+before anyone signs in. Apply it again after any change to `deploy/cognito-branding/`.
+For an existing pool still on the old hosted page, apply the style before the stack
+update that moves the domain to managed login:
+
+```sh
+uv run python deploy/cognito_branding.py --pool-id POOL_ID --client-id CLIENT_ID \
+  --region REGION
+```
+
 Reuse this same stack name, account, region and domain prefix on subsequent runs. A
 name/domain collision is a reason to stop and inspect ownership, not choose a fresh
 name automatically. Retention policies preserve the pool, client and domain if the
