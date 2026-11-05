@@ -178,7 +178,8 @@ async function start() {
     if (!alive()) return;
     // Label by what answered: an agent deployed before the classifier always runs the rules.
     finish(rules,decision.gate==='classifier'?`Decided by ${gate.name}`:'Rules checked',`Rule ${decision.rule}`);
-    flow.append(verdict(decision.survey,decision));
+    const shown=verdict(decision.survey,decision);
+    flow.append(shown);
     if (!decision.survey) return;
     await pause(900);
     if (!alive()) return;
@@ -194,9 +195,15 @@ async function start() {
     if (!alive()) return;
     const r=record.result, seconds=Math.round((Date.now()-started)/1000);
     const revisions=r.attempts>1 ? ` after ${r.attempts-1} revision${r.attempts>2?'s':''}` : '';
-    // The run asks the classifier again; it can rarely answer differently from the first call.
-    if (r.status==='skipped') finish(write,'No survey after all',`On a second read the classifier chose rule ${r.decision_rule}${r.decision_reason?`: ${r.decision_reason}`:''}`,'warn');
-    else if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
+    // The run asks the classifier again, and a second read can rarely disagree or fail. Replace
+    // the verdict on screen with what the run decided, so the page never says yes above a no.
+    if (r.status==='skipped' || r.decision_survey==null) {
+      shown.replaceWith(r.status==='skipped' ? verdict(false,{rule:r.decision_rule,reason:r.decision_reason}) : undecided(r.error));
+      finish(write,r.status==='skipped'?'No survey after all':'The classifier did not decide',
+        r.status==='skipped'?`On a second read the classifier chose rule ${r.decision_rule}`:'Nothing was written.','warn');
+      return;
+    }
+    if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
     else finish(write,r.status==='failed'?'The survey could not be written':`${VERIFIER.name} did not approve this survey${revisions}`,r.error || `${seconds} s · showing the last draft`,'warn');
     if (r.items?.length) phoneCol.append(phone(r));
   } catch (error) {
@@ -211,6 +218,13 @@ function verdict(yes, decision) {
     el('div',{},el('strong',{},yes?'We will follow up with a survey':'No survey for this conversation'),
       el('p',{},RULE_TEXT[decision.rule] || words(decision.reason_code)),
       decision.reason ? el('p',{class:'small muted'},`The classifier’s reason: ${decision.reason}`) : null));
+}
+
+function undecided(error) {
+  return el('div',{class:'demo-verdict no',role:'status'},
+    el('span',{class:'demo-verdict-icon dash','aria-hidden':true}),
+    el('div',{},el('strong',{},'No decision for this conversation'),
+      el('p',{},`The classifier gave no usable answer, so no survey was written.${error?` ${error}`:''}`)));
 }
 
 function phone(r) {
