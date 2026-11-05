@@ -70,7 +70,9 @@ body:has(> main.sign-in) {
 .sign-in h1 { margin:6px 0 10px; }
 .sign-in > .muted { margin:20px 0 12px; }
 .sign-in > .button { width:100%; justify-content:center; }
-.sign-in form { display:grid; gap:12px; margin:24px 0 0; }
+.sign-in form { display:grid; gap:10px; margin:24px 0 0; }
+.sign-in form > label { margin:0; }
+.sign-in form > button { margin-top:4px; }
 .sign-in input { width:100%; min-width:0; }
 .viewer-notice { margin:16px 24px; }
 ::selection {
