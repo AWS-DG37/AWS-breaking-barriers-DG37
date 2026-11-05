@@ -8,7 +8,10 @@
 <!--
 HOW TO UPDATE THIS DIAGRAM (for any agent; no skill needed)
 
-This page is the source. docs/aws-deployment.png is the slide export of the #deployment SVG.
+This page is the ONE source of the AWS deployment diagram. Three copies come from it:
+  docs/aws-deployment.png       light slide export
+  docs/aws-deployment-dark.png  dark slide export
+  slide 4 of the public talk    src/mel/explorer/talk/index.html (fieldecho.org/talk/#4)
 Draw what runs in the AWS account, not what template.yaml could create. On 5 Nov 2026 the
 SAM stack in template.yaml (Lambda, API Gateway, Fargate, RDS, S3) was NOT deployed.
 
@@ -18,16 +21,19 @@ SAM stack in template.yaml (Lambda, API Gateway, Fargate, RDS, S3) was NOT deplo
      aws ec2 describe-instances; aws cloudfront list-distributions; aws rds describe-db-instances
      aws ecs list-clusters; aws lambda list-functions; aws s3api list-buckets
      aws iam get-role-policy --role-name dg37-explorer-workshop-host --policy-name dg37-explorer-website-metered
-   Also read deploy/target.json, deploy/bootstrap.yaml, deploy/auth-bootstrap.yaml and the
-   entrypoint in deploy/fieldecho.py. On 5 Nov 2026 the deploy started the console with
-   --no-live (no model calls from the host). The slide still draws the Bedrock path as live
-   at the team's request, because the agent's design and the host role both use it.
+   Also read deploy/target.json, deploy/bootstrap.yaml, deploy/auth-bootstrap.yaml and
+   render_compose() in deploy/fieldecho.py: --run-jobs means the hosted console runs live
+   Bedrock jobs, --no-live means it makes no model calls.
 2. Edit the SVG below. Keep the slide level: one box per AWS service or container, labels
-   that name what the reader recognizes, no legend. Use the CSS color tokens, never a literal
-   color, so the light and dark themes both work. Icons: official AWS set in
-   assets/aws-icons/ (see its README); give the dark general icons class="mono".
+   that name what the reader recognizes, no legend. Every class starts with "ad-" and every
+   color is an --ad-* token in the SVG's own <style>, so the diagram can sit inside the talk
+   deck without clashing with its CSS. Icons: official AWS set in assets/aws-icons/ (see its
+   README); give the dark general icons class="ad-mono".
 3. Change the "Checked against" date in the footer line of the SVG.
-4. Re-export both PNGs (light and dark) from the repository root:
+4. Copy the dark diagram into the talk (slide 4) and its icons into talk/aws-icons/:
+     uv run python scripts/build_talk_diagram.py
+   tests/test_talk_diagram.py fails if the talk copy drifts from this file.
+5. Re-export both PNGs (light and dark) from the repository root:
      uv run python - <<'PY'
      from pathlib import Path
      from playwright.sync_api import sync_playwright
@@ -41,250 +47,253 @@ SAM stack in template.yaml (Lambda, API Gateway, Fargate, RDS, S3) was NOT deplo
              pg.locator("#deployment").screenshot(path=out)
          b.close()
      PY
-5. Open both PNGs and look at them before you commit.
+6. Open both PNGs and the talk's slide 4, and look at them before you commit.
 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
 <style>
 /* Layout: one slide-shaped figure (16:9 SVG) on the page, notes under it.
-   Two themes from one source. Light matches the MEL Console. Dark matches the
-   Field Echo deck (fieldechopres.vercel.app). The page follows the viewer's
-   theme; #light or #dark in the URL forces one. */
+   The page follows the viewer's theme; #light or #dark in the URL forces one.
+   The diagram's own colors live in the SVG's <style>. */
 :root {
   --bg: #ffffff;
-  --card: #ffffff;
-  --card-line: #D9D9D9;
-  --panel: #F2F2F2;      /* console --surface */
-  --panel-line: #007A27;
-  --ink: #001D09;        /* console --ink */
+  --ink: #001D09;
   --muted: #52635A;
   --line: #D9D9D9;
-  --bar: #00A033;        /* Digital Green brand green */
-  --green: #007A27;
-  --deep: #00501A;
-  --gold: #C98A1B;       /* revision loop */
-  --loop-ink: #8A6516;
-  --aws-line: #242F3E;
-  --ec2: #ED7100;
-  --vpc: #8C4FFF;
-  --glow: 0;
-  --mono-filter: none;   /* AWS general icons are dark; dark theme turns them white */
+  --link: #007A27;
   --f-display: Figtree, "Helvetica Neue", Arial, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #070b08; --card: #121b15; --card-line: #2f4036; --panel: #0f1912; --panel-line: #2d6b43;
-  --ink: #edf6ef; --muted: #86a38e; --line: #243128; --bar: #5ee68a; --green: #5ee68a; --deep: #4ade80;
-  --gold: #d9f99d; --loop-ink: #d9f99d; --aws-line: #86a38e; --ec2: #ED7100; --vpc: #A97BFF;
-  --glow: 1; --mono-filter: brightness(0) invert(1); color-scheme: dark;
+  --bg: #070b08; --ink: #edf6ef; --muted: #86a38e; --line: #243128; --link: #5ee68a; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
-  --bg: #070b08; --card: #121b15; --card-line: #2f4036; --panel: #0f1912; --panel-line: #2d6b43;
-  --ink: #edf6ef; --muted: #86a38e; --line: #243128; --bar: #5ee68a; --green: #5ee68a; --deep: #4ade80;
-  --gold: #d9f99d; --loop-ink: #d9f99d; --aws-line: #86a38e; --ec2: #ED7100; --vpc: #A97BFF;
-  --glow: 1; --mono-filter: brightness(0) invert(1); color-scheme: dark;
+  --bg: #070b08; --ink: #edf6ef; --muted: #86a38e; --line: #243128; --link: #5ee68a; color-scheme: dark;
 }
 body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f-display); font-size: 16px; line-height: 1.55; }
 .wrap { max-width: 1440px; margin: 0 auto; padding-block: 24px 48px;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: grid; gap: 28px; }
 .scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
-#deployment { display: block; width: 100%; min-width: 900px; height: auto; background: var(--bg); }
+#deployment { display: block; width: 100%; min-width: 900px; height: auto; }
 .notes { max-width: 72ch; display: grid; gap: 10px; }
 .notes h2 { margin: 0; font-size: 20px; font-weight: 700; text-wrap: balance; }
 .notes ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 .notes code { font-family: var(--f-mono); font-size: 0.85em; }
-.notes a { color: var(--green); }
-
-/* SVG surfaces */
-.bgfill { fill: var(--bg); }
-.glow { opacity: var(--glow); }
-.topbar { fill: var(--bar); }
-.g-aws { fill: none; stroke: var(--aws-line); stroke-width: 1.5; }
-.g-vpc { fill: none; stroke: var(--vpc); stroke-width: 1.5; }
-.g-ec2 { fill: none; stroke: var(--ec2); stroke-width: 1.5; }
-.card { fill: var(--card); stroke: var(--card-line); stroke-width: 1.5; }
-.panel { fill: var(--panel); stroke: var(--panel-line); stroke-width: 1.5; }
-.mono { filter: var(--mono-filter); }
-.accent { fill: var(--ink); }
-:root[data-theme="dark"] .accent { fill: url(#hl); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .accent { fill: url(#hl); } }
-
-/* SVG text and lines */
-.eyebrow { font: 600 14px var(--f-display); letter-spacing: .12em; fill: var(--green); }
-.title { font: 800 46px var(--f-display); letter-spacing: -.02em; fill: var(--ink); }
-.brandline { font: 700 15px var(--f-display); fill: var(--green); }
-.meta { font: 500 13px var(--f-display); fill: var(--muted); }
-.grp { font: 700 16px var(--f-display); fill: var(--ink); }
-.grp-sub { font: 500 13px var(--f-display); fill: var(--muted); }
-.lbl { font: 700 16px var(--f-display); fill: var(--ink); }
-.sub { font: 500 13px var(--f-display); fill: var(--muted); }
-.step { font: 700 14px var(--f-display); fill: var(--ink); }
-.step-sub { font: 500 12px var(--f-display); fill: var(--muted); }
-.panel-title { font: 700 15px var(--f-display); fill: var(--green); }
-.edge { font: 600 12.5px var(--f-display); fill: var(--deep); }
-.loop-lbl { font: 600 12.5px var(--f-display); fill: var(--loop-ink); }
-.tag { font: 500 10.5px var(--f-mono); letter-spacing: .06em; fill: var(--muted); }
-.w { fill: none; stroke: var(--deep); stroke-width: 1.8; }
-.w-loop { fill: none; stroke: var(--gold); stroke-width: 1.8; stroke-dasharray: 6 5; }
-.ah { fill: var(--deep); }
-.ah-loop { fill: var(--gold); }
+.notes a { color: var(--link); }
 </style>
 </head>
 <body>
 <div class="wrap">
 <div class="scroll">
 <svg id="deployment" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img"
-  aria-label="Field Echo deployment on AWS. Same content in the light and dark themes. Console users reach fieldecho.org through Amazon CloudFront, which forwards to one Amazon EC2 t3.small instance through a private VPC origin. The instance runs Docker Compose with nginx, the MEL Console container and a PostgreSQL 16 container. The MEL agent graph decides, generates, checks the schema, reviews and hands off a survey, with at most one redraft. Amazon Cognito handles sign-in. The agent graph calls Amazon Bedrock models from OpenAI, Anthropic and Amazon. GitHub Actions on main assumes an IAM OIDC role, pushes the image to Amazon ECR and deploys through AWS Systems Manager Run Command.">
+  aria-label="Field Echo deployment on AWS. Console users reach fieldecho.org through Amazon CloudFront, which forwards to one Amazon EC2 t3.small instance through a private VPC origin. The instance runs Docker Compose with nginx, the MEL Console container and a PostgreSQL 16 container. The MEL agent graph decides, generates, checks the schema, reviews and hands off a survey, with at most one redraft. Amazon Cognito handles sign-in. The agent graph calls Amazon Bedrock models from OpenAI, Anthropic and Amazon. GitHub Actions on main assumes an IAM OIDC role, pushes the image to Amazon ECR and deploys through AWS Systems Manager Run Command.">
+  <style>
+    /* Light (MEL Console) tokens by default. Dark (Field Echo deck) tokens with class
+       ad-dark, an explicit dark page theme, or a dark system theme. ad-embed hides the
+       canvas and brand lines when a host page (the talk deck) already provides them. */
+    #deployment {
+      --ad-bg: #ffffff; --ad-card: #ffffff; --ad-card-line: #D9D9D9; --ad-panel: #F2F2F2;
+      --ad-panel-line: #007A27; --ad-ink: #001D09; --ad-muted: #52635A; --ad-bar: #00A033;
+      --ad-green: #007A27; --ad-deep: #00501A; --ad-loop: #C98A1B; --ad-loop-ink: #8A6516;
+      --ad-aws-line: #242F3E; --ad-ec2: #ED7100; --ad-vpc: #8C4FFF; --ad-glow: 0;
+      --ad-mono-filter: none; --ad-accent: var(--ad-ink);
+      --ad-font: Figtree, "Helvetica Neue", Arial, sans-serif;
+      --ad-font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    }
+    #deployment.ad-dark, :root[data-theme="dark"] #deployment {
+      --ad-bg: #070b08; --ad-card: #121b15; --ad-card-line: #2f4036; --ad-panel: #0f1912;
+      --ad-panel-line: #2d6b43; --ad-ink: #edf6ef; --ad-muted: #86a38e; --ad-bar: #5ee68a;
+      --ad-green: #5ee68a; --ad-deep: #4ade80; --ad-loop: #d9f99d; --ad-loop-ink: #d9f99d;
+      --ad-aws-line: #86a38e; --ad-vpc: #A97BFF; --ad-glow: 1;
+      --ad-mono-filter: brightness(0) invert(1); --ad-accent: url(#ad-hl);
+    }
+    @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) #deployment {
+      --ad-bg: #070b08; --ad-card: #121b15; --ad-card-line: #2f4036; --ad-panel: #0f1912;
+      --ad-panel-line: #2d6b43; --ad-ink: #edf6ef; --ad-muted: #86a38e; --ad-bar: #5ee68a;
+      --ad-green: #5ee68a; --ad-deep: #4ade80; --ad-loop: #d9f99d; --ad-loop-ink: #d9f99d;
+      --ad-aws-line: #86a38e; --ad-vpc: #A97BFF; --ad-glow: 1;
+      --ad-mono-filter: brightness(0) invert(1); --ad-accent: url(#ad-hl);
+    } }
+    #deployment.ad-embed .ad-canvas, #deployment.ad-embed .ad-glow,
+    #deployment.ad-embed .ad-topbar, #deployment.ad-embed .ad-brand { display: none; }
+    #deployment .ad-bgfill { fill: var(--ad-bg); }
+    #deployment .ad-glow { opacity: var(--ad-glow); }
+    #deployment .ad-topbar { fill: var(--ad-bar); }
+    #deployment .ad-g-aws { fill: none; stroke: var(--ad-aws-line); stroke-width: 1.5; }
+    #deployment .ad-g-vpc { fill: none; stroke: var(--ad-vpc); stroke-width: 1.5; }
+    #deployment .ad-g-ec2 { fill: none; stroke: var(--ad-ec2); stroke-width: 1.5; }
+    #deployment .ad-card { fill: var(--ad-card); stroke: var(--ad-card-line); stroke-width: 1.5; }
+    #deployment .ad-panel { fill: var(--ad-panel); stroke: var(--ad-panel-line); stroke-width: 1.5; }
+    #deployment .ad-mono { filter: var(--ad-mono-filter); }
+    #deployment .ad-accent { fill: var(--ad-accent); }
+    #deployment .ad-eyebrow { font: 600 14px var(--ad-font); letter-spacing: .12em; fill: var(--ad-green); }
+    #deployment .ad-title { font: 800 46px var(--ad-font); letter-spacing: -.02em; fill: var(--ad-ink); }
+    #deployment .ad-brandline { font: 700 15px var(--ad-font); fill: var(--ad-green); }
+    #deployment .ad-meta { font: 500 13px var(--ad-font); fill: var(--ad-muted); }
+    #deployment .ad-grp { font: 700 16px var(--ad-font); fill: var(--ad-ink); }
+    #deployment .ad-grp-sub { font: 500 13px var(--ad-font); fill: var(--ad-muted); }
+    #deployment .ad-lbl { font: 700 16px var(--ad-font); fill: var(--ad-ink); }
+    #deployment .ad-sub { font: 500 13px var(--ad-font); fill: var(--ad-muted); }
+    #deployment .ad-step { font: 700 14px var(--ad-font); fill: var(--ad-ink); }
+    #deployment .ad-step-sub { font: 500 12px var(--ad-font); fill: var(--ad-muted); }
+    #deployment .ad-panel-title { font: 700 15px var(--ad-font); fill: var(--ad-green); }
+    #deployment .ad-edge { font: 600 12.5px var(--ad-font); fill: var(--ad-deep); }
+    #deployment .ad-loop-lbl { font: 600 12.5px var(--ad-font); fill: var(--ad-loop-ink); }
+    #deployment .ad-tag { font: 500 10.5px var(--ad-font-mono); letter-spacing: .06em; fill: var(--ad-muted); }
+    #deployment .ad-w { fill: none; stroke: var(--ad-deep); stroke-width: 1.8; }
+    #deployment .ad-w-loop { fill: none; stroke: var(--ad-loop); stroke-width: 1.8; stroke-dasharray: 6 5; }
+    #deployment .ad-ah { fill: var(--ad-deep); }
+    #deployment .ad-ah-loop { fill: var(--ad-loop); }
+  </style>
   <defs>
-    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
-    <linearGradient id="hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0.1" stop-color="#5ee68a"/><stop offset="0.9" stop-color="#d9f99d"/></linearGradient>
-    <radialGradient id="glow-a" cx="0.72" cy="-0.1" r="0.75"><stop offset="0" stop-color="#5ee68a" stop-opacity="0.12"/><stop offset="0.6" stop-color="#5ee68a" stop-opacity="0"/></radialGradient>
-    <radialGradient id="glow-b" cx="0.1" cy="1.1" r="0.6"><stop offset="0" stop-color="#16a34a" stop-opacity="0.12"/><stop offset="0.6" stop-color="#16a34a" stop-opacity="0"/></radialGradient>
-    <marker id="ah-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ah-loop" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ad-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ad-ah" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ad-arrow-loop" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="ad-ah-loop" d="M0,0 L10,5 L0,10 z"/></marker>
+    <linearGradient id="ad-hl" x1="0" y1="0" x2="1" y2="0"><stop offset="0.1" stop-color="#5ee68a"/><stop offset="0.9" stop-color="#d9f99d"/></linearGradient>
+    <radialGradient id="ad-glow-a" cx="0.72" cy="-0.1" r="0.75"><stop offset="0" stop-color="#5ee68a" stop-opacity="0.12"/><stop offset="0.6" stop-color="#5ee68a" stop-opacity="0"/></radialGradient>
+    <radialGradient id="ad-glow-b" cx="0.1" cy="1.1" r="0.6"><stop offset="0" stop-color="#16a34a" stop-opacity="0.12"/><stop offset="0.6" stop-color="#16a34a" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect class="bgfill" width="1600" height="900"/>
-  <rect class="glow" width="1600" height="900" fill="url(#glow-a)"/>
-  <rect class="glow" width="1600" height="900" fill="url(#glow-b)"/>
-  <rect class="topbar" x="0" y="0" width="1600" height="6"/>
+  <rect class="ad-bgfill ad-canvas" width="1600" height="900"/>
+  <rect class="ad-glow" width="1600" height="900" fill="url(#ad-glow-a)"/>
+  <rect class="ad-glow" width="1600" height="900" fill="url(#ad-glow-b)"/>
+  <rect class="ad-topbar" x="0" y="0" width="1600" height="6"/>
 
   <!-- Title -->
-  <text class="eyebrow" x="40" y="54">FIELD ECHO · MEL SURVEY AGENT</text>
-  <text class="title" x="40" y="104">Deployment <tspan class="accent">on AWS</tspan></text>
-  <text class="brandline" x="1560" y="54" text-anchor="end">Digital Green · FarmerChat</text>
-  <text class="meta" x="1560" y="76" text-anchor="end">Team 37 · AWS Breaking Barriers 2026</text>
+  <text class="ad-eyebrow" x="40" y="54">FIELD ECHO · MEL SURVEY AGENT</text>
+  <text class="ad-title" x="40" y="104">Deployment <tspan class="ad-accent">on AWS</tspan></text>
+  <text class="ad-brandline ad-brand" x="1560" y="54" text-anchor="end">Digital Green · FarmerChat</text>
+  <text class="ad-meta ad-brand" x="1560" y="76" text-anchor="end">Team 37 · AWS Breaking Barriers 2026</text>
 
   <!-- AWS Cloud group -->
-  <rect class="g-aws" x="290" y="130" width="1270" height="730"/>
+  <rect class="ad-g-aws" x="290" y="130" width="1270" height="730"/>
   <image href="assets/aws-icons/AWSCloudlogo.svg" x="290" y="130" width="40" height="40"/>
-  <text class="grp" x="342" y="156">AWS Cloud</text>
-  <text class="grp-sub" x="432" y="156">us-east-1</text>
+  <text class="ad-grp" x="342" y="156">AWS Cloud</text>
+  <text class="ad-grp-sub" x="432" y="156">us-east-1</text>
 
   <!-- VPC group -->
-  <rect class="g-vpc" x="470" y="184" width="760" height="466"/>
-  <text class="grp" x="486" y="208">Default VPC</text>
-  <text class="grp-sub" x="586" y="208">Private network, for security: only CloudFront can reach the server</text>
+  <rect class="ad-g-vpc" x="470" y="184" width="760" height="466"/>
+  <text class="ad-grp" x="486" y="208">Default VPC</text>
+  <text class="ad-grp-sub" x="586" y="208">Private network, for security: only CloudFront can reach the server</text>
 
   <!-- EC2 instance group -->
-  <rect class="g-ec2" x="500" y="226" width="700" height="404"/>
+  <rect class="ad-g-ec2" x="500" y="226" width="700" height="404"/>
   <image href="assets/aws-icons/EC2instancecontents.svg" x="500" y="226" width="32" height="32"/>
-  <text class="grp" x="544" y="248">Amazon EC2 · t3.small</text>
-  <text class="grp-sub" x="730" y="248">instance fieldecho · Docker Compose · nginx sign-in proxy</text>
+  <text class="ad-grp" x="544" y="248">Amazon EC2 · t3.small</text>
+  <text class="ad-grp-sub" x="730" y="248">instance fieldecho · Docker Compose · nginx sign-in proxy</text>
 
   <!-- Containers -->
-  <rect class="card" x="530" y="290" width="290" height="84" rx="8"/>
-  <text class="tag" x="546" y="310">CONTAINER</text>
-  <text class="lbl" x="546" y="335">MEL Console</text>
-  <text class="sub" x="546" y="356">FastAPI API and web UI</text>
+  <rect class="ad-card" x="530" y="290" width="290" height="84" rx="8"/>
+  <text class="ad-tag" x="546" y="310">CONTAINER</text>
+  <text class="ad-lbl" x="546" y="335">MEL Console</text>
+  <text class="ad-sub" x="546" y="356">FastAPI API and web UI</text>
 
-  <rect class="card" x="880" y="290" width="290" height="84" rx="8"/>
-  <image class="mono" href="assets/aws-icons/Database.svg" x="1118" y="304" width="40" height="40"/>
-  <text class="tag" x="896" y="310">CONTAINER</text>
-  <text class="lbl" x="896" y="335">PostgreSQL 16</text>
-  <text class="sub" x="896" y="356">runs, configs, costs, outbox</text>
+  <rect class="ad-card" x="880" y="290" width="290" height="84" rx="8"/>
+  <image class="ad-mono" href="assets/aws-icons/Database.svg" x="1118" y="304" width="40" height="40"/>
+  <text class="ad-tag" x="896" y="310">CONTAINER</text>
+  <text class="ad-lbl" x="896" y="335">PostgreSQL 16</text>
+  <text class="ad-sub" x="896" y="356">runs, configs, costs, outbox</text>
 
-  <line class="w" x1="824" y1="332" x2="876" y2="332" marker-start="url(#ah)" marker-end="url(#ah)"/>
-  <line class="w" x1="675" y1="376" x2="675" y2="404" marker-end="url(#ah)"/>
-  <text class="edge" x="684" y="395">starts runs</text>
-  <line class="w" x1="1025" y1="378" x2="1025" y2="404" marker-start="url(#ah)"/>
-  <text class="edge" x="1034" y="395">saves results and handoffs</text>
+  <line class="ad-w" x1="824" y1="332" x2="876" y2="332" marker-start="url(#ad-arrow)" marker-end="url(#ad-arrow)"/>
+  <line class="ad-w" x1="675" y1="376" x2="675" y2="404" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="684" y="395">starts runs</text>
+  <line class="ad-w" x1="1025" y1="378" x2="1025" y2="404" marker-start="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1034" y="395">saves results and handoffs</text>
 
   <!-- MEL agent graph (orchestrator) -->
-  <rect class="panel" x="530" y="406" width="640" height="204" rx="10"/>
-  <text class="panel-title" x="850" y="432" text-anchor="middle">MEL agent graph · Pydantic AI</text>
+  <rect class="ad-panel" x="530" y="406" width="640" height="204" rx="10"/>
+  <text class="ad-panel-title" x="850" y="432" text-anchor="middle">MEL agent graph · Pydantic AI</text>
 
-  <line class="w" x1="632" y1="470" x2="692" y2="470" marker-end="url(#ah)"/>
-  <line class="w" x1="757" y1="470" x2="817" y2="470" marker-end="url(#ah)"/>
-  <line class="w" x1="882" y1="470" x2="942" y2="470" marker-end="url(#ah)"/>
-  <line class="w" x1="1007" y1="470" x2="1067" y2="470" marker-end="url(#ah)"/>
+  <line class="ad-w" x1="632" y1="470" x2="692" y2="470" marker-end="url(#ad-arrow)"/>
+  <line class="ad-w" x1="757" y1="470" x2="817" y2="470" marker-end="url(#ad-arrow)"/>
+  <line class="ad-w" x1="882" y1="470" x2="942" y2="470" marker-end="url(#ad-arrow)"/>
+  <line class="ad-w" x1="1007" y1="470" x2="1067" y2="470" marker-end="url(#ad-arrow)"/>
 
-  <image class="mono" href="assets/aws-icons/MagnifyingGlass.svg" x="576" y="446" width="48" height="48"/>
-  <image class="mono" href="assets/aws-icons/Chat.svg" x="701" y="446" width="48" height="48"/>
-  <image class="mono" href="assets/aws-icons/JSONScript.svg" x="826" y="446" width="48" height="48"/>
-  <image class="mono" href="assets/aws-icons/Shield.svg" x="951" y="446" width="48" height="48"/>
-  <image class="mono" href="assets/aws-icons/Document.svg" x="1076" y="446" width="48" height="48"/>
+  <image class="ad-mono" href="assets/aws-icons/MagnifyingGlass.svg" x="576" y="446" width="48" height="48"/>
+  <image class="ad-mono" href="assets/aws-icons/Chat.svg" x="701" y="446" width="48" height="48"/>
+  <image class="ad-mono" href="assets/aws-icons/JSONScript.svg" x="826" y="446" width="48" height="48"/>
+  <image class="ad-mono" href="assets/aws-icons/Shield.svg" x="951" y="446" width="48" height="48"/>
+  <image class="ad-mono" href="assets/aws-icons/Document.svg" x="1076" y="446" width="48" height="48"/>
 
-  <text class="step" x="600" y="516" text-anchor="middle">Decide</text>
-  <text class="step-sub" x="600" y="533" text-anchor="middle">rules R1 to R8</text>
-  <text class="step" x="725" y="516" text-anchor="middle">Generate</text>
-  <text class="step-sub" x="725" y="533" text-anchor="middle">1 to 3 tap questions</text>
-  <text class="step" x="850" y="516" text-anchor="middle">Check schema</text>
-  <text class="step-sub" x="850" y="533" text-anchor="middle">survey JSON</text>
-  <text class="step" x="975" y="516" text-anchor="middle">Review</text>
-  <text class="step-sub" x="975" y="533" text-anchor="middle">model review gate</text>
-  <text class="step" x="1100" y="516" text-anchor="middle">Hand off</text>
-  <text class="step-sub" x="1100" y="533" text-anchor="middle">survey and schedule</text>
+  <text class="ad-step" x="600" y="516" text-anchor="middle">Decide</text>
+  <text class="ad-step-sub" x="600" y="533" text-anchor="middle">rules R1 to R8</text>
+  <text class="ad-step" x="725" y="516" text-anchor="middle">Generate</text>
+  <text class="ad-step-sub" x="725" y="533" text-anchor="middle">1 to 3 tap questions</text>
+  <text class="ad-step" x="850" y="516" text-anchor="middle">Check schema</text>
+  <text class="ad-step-sub" x="850" y="533" text-anchor="middle">survey JSON</text>
+  <text class="ad-step" x="975" y="516" text-anchor="middle">Review</text>
+  <text class="ad-step-sub" x="975" y="533" text-anchor="middle">model review gate</text>
+  <text class="ad-step" x="1100" y="516" text-anchor="middle">Hand off</text>
+  <text class="ad-step-sub" x="1100" y="533" text-anchor="middle">survey and schedule</text>
 
-  <path class="w-loop" d="M975,545 V568 H725 V548" marker-end="url(#ah-loop)"/>
-  <text class="loop-lbl" x="850" y="590" text-anchor="middle">Bounded revision: at most one redraft</text>
+  <path class="ad-w-loop" d="M975,545 V568 H725 V548" marker-end="url(#ad-arrow-loop)"/>
+  <text class="ad-loop-lbl" x="850" y="590" text-anchor="middle">Bounded revision: at most one redraft</text>
 
   <!-- Edge: users, CloudFront -->
-  <image class="mono" href="assets/aws-icons/Users.svg" x="113" y="298" width="64" height="64"/>
-  <text class="lbl" x="145" y="392" text-anchor="middle">Console users</text>
-  <text class="sub" x="145" y="411" text-anchor="middle">team and Digital Green</text>
-  <text class="sub" x="145" y="428" text-anchor="middle">in a web browser</text>
+  <image class="ad-mono" href="assets/aws-icons/Users.svg" x="113" y="298" width="64" height="64"/>
+  <text class="ad-lbl" x="145" y="392" text-anchor="middle">Console users</text>
+  <text class="ad-sub" x="145" y="411" text-anchor="middle">team and Digital Green</text>
+  <text class="ad-sub" x="145" y="428" text-anchor="middle">in a web browser</text>
 
-  <line class="w" x1="184" y1="330" x2="324" y2="330" marker-end="url(#ah)"/>
-  <text class="edge" x="254" y="320" text-anchor="middle">HTTPS</text>
+  <line class="ad-w" x1="184" y1="330" x2="324" y2="330" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="254" y="320" text-anchor="middle">HTTPS</text>
 
   <image href="assets/aws-icons/AmazonCloudFront.svg" x="330" y="298" width="64" height="64"/>
-  <text class="lbl" x="362" y="392" text-anchor="middle">CloudFront</text>
-  <text class="sub" x="362" y="411" text-anchor="middle">fieldecho.org</text>
-  <text class="sub" x="362" y="428" text-anchor="middle">HTTPS, ACM cert</text>
+  <text class="ad-lbl" x="362" y="392" text-anchor="middle">CloudFront</text>
+  <text class="ad-sub" x="362" y="411" text-anchor="middle">fieldecho.org</text>
+  <text class="ad-sub" x="362" y="428" text-anchor="middle">HTTPS, ACM cert</text>
 
-  <line class="w" x1="400" y1="330" x2="496" y2="330" marker-end="url(#ah)"/>
-  <text class="edge" x="433" y="320" text-anchor="middle">VPC origin</text>
-  <text class="edge" x="433" y="348" text-anchor="middle">private</text>
+  <line class="ad-w" x1="400" y1="330" x2="496" y2="330" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="433" y="320" text-anchor="middle">VPC origin</text>
+  <text class="ad-edge" x="433" y="348" text-anchor="middle">private</text>
 
   <!-- Right: Cognito, Bedrock -->
-  <line class="w" x1="1204" y1="300" x2="1382" y2="300" marker-end="url(#ah)"/>
-  <text class="edge" x="1306" y="290" text-anchor="middle">sign-in</text>
-  <text class="edge" x="1306" y="318" text-anchor="middle">OAuth code + PKCE</text>
+  <line class="ad-w" x1="1204" y1="300" x2="1382" y2="300" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1306" y="290" text-anchor="middle">sign-in</text>
+  <text class="ad-edge" x="1306" y="318" text-anchor="middle">OAuth code + PKCE</text>
   <image href="assets/aws-icons/AmazonCognito.svg" x="1388" y="268" width="64" height="64"/>
-  <text class="lbl" x="1420" y="362" text-anchor="middle">Amazon Cognito</text>
-  <text class="sub" x="1420" y="381" text-anchor="middle">fieldecho user pool</text>
+  <text class="ad-lbl" x="1420" y="362" text-anchor="middle">Amazon Cognito</text>
+  <text class="ad-sub" x="1420" y="381" text-anchor="middle">fieldecho user pool</text>
 
-  <line class="w" x1="1174" y1="470" x2="1382" y2="470" marker-end="url(#ah)"/>
-  <text class="edge" x="1306" y="460" text-anchor="middle">model calls</text>
-  <text class="edge" x="1306" y="488" text-anchor="middle">write and review</text>
+  <line class="ad-w" x1="1174" y1="470" x2="1382" y2="470" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1306" y="460" text-anchor="middle">model calls</text>
+  <text class="ad-edge" x="1306" y="488" text-anchor="middle">write and review</text>
   <image href="assets/aws-icons/AmazonBedrock.svg" x="1388" y="438" width="64" height="64"/>
-  <text class="lbl" x="1420" y="532" text-anchor="middle">Amazon Bedrock</text>
-  <text class="sub" x="1420" y="551" text-anchor="middle">models from</text>
-  <text class="sub" x="1420" y="568" text-anchor="middle">OpenAI · Anthropic · Amazon</text>
+  <text class="ad-lbl" x="1420" y="532" text-anchor="middle">Amazon Bedrock</text>
+  <text class="ad-sub" x="1420" y="551" text-anchor="middle">models from</text>
+  <text class="ad-sub" x="1420" y="568" text-anchor="middle">OpenAI · Anthropic · Amazon</text>
 
   <!-- Delivery -->
-  <image class="mono" href="assets/aws-icons/GitRepository.svg" x="113" y="690" width="64" height="64"/>
-  <text class="lbl" x="145" y="784" text-anchor="middle">GitHub Actions</text>
-  <text class="sub" x="145" y="803" text-anchor="middle">main branch only</text>
+  <image class="ad-mono" href="assets/aws-icons/GitRepository.svg" x="113" y="690" width="64" height="64"/>
+  <text class="ad-lbl" x="145" y="784" text-anchor="middle">GitHub Actions</text>
+  <text class="ad-sub" x="145" y="803" text-anchor="middle">main branch only</text>
 
-  <line class="w" x1="184" y1="712" x2="554" y2="712" marker-end="url(#ah)"/>
-  <text class="edge" x="462" y="702" text-anchor="middle">1 · push exact-SHA image</text>
-  <rect class="bgfill" x="328" y="692" width="40" height="40"/>
+  <line class="ad-w" x1="184" y1="712" x2="554" y2="712" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="462" y="702" text-anchor="middle">1 · push exact-SHA image</text>
+  <rect class="ad-bgfill" x="328" y="692" width="40" height="40"/>
   <image href="assets/aws-icons/AWSIdentityandAccessManagement.svg" x="330" y="694" width="36" height="36"/>
-  <text class="sub" x="348" y="750" text-anchor="middle">IAM OIDC role</text>
+  <text class="ad-sub" x="348" y="750" text-anchor="middle">IAM OIDC role</text>
 
-  <path class="w" d="M184,738 H250 V830 H912 V772" marker-end="url(#ah)"/>
-  <text class="edge" x="620" y="822" text-anchor="middle">2 · send the fixed deploy command</text>
+  <path class="ad-w" d="M184,738 H250 V830 H912 V772" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="620" y="822" text-anchor="middle">2 · send the fixed deploy command</text>
 
   <image href="assets/aws-icons/AmazonElasticContainerRegistry.svg" x="560" y="696" width="64" height="64"/>
-  <text class="lbl" x="636" y="722">Amazon ECR</text>
-  <text class="sub" x="636" y="741">dg37-explorer</text>
-  <text class="sub" x="636" y="758">immutable tags</text>
+  <text class="ad-lbl" x="636" y="722">Amazon ECR</text>
+  <text class="ad-sub" x="636" y="741">dg37-explorer</text>
+  <text class="ad-sub" x="636" y="758">immutable tags</text>
 
   <image href="assets/aws-icons/AWSSystemsManager.svg" x="880" y="696" width="64" height="64"/>
-  <text class="lbl" x="956" y="722">AWS Systems Manager</text>
-  <text class="sub" x="956" y="741">Run Command</text>
-  <text class="sub" x="956" y="758">DG37-DeployMain-v1</text>
+  <text class="ad-lbl" x="956" y="722">AWS Systems Manager</text>
+  <text class="ad-sub" x="956" y="741">Run Command</text>
+  <text class="ad-sub" x="956" y="758">DG37-DeployMain-v1</text>
 
-  <line class="w" x1="592" y1="692" x2="592" y2="634" marker-end="url(#ah)"/>
-  <text class="edge" x="602" y="670">pull image</text>
-  <line class="w" x1="912" y1="692" x2="912" y2="634" marker-end="url(#ah)"/>
-  <text class="edge" x="922" y="670">3 · deploy, roll back on failure</text>
+  <line class="ad-w" x1="592" y1="692" x2="592" y2="634" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="602" y="670">pull image</text>
+  <line class="ad-w" x1="912" y1="692" x2="912" y2="634" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="922" y="670">3 · deploy, roll back on failure</text>
 
-  <!-- Legend -->
-  <text class="meta" x="1560" y="889" text-anchor="end">Checked against the AWS account on 5 Nov 2026</text>
+  <text class="ad-meta" x="1560" y="889" text-anchor="end">Checked against the AWS account on 5 Nov 2026</text>
 </svg>
 </div>
 
@@ -295,7 +304,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
     <li>The MEL agent calls Amazon Bedrock to write and review surveys, under the console spend cap. The host role allows three models: OpenAI GPT-6 Luna (Responses API), Anthropic Claude Haiku 4.5 and Amazon Nova Lite (Converse API).</li>
     <li><code>template.yaml</code> describes a larger serverless stack (Lambda, API Gateway, Fargate, RDS, S3). That stack is not deployed, so it is not on the diagram.</li>
     <li>The voice survey runs on GitHub Pages with ElevenLabs recordings. It does not use AWS.</li>
-    <li>Slide exports: <a href="aws-deployment.png">light</a> and <a href="aws-deployment-dark.png">dark</a>. Add <code>#dark</code> or <code>#light</code> to this page's address to force a theme. Update steps are in a comment at the top of this file.</li>
+    <li>Slide exports: <a href="aws-deployment.png">light</a> and <a href="aws-deployment-dark.png">dark</a>. The dark version is also slide 4 of the <a href="https://fieldecho.org/talk/#4">team talk</a>. Add <code>#dark</code> or <code>#light</code> to this page's address to force a theme. Update steps are in a comment at the top of this file.</li>
   </ul>
 </section>
 </div>

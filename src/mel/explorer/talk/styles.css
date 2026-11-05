@@ -289,3 +289,11 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   .scene,.scene .content>*,.scene-head>*,.cards>*,.steps li,.bullets li,
   .flow>*,.rules .rule,.cases>*{opacity:1;transform:none;filter:none}
 }
+
+/* ─── slide 4: AWS deployment diagram ───
+   The SVG is generated from docs/aws-deployment.html by scripts/build_talk_diagram.py and
+   carries its own namespaced styles. This slide only gives it room: it widens past the
+   1040px column and keeps 16:9 inside the space between the bar and the footer. */
+.scene.scene-arch{padding:clamp(8px,1.5vh,20px) max(16px,2vw)}
+.content.arch{max-width:none;width:min(100%,calc((100vh - 92px - 10vh) * 16 / 9))}
+.arch svg{display:block;width:100%;height:auto}
