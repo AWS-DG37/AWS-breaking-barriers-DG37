@@ -708,6 +708,29 @@ class Store:
             return None
         return {"insight_id": insight_id, "status": row[0], "insight": row[1], "outcome": row[2]}
 
+    # English versions of saved surveys (mel.translate), keyed by survey content.
+
+    def translation(self, key: str) -> dict | None:
+        with self.lock:
+            row = self.connection.execute(
+                "SELECT language,items FROM survey_translations WHERE survey_sha256=%s", (key,)
+            ).fetchone()
+        return {"language": row[0], "items": row[1]} if row else None
+
+    def save_translation(
+        self, key: str, language: str, items: list[dict], run_id: str, model_id: str
+    ) -> dict:
+        """Keeps the first translation of a survey; a concurrent second one is dropped."""
+        from psycopg.types.json import Jsonb
+
+        with self.lock:
+            self.connection.execute(
+                "INSERT INTO survey_translations(survey_sha256,language,items,run_id,model_id) "
+                "VALUES (%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING",
+                (key, language, Jsonb(items), run_id, model_id),
+            )
+        return self.translation(key)
+
     # Jobs. Workers claim queued jobs with SKIP LOCKED, so several runners can share
     # one queue without running a job twice.
 

@@ -145,14 +145,23 @@ def test_viewer_can_preview_a_saved_survey_without_mutation_controls(viewer_serv
                 f"/api/runs/{run_id}/facets": {"crops": {}, "concerns": {}, "rules": {}},
                 f"/api/runs/{run_id}/results/{insight_id}": {**row, "outcome": outcome},
             }
+            english = f"/api/runs/{run_id}/results/{insight_id}/english"
+            asked_to_translate = []
+
             # These saved read responses stand in for PostgreSQL, while login and
             # authorization use the running application above.
-            page.route(
-                "**/api/runs/**",
-                lambda route: route.fulfill(
-                    json=fixtures[route.request.url.removeprefix(base).split("?")[0]]
-                ),
-            )
+            def saved(route):
+                path = route.request.url.removeprefix(base).split("?")[0]
+                if path != english:
+                    return route.fulfill(json=fixtures[path])
+                if route.request.method == "GET":
+                    return route.fulfill(status=404, json={"detail": "No English version yet"})
+                # Making a translation spends money: the real viewer guard must refuse it.
+                response = route.fetch()
+                asked_to_translate.append(response.status)
+                return route.fulfill(response=response)
+
+            page.route("**/api/runs/**", saved)
             page.goto(base + f"/static/sign-in.html#runs/run/{run_id}/{insight_id}")
             page.get_by_label("Viewer password").fill(VIEWER_PASSWORD)
             page.get_by_role("button", name="View only").click()
@@ -160,5 +169,10 @@ def test_viewer_can_preview_a_saved_survey_without_mutation_controls(viewer_serv
             expect(page.get_by_role("button", name="Delete run")).to_have_count(0)
             expect(page.get_by_text("Add to review list", exact=True)).to_have_count(0)
             assert "null" not in page.locator(".gen-detail").inner_text()
+            for _ in range(50):  # the page asks for English after it shows the phone
+                if asked_to_translate:
+                    break
+                page.wait_for_timeout(100)
+            assert asked_to_translate == [403]
         finally:
             browser.close()

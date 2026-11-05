@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
 
+from mel.agents import build_agent
 from mel.bedrock_models import CatalogDiscoveryError, discover_models
 from mel.browse import ResultFilter, RunFilter
 from mel.bundle import Bundle, read_bytes
@@ -25,6 +26,7 @@ from mel.config import ModelConfig, Settings, StrictModel
 from mel.configs import active_config, config_bundle, validate_definition
 from mel.costs import (
     CapUpdate,
+    CostedModel,
     CostRefused,
     NewPrice,
     cap_view,
@@ -33,6 +35,7 @@ from mel.costs import (
     estimate_run,
     prices,
     report,
+    request_scope,
     save_price,
     set_cap,
 )
@@ -51,6 +54,14 @@ from mel.improvement import ImprovementSpec, ReviewComment, review_target
 from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
 from mel.store import Store
+from mel.translate import PROMPT as TRANSLATE_PROMPT
+from mel.translate import (
+    SurveyTranslation,
+    TranslationCosts,
+    english_items,
+    request_text,
+    survey_key,
+)
 from mel.voice import ElevenLabs, SpokenLines
 
 logger = logging.getLogger("mel.explorer")
@@ -262,6 +273,7 @@ def create_app(
     lifespan=None,
     agent_invoker=None,
     speaker=None,
+    translation_agent=build_agent,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
@@ -643,6 +655,71 @@ def create_app(
         if survey is None:
             raise HTTPException(404, "No accepted survey for this result")
         return survey
+
+    def saved_survey(db, run_id: str, insight_id: str) -> dict:
+        outcome = (db.run_result(run_id, insight_id) or {}).get("outcome") or {}
+        survey = outcome.get("survey") or outcome.get("candidate_survey")
+        if not survey or not survey.get("items"):
+            raise HTTPException(404, "No survey for this result")
+        return survey
+
+    @app.get("/api/runs/{run_id}/results/{insight_id}/english")
+    def run_survey_english(run_id: UUID, insight_id: str):
+        """The stored English version of a saved survey, when the console has made one."""
+        found = database_call(
+            lambda db: db.translation(survey_key(saved_survey(db, str(run_id), insight_id)))
+        )
+        if found is None:
+            raise HTTPException(404, "No English version yet")
+        return found
+
+    @app.post("/api/runs/{run_id}/results/{insight_id}/english")
+    def translate_run_survey(run_id: UUID, insight_id: str):
+        """Make a saved survey's English version once, with the run's own review model.
+        The request is charged to that run, under its budget and the console spend cap."""
+
+        def make(db):
+            survey = saved_survey(db, str(run_id), insight_id)
+            if str(survey.get("language") or "").split("-")[0] == "en":
+                raise HTTPException(409, "This survey is already in English")
+            key = survey_key(survey)
+            found = db.translation(key)
+            if found is not None:
+                return found
+            require_live()
+            config_id = (db.run_summary(str(run_id)) or {}).get("config_id")
+            bundle = config_bundle(db, config_id) if config_id else active_config(db, settings)[1]
+            model = bundle.config.review
+            if not model.model_id:
+                model = model.model_copy(update={"model_id": settings.bedrock_model_id})
+            allowed = {(m.model_id, m.api) for m in settings.allowed_models}
+            if allowed and (model.model_id, model.api) not in allowed:
+                raise HTTPException(409, f"{model.model_id} is not enabled for this deployment")
+            agent = translation_agent(
+                model, SurveyTranslation, TRANSLATE_PROMPT, settings.aws_region,
+                settings.bedrock_project_id, 1,
+            )  # fmt: skip
+            if hasattr(db, "connection"):
+                costs = TranslationCosts(db, str(run_id))
+                # Runs made outside the console have no cost record; theirs counts toward the cap.
+                costs.initialize(None, capped=True)
+                metered = agent.override(
+                    model=CostedModel(agent.model, costs, model, settings.aws_region, "translate")
+                )
+            else:
+                metered = agent.override()
+            try:
+                with metered, request_scope(insight_id):
+                    result = agent.run_sync(request_text(survey))
+                items = english_items(survey, result.output)
+            except (HTTPException, CostRefused):
+                raise
+            except Exception as error:
+                logger.warning("survey_translation_failed: %s: %s", type(error).__name__, error)
+                raise HTTPException(502, f"Translation failed ({type(error).__name__})") from None
+            return db.save_translation(key, "en-IN", items, str(run_id), model.model_id)
+
+        return database_call(make)
 
     @app.get("/api/jobs")
     def jobs():

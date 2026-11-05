@@ -424,6 +424,14 @@ function resultsTable(summary,rows) {
   return el('div',{},el('div',{class:'table-scroll'},table),more);
 }
 
+// The stored English version of a saved survey, or a new one (a paid model call that
+// view-only sessions and the offline demo cannot make). Null when neither is possible.
+async function englishVersion(runId,insightId) {
+  const path=`/runs/${runId}/results/${encodeURIComponent(insightId)}/english`;
+  try { return await details.api(path); }
+  catch { try { return await details.api(path,{method:'POST'}); } catch { return null; } }
+}
+
 async function showDetail(panel,runId,insightId) {
   details.renew();
   const signal=details.signal;
@@ -441,8 +449,15 @@ async function showDetail(panel,runId,insightId) {
       el('p',{class:'small muted'},[insight.asset?.name,words(insight.concern),insight.conversation_language,when(insight.created_at)].filter(Boolean).join(' · ')),
     ];
     if (survey?.items?.length) {
-      const host=el('div',{class:'survey-player'});
-      mountSurveyPlayer(host,{survey,session:{phase:'questions',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
+      const host=el('div',{class:'survey-player'}), session={phase:'questions',question:0,answers:{}};
+      const mount=translation=>mountSurveyPlayer(host,{survey,session,translation,photoUrl:'/static/assets/mustard-field.webp'});
+      mount(null);
+      // Saved runs keep only the farmer's language. The English version comes from the
+      // console (made once per survey); when it arrives the phone gains its language switch
+      // and keeps the reviewer's place and answers.
+      if (!String(survey.language || '').startsWith('en')) englishVersion(runId,insightId).then(english=>{
+        if (english && !signal.aborted && host.isConnected) mount(english);
+      });
       sections.push(el('h3',{},outcome.survey?'Survey preview':'Rejected draft'),el('figure',{class:'phone-stage'},host,el('figcaption',{},'Preview only · answers are not sent')),addToReviewList(runId,insightId,survey));
     }
     sections.push(
