@@ -276,7 +276,10 @@ def create_app(
     lifespan=None,
     agent_invoker=None,
     speaker=None,
-    viewer_voice_lines_per_hour: int = 60,
+    # One demo survey is about 5 new lines, twice that with the English switch, so 300 covers a
+    # busy hour of demos; a cached replay is free. ElevenLabs bills per character: at about 100
+    # characters a line (an estimate), the cap spends at most ~30,000 characters an hour.
+    viewer_voice_lines_per_hour: int = 300,
     translation_agent=build_agent,
 ) -> FastAPI:
     settings = settings or Settings()
