@@ -16,6 +16,8 @@ RUNS_URL = (
     "?branch=main&per_page=20"
 )
 REFRESH_SECONDS = 90
+ACTIVE_REFRESH_SECONDS = 15
+QUOTA_RESERVE = 5
 MAX_BODY_BYTES = 1_000_000
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 
@@ -112,6 +114,7 @@ class DeploymentStatus:
         self.wall_clock = wall_clock
         self._lock = asyncio.Lock()
         self._next_refresh = 0.0
+        self._fresh_until = 0.0
         self._run: Run | None = None
         self._failures = 0
 
@@ -125,7 +128,7 @@ class DeploymentStatus:
                 if self.clock() >= self._next_refresh:
                     await self._refresh()
         run = self._run
-        if run is None:
+        if run is None or self.clock() >= self._fresh_until:
             return {"state": "unknown"}
         state = run.state
         if state == "success":
@@ -166,12 +169,35 @@ class DeploymentStatus:
                         if len(body) > MAX_BODY_BYTES:
                             raise ValueError("Workflow response too large")
                     self._run = latest_run(json.loads(body))
+                    delay, fresh_for = self._refresh_delay(response.headers)
             self._failures = 0
+            self._fresh_until = self.clock() + fresh_for
         except (httpx.HTTPError, TimeoutError, ValueError, UnicodeError, TypeError):
             self._run = None
             self._failures = min(self._failures + 1, 6)
             delay = max(delay, min(3600, REFRESH_SECONDS * 2 ** (self._failures - 1)))
         self._next_refresh = self.clock() + delay
+
+    def _refresh_delay(self, headers: httpx.Headers) -> tuple[float, float]:
+        try:
+            limit = int(headers["x-ratelimit-limit"])
+            remaining = int(headers["x-ratelimit-remaining"])
+            reset_in = int(headers["x-ratelimit-reset"]) - self.wall_clock()
+            if limit != 60 or not 0 <= remaining < limit or not 0 < reset_in <= 3600:
+                raise ValueError("Invalid anonymous quota")
+        except (KeyError, ValueError):
+            return REFRESH_SECONDS, REFRESH_SECONDS
+        interval = (
+            ACTIVE_REFRESH_SECONDS
+            if self._run.state in {"queued", "running"}
+            else REFRESH_SECONDS
+        )
+        if remaining <= QUOTA_RESERVE:
+            return max(interval, reset_in + 1), interval
+        # Spread the remaining requests across the entire quota window. Quiet periods
+        # leave room for 15s checks; continuous activity stays within the shared budget.
+        delay = max(interval, reset_in / (remaining - QUOTA_RESERVE))
+        return delay, max(interval, min(delay, REFRESH_SECONDS))
 
     def _retry_delay(self, headers: httpx.Headers) -> float:
         delays = [0.0]

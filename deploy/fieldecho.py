@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import fcntl
+import http.client
 import json
 import os
 import re
@@ -23,6 +24,86 @@ ROOT = Path("/opt/dg37")
 PROJECT = "dg37-explorer-cloud"
 AUTH_ENV = ("MEL_AUTH_DOMAIN", "MEL_AUTH_CLIENT_ID", "MEL_AUTH_ISSUER", "MEL_CONSOLE_URL")
 HOST_DEADLINE = None
+LEGACY_PROXY = """events {}
+http {
+  server {
+    listen 80 default_server;
+    location / {
+      proxy_pass http://127.0.0.1:8877;
+      proxy_set_header Host $host;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+  }
+}
+"""
+INCLUDED_PROXY_ROOT = """user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+events { worker_connections 1024; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /var/log/nginx/access.log combined;
+    sendfile on;
+    include /etc/nginx/conf.d/*.conf;
+}
+"""
+INCLUDED_PROXY_SITE = """server {
+    listen 80 default_server;
+    server_name _;
+    server_tokens off;
+    client_max_body_size 2m;
+    auth_basic off;
+    auth_basic_user_file /etc/nginx/dg37.htpasswd;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    location / {
+        proxy_pass http://127.0.0.1:8877;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 120s;
+    }
+}
+"""
+MAINTENANCE_LOCATIONS = """    location = /__fieldecho_maintenance__ {
+      error_page 503 =503 @maintenance;
+      return 503;
+    }
+    location @maintenance {
+      default_type text/html;
+      add_header Cache-Control "no-store" always;
+      add_header Retry-After "10" always;
+      return 503 '<!doctype html><html lang="en"><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>Field Echo temporarily unavailable</title><body><main>
+        <h1>Field Echo is temporarily unavailable</h1>
+        <p>A site update may be in progress. Please try again shortly.</p>
+        <p>If you already have Field Echo open, leave that tab open to keep your work.</p>
+        <p><a href="/">Try again</a></p></main></body></html>';
+    }
+"""
+MAINTENANCE_PROXY = LEGACY_PROXY.replace(
+    "      proxy_pass",
+    "      error_page 502 503 504 =503 @maintenance;\n      proxy_pass",
+).replace("    location / {", MAINTENANCE_LOCATIONS + "    location / {")
+MAINTENANCE_SITE = INCLUDED_PROXY_SITE.replace(
+    "        proxy_pass",
+    "        error_page 502 503 504 =503 @maintenance;\n        proxy_pass",
+).replace(
+    "    location / {",
+    MAINTENANCE_LOCATIONS.replace(
+        '      add_header Retry-After "10" always;',
+        '      add_header X-Content-Type-Options "nosniff" always;\n'
+        '      add_header Referrer-Policy "same-origin" always;\n'
+        '      add_header Retry-After "10" always;',
+    )
+    + "    location / {",
+)
 
 
 class ActivationInterrupted(RuntimeError):
@@ -295,6 +376,77 @@ def read_live_policy(root):
     if type(value) is not bool:
         raise ValueError("live policy must contain one JSON boolean")
     return value
+
+
+def read_proxy_config(path):
+    metadata = path.lstat()
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or metadata.st_mode & 0o022
+    ):
+        raise ValueError("proxy must be an operator-owned regular file")
+    return path.read_text()
+
+
+def prepare_maintenance_proxy(root, path=Path("/etc/nginx/nginx.conf")):
+    original = read_proxy_config(path)
+    staged = root / "nginx.maintenance.conf"
+    validation = staged
+    desired = MAINTENANCE_PROXY
+    backup = root / "nginx.before-maintenance.conf"
+    if original == INCLUDED_PROXY_ROOT:
+        directory = path.parent / "conf.d"
+        path = directory / "dg37.conf"
+        if directory.is_symlink() or set(directory.glob("*.conf")) != {path}:
+            raise ValueError("included proxy must have exactly the managed dg37 site")
+        original = read_proxy_config(path)
+        if original not in (INCLUDED_PROXY_SITE, MAINTENANCE_SITE):
+            raise ValueError("custom site requires a separate reviewed maintenance configuration")
+        desired = MAINTENANCE_SITE
+        backup = root / "nginx.site.before-maintenance.conf"
+        validation = root / "nginx.maintenance-root.conf"
+        atomic_write(
+            validation,
+            INCLUDED_PROXY_ROOT.replace(
+                "include /etc/nginx/conf.d/*.conf;", "include " + json.dumps(str(staged)) + ";"
+            ),
+        )
+    elif original not in (LEGACY_PROXY, MAINTENANCE_PROXY):
+        raise ValueError("custom proxy requires a separate reviewed maintenance configuration")
+    if not backup.exists():
+        atomic_write(backup, original)
+    atomic_write(staged, desired)
+    command(["nginx", "-t", "-c", str(validation)])
+    atomic_write(path, desired)
+    try:
+        # Reload even on exact replay: a prior process may have died after the write.
+        command(["systemctl", "reload", "nginx"])
+        probe_maintenance_proxy()
+    except Exception:
+        atomic_write(path, original)
+        raise
+
+
+def probe_maintenance_proxy(port=80):
+    for _ in range(20):
+        connection = http.client.HTTPConnection("127.0.0.1", port, timeout=1)
+        try:
+            connection.request("GET", "/__fieldecho_maintenance__")
+            response = connection.getresponse()
+            if (
+                response.status == 503
+                and response.getheader("Cache-Control") == "no-store"
+                and response.getheader("Retry-After") == "10"
+                and b"Field Echo is temporarily unavailable" in response.read(4096)
+            ):
+                return
+        except (OSError, http.client.HTTPException):
+            pass
+        finally:
+            connection.close()
+        time.sleep(0.1)
+    raise ValueError("maintenance proxy did not become ready before application stop")
 
 
 def render_compose(current, image, live=False):
@@ -797,6 +949,7 @@ class DockerHost:
             "from pathlib import Path; files=list(Path('migrations').glob('*.sql')); "
             "assert files; assert all(p.read_bytes() for p in files)",
         )
+        prepare_maintenance_proxy(self.root)
 
     def live_preflight(self, release):
         self.run_image(
