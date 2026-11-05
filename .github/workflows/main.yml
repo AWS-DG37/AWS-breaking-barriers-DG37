@@ -48,7 +48,7 @@ jobs:
           uv python install 3.9
           uv run --no-project --python 3.9 python -I deploy/fieldecho.py --help
       - name: Build exact checkout with locked runtime dependencies
-        run: docker build --platform linux/amd64 --label org.opencontainers.image.revision="$GITHUB_SHA" -t fieldecho:tested .
+        run: docker build --platform linux/amd64 --build-arg FIELDECHO_REVISION="$GITHUB_SHA" --label org.opencontainers.image.revision="$GITHUB_SHA" -t fieldecho:tested .
       - name: Smoke the built image offline
         env:
           FIELDECHO_BROWSER_URL: http://127.0.0.1:8879
@@ -59,6 +59,8 @@ jobs:
             -e AWS_EC2_METADATA_DISABLED=true -e MEL_DATABASE_HOST=127.0.0.1 \
             -e MEL_DATABASE_SSLMODE=disable --entrypoint mel-explorer \
             fieldecho:tested --host 127.0.0.1 --port 8879 --no-live
+          test "$(docker exec fieldecho-smoke cat /app/REVISION)" = "$GITHUB_SHA"
+          test "$(docker image inspect fieldecho:tested --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$GITHUB_SHA"
           uv run pytest -q tests/test_fieldecho_browser.py
       - name: Save the tested image
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'

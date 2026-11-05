@@ -196,7 +196,7 @@ details[open] summary {
   z-index:5;
 }
 .skip:focus {
-  top:8px;
+  top:calc(8px + var(--deployment-banner-height,0px));
 }
 .masthead {
   height:88px;
@@ -818,7 +818,7 @@ form h2+p {
 .gen-step-number { display:inline-grid; place-items:center; width:22px; height:22px; border-radius:50%; background:var(--green); color:white; font-size:12px; }
 .gen-step label { margin-top:10px; }
 .gen-filters, .gen-row { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
-.gen-side { display:flex; flex-direction:column; gap:28px; position:sticky; top:16px; }
+.gen-side { display:flex; flex-direction:column; gap:28px; position:sticky; top:calc(16px + var(--deployment-banner-height,0px)); }
 .gen-plan { border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
 .gen-plan h2 { margin-bottom:10px; }
 .gen-estimate { margin:0 0 14px; }
@@ -846,7 +846,7 @@ button.metric[aria-pressed=true] { border-color:var(--green); box-shadow:inset 0
    results list scrolls with the page. A sticky pane cannot pass the end of its
    container, so the run page's bottom padding matches the pane's 16px top gap. */
 .generate:has(> .gen-run) { padding-bottom:16px; }
-.gen-detail { position:sticky; top:16px; border-left:1px solid var(--line); padding-left:28px; padding-right:8px; min-width:0; max-height:calc(100vh - 32px); overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
+.gen-detail { position:sticky; top:calc(16px + var(--deployment-banner-height,0px)); border-left:1px solid var(--line); padding-left:28px; padding-right:8px; min-width:0; max-height:calc(100vh - 32px - var(--deployment-banner-height,0px)); overflow-y:auto; overscroll-behavior:contain; scrollbar-gutter:stable; }
 .gen-detail h3 { margin-top:20px; font-size:15px; color:var(--purple-ink); }
 .gen-detail-head { display:flex; align-items:center; gap:12px; justify-content:space-between; }
 .gen-steps { list-style:none; padding:0; margin:8px 0 0; }
@@ -878,7 +878,7 @@ button.metric[aria-pressed=true] { border-color:var(--green); box-shadow:inset 0
 /* Configure */
 .configure { padding:32px 40px 48px; max-width:1600px; margin:auto; }
 .cfg { display:grid; grid-template-columns:260px minmax(0,1fr); gap:40px; align-items:start; }
-.cfg-list { position:sticky; top:16px; }
+.cfg-list { position:sticky; top:calc(16px + var(--deployment-banner-height,0px)); }
 .cfg-list h2 { margin-bottom:10px; }
 .cfg-list details { margin-top:12px; }
 .cfg-item { display:flex; flex-direction:column; gap:2px; padding:10px 12px; border-radius:10px; text-decoration:none; color:var(--ink); margin-bottom:4px; border:1px solid transparent; }
@@ -976,7 +976,7 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .demo-controls > label { margin:0; }
 .demo-verifier { font-weight:400; }
 .demo-layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; align-items:start; }
-.demo-phone-col { position:sticky; top:12px; }
+.demo-phone-col { position:sticky; top:calc(12px + var(--deployment-banner-height,0px)); }
 /* No survey on screen (before a run, while it runs, or no follow-up): the controls, story and
    steps use the full width instead of leaving an empty phone column. */
 .demo-layout:has(> .demo-phone-col:empty) { grid-template-columns:minmax(0,1fr); }
