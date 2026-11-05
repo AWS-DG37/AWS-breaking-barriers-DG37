@@ -3,7 +3,8 @@
 Request payload (JSON):
   {"insight": {...one insight row...},
    "generator": "<model id>", "verifier": "<model id>",      optional, allowlisted in service.py
-   "pipeline": "direct" | "translate", "max_retries": 0-2}    optional
+   "pipeline": "direct" | "translate", "max_retries": 0-2,    optional
+   "verifier_effort": "low" | "medium" | "high"}              optional, unset = model default
   {"action": "options"}  returns the allowed models and defaults
 
 Response: {"ok": true, "result": {...}} or {"ok": false, "error": "..."}.
@@ -45,6 +46,7 @@ def invoke(payload, context=None):
             payload.get("pipeline", "direct"),
             payload.get("translator"),
             payload.get("max_retries", 1),
+            payload.get("verifier_effort"),
         )
     except service.BadRequest as error:
         return {"ok": False, "error": str(error)}

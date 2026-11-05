@@ -29,6 +29,8 @@ GENERATORS = (
 VERIFIERS = ("global.anthropic.claude-sonnet-5-5", "global.anthropic.claude-haiku-5-5")
 TRANSLATORS = (DEFAULT_TRANSLATOR,)
 PIPELINES = ("direct", "translate")
+# Effort levels the console may ask for on the verifier. None leaves the model's default.
+VERIFIER_EFFORTS = ("low", "medium", "high")
 MAX_RETRIES = 2
 
 REQUIRED_FIELDS = (
@@ -51,6 +53,7 @@ def options():
         "verifiers": list(VERIFIERS),
         "translators": list(TRANSLATORS),
         "pipelines": list(PIPELINES),
+        "verifier_efforts": list(VERIFIER_EFFORTS),
         "defaults": {
             "generator": DEFAULT_GENERATOR,
             "verifier": DEFAULT_VERIFIER,
@@ -90,7 +93,13 @@ def decide_only(insight):
 
 
 def generate_survey(
-    insight, generator=None, verifier=None, pipeline="direct", translator=None, max_retries=1
+    insight,
+    generator=None,
+    verifier=None,
+    pipeline="direct",
+    translator=None,
+    max_retries=1,
+    verifier_effort=None,
 ):
     """Run one insight through the pipeline and return the result dict."""
     _check_insight(insight)
@@ -104,10 +113,24 @@ def generate_survey(
         raise BadRequest("max_retries must be a whole number") from None
     if not 0 <= max_retries <= MAX_RETRIES:
         raise BadRequest(f"max_retries must be between 0 and {MAX_RETRIES}")
-    result = run_pipeline(insight, generator, verifier, pipeline, translator, max_retries)
+    if verifier_effort is not None and verifier_effort not in VERIFIER_EFFORTS:
+        raise BadRequest(
+            f"verifier_effort '{verifier_effort}' is not allowed. "
+            f"Choose one of: {', '.join(VERIFIER_EFFORTS)}"
+        )
+    result = run_pipeline(
+        insight,
+        generator,
+        verifier,
+        pipeline,
+        translator,
+        max_retries,
+        verifier_effort=verifier_effort,
+    )
     result["models"] = {
         "generator": generator,
         "verifier": verifier,
+        "verifier_effort": verifier_effort,
         "translator": translator if pipeline == "translate" else None,
     }
     return result

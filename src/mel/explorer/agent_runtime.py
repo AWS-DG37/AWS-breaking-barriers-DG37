@@ -46,6 +46,7 @@ class AgentRun(StrictModel):
     verifier: str | None = Field(default=None, max_length=120)
     pipeline: Literal["direct", "translate"] = "direct"
     max_retries: int = Field(default=1, ge=0, le=2)
+    verifier_effort: Literal["low", "medium", "high"] | None = None
 
 
 class AgentRuntime:
@@ -221,6 +222,7 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
                     "verifier": value.verifier,
                     "pipeline": value.pipeline,
                     "max_retries": value.max_retries,
+                    "verifier_effort": value.verifier_effort,
                 }
             )
             record = {"status": "done", "result": result, "expected": row.get("expected")}
