@@ -89,7 +89,7 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
 <div class="wrap">
 <div class="scroll">
 <svg id="deployment" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img"
-  aria-label="Field Echo deployment on AWS. Console users reach fieldecho.org through Amazon CloudFront, which forwards to one Amazon EC2 t3.small instance through a private VPC origin. The instance runs Docker Compose with nginx, the MEL Console container and a PostgreSQL 16 container. The MEL agent graph decides, generates, checks the schema, reviews and hands off a survey, with at most one redraft. Amazon Cognito handles sign-in. The agent graph calls Amazon Bedrock models from OpenAI, Anthropic and Amazon. GitHub Actions on main assumes an IAM OIDC role, pushes the image to Amazon ECR and deploys through AWS Systems Manager Run Command.">
+  aria-label="Field Echo deployment on AWS. Console users reach fieldecho.org through Amazon CloudFront, which forwards to one Amazon EC2 t3.small instance through a private VPC origin. The instance runs Docker Compose with nginx, the MEL Console container and a PostgreSQL 16 container. The MEL agent graph decides, generates, checks the schema, reviews and hands off a survey, with at most one redraft. Amazon Cognito handles sign-in. The agent graph calls Amazon Bedrock models from OpenAI, Anthropic, Amazon and Google. The console's Agents tab invokes the Strands survey agents on Amazon Bedrock AgentCore Runtime, which gate, generate, check and verify a survey with up to two redrafts, call Bedrock models and log to Amazon CloudWatch. GitHub Actions on main assumes an IAM OIDC role, pushes the image to Amazon ECR, deploys through AWS Systems Manager Run Command, and releases the agent code to AgentCore through an Amazon S3 CodeZip.">
   <style>
     /* Light (MEL Console) tokens by default. Dark (Field Echo deck) tokens with class
        ad-dark, an explicit dark page theme, or a dark system theme. ad-embed hides the
@@ -127,6 +127,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
     #deployment .ad-g-ec2 { fill: none; stroke: var(--ad-ec2); stroke-width: 1.5; }
     #deployment .ad-card { fill: var(--ad-card); stroke: var(--ad-card-line); stroke-width: 1.5; }
     #deployment .ad-panel { fill: var(--ad-panel); stroke: var(--ad-panel-line); stroke-width: 1.5; }
+    #deployment .ad-g-ml { fill: var(--ad-panel); stroke: #01A88D; stroke-width: 1.5; }  /* AWS ML group color */
+    #deployment .ad-divider { stroke: var(--ad-card-line); stroke-width: 1; }
     #deployment .ad-mono { filter: var(--ad-mono-filter); }
     #deployment .ad-accent { fill: var(--ad-accent); }
     #deployment .ad-eyebrow { font: 600 14px var(--ad-font); letter-spacing: .12em; fill: var(--ad-green); }
@@ -252,20 +254,39 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   <text class="ad-edge" x="433" y="348" text-anchor="middle">private</text>
 
   <!-- Right: Cognito, Bedrock -->
-  <line class="ad-w" x1="1204" y1="300" x2="1382" y2="300" marker-end="url(#ad-arrow)"/>
-  <text class="ad-edge" x="1306" y="290" text-anchor="middle">sign-in</text>
-  <text class="ad-edge" x="1306" y="318" text-anchor="middle">OAuth code + PKCE</text>
-  <image href="assets/aws-icons/AmazonCognito.svg" x="1388" y="268" width="64" height="64"/>
-  <text class="ad-lbl" x="1420" y="362" text-anchor="middle">Amazon Cognito</text>
-  <text class="ad-sub" x="1420" y="381" text-anchor="middle">fieldecho user pool</text>
+  <line class="ad-w" x1="1204" y1="278" x2="1382" y2="278" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1306" y="268" text-anchor="middle">sign-in</text>
+  <text class="ad-edge" x="1306" y="296" text-anchor="middle">OAuth code + PKCE</text>
+  <image href="assets/aws-icons/AmazonCognito.svg" x="1388" y="246" width="64" height="64"/>
+  <text class="ad-lbl" x="1420" y="340" text-anchor="middle">Amazon Cognito</text>
+  <text class="ad-sub" x="1420" y="359" text-anchor="middle">fieldecho user pool</text>
 
-  <line class="ad-w" x1="1174" y1="470" x2="1382" y2="470" marker-end="url(#ad-arrow)"/>
-  <text class="ad-edge" x="1306" y="460" text-anchor="middle">model calls</text>
-  <text class="ad-edge" x="1306" y="488" text-anchor="middle">write and review</text>
-  <image href="assets/aws-icons/AmazonBedrock.svg" x="1388" y="438" width="64" height="64"/>
-  <text class="ad-lbl" x="1420" y="532" text-anchor="middle">Amazon Bedrock</text>
-  <text class="ad-sub" x="1420" y="551" text-anchor="middle">models from</text>
-  <text class="ad-sub" x="1420" y="568" text-anchor="middle">OpenAI · Anthropic · Amazon</text>
+  <line class="ad-w" x1="1174" y1="430" x2="1382" y2="430" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1306" y="420" text-anchor="middle">model calls</text>
+  <text class="ad-edge" x="1306" y="448" text-anchor="middle">write and review</text>
+  <image href="assets/aws-icons/AmazonBedrock.svg" x="1388" y="398" width="64" height="64"/>
+  <text class="ad-lbl" x="1420" y="492" text-anchor="middle">Amazon Bedrock</text>
+  <text class="ad-sub" x="1420" y="511" text-anchor="middle">models from</text>
+  <text class="ad-sub" x="1420" y="528" text-anchor="middle">OpenAI · Anthropic · Amazon · Google</text>
+
+  <!-- AgentCore: the Strands survey agents the console's Agents tab runs -->
+  <line class="ad-w" x1="1200" y1="600" x2="1306" y2="600" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1236" y="590">Agents tab</text>
+  <text class="ad-edge" x="1236" y="618">invoke</text>
+  <line class="ad-w" x1="1428" y1="574" x2="1428" y2="540" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1436" y="562">model calls</text>
+  <rect class="ad-g-ml" x="1310" y="576" width="236" height="244" rx="8"/>
+  <image href="assets/aws-icons/AmazonBedrockAgentCore.svg" x="1310" y="576" width="32" height="32"/>
+  <text class="ad-grp" x="1352" y="598">Bedrock AgentCore</text>
+  <text class="ad-grp-sub" x="1326" y="628">Runtime · Strands survey agents</text>
+  <text class="ad-step" x="1326" y="656">1  Gate: rules in code</text>
+  <text class="ad-step" x="1326" y="678">2  Generate the survey</text>
+  <text class="ad-step" x="1326" y="700">3  Code checks</text>
+  <text class="ad-step" x="1326" y="722">4  Verify with a second model</text>
+  <text class="ad-loop-lbl" x="1326" y="746">Blocking issues: redraft, up to 2</text>
+  <line class="ad-divider" x1="1326" y1="764" x2="1530" y2="764"/>
+  <image href="assets/aws-icons/AmazonCloudWatch.svg" x="1326" y="776" width="28" height="28"/>
+  <text class="ad-sub" x="1364" y="795">Logs in Amazon CloudWatch</text>
 
   <!-- Delivery -->
   <image class="ad-mono" href="assets/aws-icons/GitRepository.svg" x="113" y="690" width="64" height="64"/>
@@ -296,6 +317,14 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   <line class="ad-w" x1="912" y1="692" x2="912" y2="634" marker-end="url(#ad-arrow)"/>
   <text class="ad-edge" x="922" y="670">3 · deploy, roll back on failure</text>
 
+  <path class="ad-w" d="M912,830 H1178 V762" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1045" y="822" text-anchor="middle">4 · agent code release</text>
+  <image href="assets/aws-icons/AmazonSimpleStorageService.svg" x="1150" y="700" width="56" height="56"/>
+  <text class="ad-lbl" x="1216" y="722">Amazon S3</text>
+  <text class="ad-sub" x="1216" y="741">CodeZip</text>
+  <path class="ad-w" d="M1178,696 V680 H1306" marker-end="url(#ad-arrow)"/>
+  <text class="ad-edge" x="1188" y="670">update runtime</text>
+
   <text class="ad-meta" x="1560" y="889" text-anchor="end">Checked against the AWS account on 5 Nov 2026</text>
 </svg>
 </div>
@@ -304,7 +333,8 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   <h2>What this shows, and what it leaves out</h2>
   <ul>
     <li>The diagram shows the AWS resources that run today. It shows the delivery path because every merge to <code>main</code> uses it.</li>
-    <li>The MEL agent calls Amazon Bedrock to write and review surveys, under the console spend cap. The host role allows three models: OpenAI GPT-6 Luna (Responses API), Anthropic Claude Haiku 4.5 and Amazon Nova Lite (Converse API).</li>
+    <li>Two agent paths call Amazon Bedrock. The MEL agent graph runs inside the console on EC2, under the console spend cap; the host role allows OpenAI GPT-6 Luna (Responses API), Anthropic Claude Haiku 4.5 and Amazon Nova Lite (Converse API). The Agents tab invokes the Strands survey agents on Bedrock AgentCore Runtime (<code>FieldEchoAgentCore_melSurveyAgent</code>); its role allows Anthropic Claude and OpenAI GPT generators, Claude verifiers and the Google Gemma translator.</li>
+    <li>Every merge to <code>main</code> also releases the agent code: CI uploads an exact-SHA CodeZip to S3 and updates the AgentCore runtime (<code>deploy/agentcore.py</code>).</li>
     <li><code>template.yaml</code> describes a larger serverless stack (Lambda, API Gateway, Fargate, RDS, S3). That stack is not deployed, so it is not on the diagram.</li>
     <li>The voice survey runs on GitHub Pages with ElevenLabs recordings. It does not use AWS.</li>
     <li>Slide exports: <a href="aws-deployment.png">light</a> and <a href="aws-deployment-dark.png">dark</a>. The dark version is also slide 4 of the <a href="https://fieldecho.org/talk/#4">team talk</a>. Add <code>#dark</code> or <code>#light</code> to this page's address to force a theme. Update steps are in a comment at the top of this file.</li>
