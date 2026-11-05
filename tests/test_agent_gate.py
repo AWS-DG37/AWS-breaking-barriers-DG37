@@ -48,7 +48,7 @@ def model(monkeypatch):
         classifier_says = '{"rule": "R8", "reason": "Real advice to check."}'
         calls = []
 
-        def __call__(self, role, model_id, system, user):
+        def __call__(self, role, model_id, system, user, effort=None):
             self.calls.append((role, model_id, user))
             text = {
                 "classify": self.classifier_says,

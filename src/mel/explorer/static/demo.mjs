@@ -28,11 +28,14 @@ export const GATES = [
   {id:'rules', label:'Follow-up rules · instant'},
   {id:'classifier', label:'Classifier agent · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
 ];
-// The checker reviews the survey and writes an English reading of each question. On the live
-// console (2026-11-05) Sonnet took about 14 s a check; Haiku is the faster choice to show.
+// The checker reviews the survey and writes an English reading of each question. Haiku is not
+// faster here: timed on the live console (2026-11-05, Opus writing), Sonnet checked in 9-11 s
+// and Haiku in 11-12 s, because Haiku writes about 40% more. It also scored relevance lower.
+// Sonnet runs at its default effort (high) unless `effort` asks for less thinking.
 export const CHECKERS = [
   {id:'thorough', label:'Thorough · Claude Sonnet 5.5', model:'global.anthropic.claude-sonnet-5-5', name:'Claude Sonnet 5.5'},
-  {id:'fast', label:'Faster · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
+  {id:'sonnet-low', label:'Low effort · Claude Sonnet 5.5', model:'global.anthropic.claude-sonnet-5-5', effort:'low', name:'Claude Sonnet 5.5 (low effort)'},
+  {id:'fast', label:'Smaller model · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
 ];
 const RULE_TEXT = {
   R1:'This was not a real farming conversation (a greeting, or a message that could not be understood), so there is nothing to follow up on.',
@@ -198,7 +201,7 @@ async function start() {
     const clock=setInterval(()=>{ if(!alive()) return clearInterval(clock); write.querySelector('p').textContent=`${Math.round((Date.now()-started)/1000)} s`; },1000);
     let record;
     try {
-      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:checker.model,pipeline:'direct',max_retries:1,...choice},runs);
+      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:checker.model,...(checker.effort?{verifier_effort:checker.effort}:{}),pipeline:'direct',max_retries:1,...choice},runs);
     } finally { clearInterval(clock); }
     if (!alive()) return;
     const r=record.result, seconds=Math.round((Date.now()-started)/1000);

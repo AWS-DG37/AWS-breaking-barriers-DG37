@@ -48,6 +48,7 @@ class AgentRun(StrictModel):
     gate: Literal["rules", "classifier"] = "rules"
     classifier: str | None = Field(default=None, max_length=120)
     max_retries: int = Field(default=1, ge=0, le=2)
+    verifier_effort: Literal["low", "medium", "high"] | None = None
 
 
 class AgentRuntime:
@@ -227,6 +228,7 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
                     "max_retries": value.max_retries,
                     "gate": value.gate,
                     "classifier": value.classifier,
+                    "verifier_effort": value.verifier_effort,
                 }
             )
             record = {"status": "done", "result": result, "expected": row.get("expected")}

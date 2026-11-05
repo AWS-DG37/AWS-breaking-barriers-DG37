@@ -61,11 +61,14 @@ def demo():
             server.shutdown()
 
 
-@pytest.mark.parametrize("choice,model,name", [
-    (None, "global.anthropic.claude-sonnet-5-5", "Claude Sonnet 5.5"),
-    ("Faster · Claude Haiku 5.5", "global.anthropic.claude-haiku-5-5", "Claude Haiku 5.5"),
+@pytest.mark.parametrize("choice,model,effort,name", [
+    (None, "global.anthropic.claude-sonnet-5-5", None, "Claude Sonnet 5.5"),
+    ("Low effort · Claude Sonnet 5.5", "global.anthropic.claude-sonnet-5-5", "low",
+     "Claude Sonnet 5.5 (low effort)"),
+    ("Smaller model · Claude Haiku 5.5", "global.anthropic.claude-haiku-5-5", None,
+     "Claude Haiku 5.5"),
 ])
-def test_demo_runs_the_chosen_checker_and_names_it(demo, choice, model, name):
+def test_demo_runs_the_chosen_checker_and_names_it(demo, choice, model, effort, name):
     page, started = demo
     checker = page.get_by_label("Checker")
     if choice:
@@ -75,6 +78,7 @@ def test_demo_runs_the_chosen_checker_and_names_it(demo, choice, model, name):
         f"approved by {name}", timeout=15000
     )
     assert started[-1]["verifier"] == model
+    assert started[-1].get("verifier_effort") == effort
     assert started[-1]["generator"] == "global.anthropic.claude-opus-5-5"
     assert "gate" not in started[-1]
 

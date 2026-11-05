@@ -58,8 +58,11 @@ WORDING_CHECKS = {"language", "language_ok", "voice", "voice_ok", "fidelity", "f
 STAGES = ("classify", "generate", "translate", "verify")
 
 
-def _call(role, model_id, system, user):
-    """One model call through Strands. Returns (text, input_tokens, output_tokens, seconds)."""
+def _call(role, model_id, system, user, effort=None):
+    """One model call through Strands. Returns (text, input_tokens, output_tokens, seconds).
+
+    effort (low / medium / high) is sent as output_config.effort. It mostly sets how much the
+    model thinks before answering; unset, the model's own default applies (Sonnet 5.5: high)."""
     from strands import Agent
     from strands.models import BedrockModel
     env_cap = {"generate": "MAX_TOKENS", "verify": "VERIFIER_MAX_TOKENS",
@@ -68,6 +71,8 @@ def _call(role, model_id, system, user):
               "max_tokens": int(os.environ.get(env_cap, "8000"))}
     if role == "generate" and os.environ.get("TEMPERATURE"):
         kwargs["temperature"] = float(os.environ["TEMPERATURE"])
+    if effort:
+        kwargs["additional_request_fields"] = {"output_config": {"effort": effort}}
     started = time.monotonic()
     result = Agent(model=BedrockModel(**kwargs), system_prompt=system, callback_handler=None)(user)
     seconds = time.monotonic() - started
@@ -96,7 +101,7 @@ def gate_decision(insight, gate="rules", classifier=DEFAULT_CLASSIFIER, call=Non
 
 def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct",
                  translator=DEFAULT_TRANSLATOR, max_retries=1, use_translation_cache=True,
-                 gate="rules", classifier=DEFAULT_CLASSIFIER):
+                 gate="rules", classifier=DEFAULT_CLASSIFIER, verifier_effort=None):
     """Run ONE insight through the chosen pipeline. Returns a result dict."""
     started = time.monotonic()
     stages = {s: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0} for s in STAGES}
@@ -109,8 +114,8 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
         "code_errors": [], "items": None, "items_en": None, "error": None, "stages": stages,
     }
 
-    def call(stage, model_id, system, user):
-        text, tin, tout, secs = _call(stage, model_id, system, user)
+    def call(stage, model_id, system, user, effort=None):
+        text, tin, tout, secs = _call(stage, model_id, system, user, effort)
         st = stages[stage]
         st["calls"] += 1; st["input_tokens"] += tin; st["output_tokens"] += tout
         st["seconds"] += secs
@@ -236,7 +241,8 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
                 continue
 
             # 4. Verify the final survey in the farmer's language
-            vraw = call("verify", verifier, vsys, build_verifier_user(vtpl, insight, final_items))
+            vraw = call("verify", verifier, vsys, build_verifier_user(vtpl, insight, final_items),
+                        verifier_effort)
             try:
                 verdict = parse_json(vraw)
             except json.JSONDecodeError:
