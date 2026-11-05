@@ -69,9 +69,48 @@ jobs:
           name: tested-image
           path: /tmp/fieldecho-image.tar
           retention-days: 1
+  agent-check:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - name: Install hash-locked Linux ARM64 runtime dependencies
+        run: |
+          python -m pip install --require-hashes --only-binary=:all: --target /tmp/agent-dependencies -r agents/requirements.lock
+      - name: Build exact-SHA CodeZip without datasets or runtime state
+        run: python deploy/agentcore.py build --sha "$GITHUB_SHA" --dependencies /tmp/agent-dependencies --package /tmp/agentcore.zip
+      - name: Test the packaged ARM64 entry point and offline rules
+        run: |
+          set -euo pipefail
+          mkdir /tmp/agent-smoke
+          python -m zipfile -e /tmp/agentcore.zip /tmp/agent-smoke
+          cd /tmp/agent-smoke
+          python -I - <<'PY'
+          import sys
+          sys.path.insert(0, '/tmp/agent-smoke')
+          from main import invoke
+          result = invoke({'action': 'options'})
+          assert result.get('ok') is True and isinstance(result.get('result'), dict), result
+          result = invoke({'action': 'decide', 'insight': {}})
+          assert result.get('ok') is False, result
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        with:
+          name: tested-agentcore
+          path: /tmp/agentcore.zip
+          retention-days: 1
   release:
     if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-    needs: check
+    needs: [check, agent-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
@@ -94,6 +133,10 @@ jobs:
         with:
           name: tested-image
           path: /tmp
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: tested-agentcore
+          path: /tmp
       - run: docker load -i /tmp/fieldecho-image.tar
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
         with:
@@ -109,5 +152,7 @@ jobs:
             docker tag fieldecho:tested "$REGISTRY:$GITHUB_SHA"
             docker push "$REGISTRY:$GITHUB_SHA"
           fi
+      - name: Update AgentCore only if this tested SHA is still main
+        run: python deploy/agentcore.py deploy --target deploy/agentcore-target.json --sha "$GITHUB_SHA" --package /tmp/agentcore.zip
       - name: Deploy only if this SHA is still main
         run: python deploy/fieldecho.py deploy --target deploy/target.json --sha "$GITHUB_SHA" --sequence "$GITHUB_RUN_NUMBER"
