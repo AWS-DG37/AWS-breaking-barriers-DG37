@@ -46,6 +46,7 @@
 }
 body {
   margin:0;
+  background:linear-gradient(180deg,#F5FAF6 0,white 420px) no-repeat;
   -webkit-font-smoothing:antialiased;
   text-rendering:optimizeLegibility;
 }
