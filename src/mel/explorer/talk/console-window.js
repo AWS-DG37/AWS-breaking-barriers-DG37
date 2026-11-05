@@ -18,10 +18,11 @@
   card.setAttribute('role', 'button');
   card.setAttribute('tabindex', '0');
   card.setAttribute('aria-label', 'Open the live MEL Console');
+  // Place the hint in the card's top-right corner, wherever the diagram puts the card.
   const hint = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   hint.setAttribute('class', 'ad-tag ad-live-hint');
-  hint.setAttribute('x', '806');
-  hint.setAttribute('y', '310');
+  hint.setAttribute('x', String(+box.getAttribute('x') + +box.getAttribute('width') - 14));
+  hint.setAttribute('y', String(+box.getAttribute('y') + 18));
   hint.setAttribute('text-anchor', 'end');
   hint.textContent = 'OPEN LIVE ↗';
   card.append(hint);
