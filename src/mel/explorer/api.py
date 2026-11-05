@@ -589,6 +589,15 @@ def create_app(
             raise HTTPException(404, "Result not found")
         return record
 
+    @app.get("/api/runs/{run_id}/results/{insight_id}/survey")
+    def run_survey(run_id: UUID, insight_id: str):
+        """The accepted survey alone, as the voice page loads it with ?survey=."""
+        record = database_call(lambda db: db.run_result(str(run_id), insight_id))
+        survey = (record or {}).get("outcome", {}).get("survey")
+        if survey is None:
+            raise HTTPException(404, "No accepted survey for this result")
+        return survey
+
     @app.get("/api/jobs")
     def jobs():
         return {"jobs": database_call(lambda db: db.list_jobs())}

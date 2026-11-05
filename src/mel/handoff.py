@@ -6,7 +6,7 @@ This constructs the handoff only. A downstream scheduler enforces it at dispatch
 from datetime import datetime, timedelta
 from uuid import NAMESPACE_URL, uuid5
 
-from mel.clock import IST
+from mel.clock import parse_ist
 
 # Assumption, pending Digital Green: the pack calls `farmerchat_flow` what FarmerChat
 # "needs to register" a survey flow, so the sender computes these IDs. Its sample IDs
@@ -17,6 +17,14 @@ from mel.clock import IST
 ID_NAMESPACE = NAMESPACE_URL
 CAMPAIGN_ID_NAME = "{campaign_name}"
 FLOW_ID_NAME = "{org_id}/{survey_id}"
+
+
+def without_channel(payload: dict, channel: str) -> dict:
+    """The handoff without one channel. The new last channel waits with no limit.
+    whatsapp is always in the order, so removing voice never leaves it empty."""
+    kept = [dict(entry) for entry in payload["channel_order"] if entry["channel"] != channel]
+    kept[-1]["wait_hours"] = None
+    return {**payload, "channel_order": kept}
 
 
 def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
@@ -43,7 +51,7 @@ def handoff(survey: dict, insight: dict, rules: dict, now: datetime) -> dict:
     flow = rules["farmerchat_flow"]
     return {
         "handoff_id": survey["survey_id"].replace("S-", "H-", 1),
-        "created_at": now.astimezone(IST).replace(microsecond=0).isoformat(),
+        "created_at": parse_ist(now).replace(microsecond=0).isoformat(),
         "survey": survey,
         "send_window": survey["send_window"],
         "send_hours": rules["send_hours"],

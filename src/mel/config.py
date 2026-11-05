@@ -111,6 +111,10 @@ class Settings(BaseSettings):
     auth_client_id: str | None = None
     auth_issuer: str | None = None  # https://cognito-idp.<region>.amazonaws.com/<pool id>
     console_url: str | None = None  # https://<distribution>.cloudfront.net, no trailing slash
+    # Survey speech (src/mel/voice.py): clips go to s3://<voice_bucket>/voice/audio/, and
+    # the secret holds the ElevenLabs key. Unset, no survey goes out on the voice channel.
+    voice_bucket: str | None = None
+    voice_key_secret_arn: str | None = None
     # The Strands survey agents (agents/) deployed on Bedrock AgentCore Runtime. Unset hides
     # live runs in the console's Agents view; saved sweep results still show.
     agent_runtime_arn: str | None = None

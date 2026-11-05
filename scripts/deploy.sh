@@ -64,6 +64,13 @@ UI_BUCKET="$(output UiBucketName)"
 STATIC=src/mel/explorer/static
 aws s3 sync "$STATIC" "s3://$UI_BUCKET/static" --delete --exclude '*.test.mjs' --exclude index.html
 aws s3 cp "$STATIC/index.html" "s3://$UI_BUCKET/index.html"
+# The voice page at /voice/index.html. /voice/audio/* comes from the data bucket, where
+# the worker adds the clips of each survey it accepts; seed it with the repository's clips.
+aws s3 sync docs/voice "s3://$UI_BUCKET/voice" --delete --exclude 'audio/*'
+aws s3 sync docs/participant-pack/json/scenarios "s3://$UI_BUCKET/participant-pack/json/scenarios" \
+  --delete --exclude '*' --include '*/survey.*.json'
+aws s3 sync docs/voice/audio "s3://$(output DataBucketName)/voice/audio" --exclude index.json \
+  --cache-control 'public, max-age=31536000, immutable'
 aws cloudfront create-invalidation --distribution-id "$(output UiDistributionId)" \
   --paths '/*' --query 'Invalidation.Id' --output text
 echo "Console: $(output ConsoleUrl)"

@@ -168,6 +168,23 @@ Resources:
             Condition:
               Bool:
                 aws:SecureTransport: 'false'
+          # The console serves recorded survey speech at /voice/audio/. Clip names are
+          # hashes of question text; nothing else in the bucket is reachable this way.
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub '${DataBucket.Arn}/voice/audio/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${UiDistribution}'
+  # The ElevenLabs API key the worker records survey speech with. The stack creates it
+  # empty; an operator sets the value (voice/README.md). Until then, and whenever the key
+  # fails, accepted surveys are taken off the voice channel and the worker logs why.
+  VoiceKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: ElevenLabs API key for recording survey speech (MEL worker).
   Cluster:
     Type: AWS::ECS::Cluster
   WorkerLogs:
@@ -216,15 +233,25 @@ Resources:
                   - !Sub 'arn:${AWS::Partition}:bedrock:*:${AWS::AccountId}:inference-profile/*'
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource: !GetAtt Database.MasterUserSecret.SecretArn
+                Resource:
+                  - !GetAtt Database.MasterUserSecret.SecretArn
+                  - !Ref VoiceKeySecret
               - Effect: Allow
                 Action: s3:GetObject
                 Resource:
                   - !Sub '${DataBucket.Arn}/inputs/*'
                   - !Sub '${DataBucket.Arn}/config/*'
+                  - !Sub '${DataBucket.Arn}/voice/audio/*'
               - Effect: Allow
                 Action: s3:PutObject
-                Resource: !Sub '${DataBucket.Arn}/outputs/*'
+                Resource:
+                  - !Sub '${DataBucket.Arn}/outputs/*'
+                  - !Sub '${DataBucket.Arn}/voice/audio/*'
+              # Without ListBucket, S3 answers 403 instead of 404 for a clip that is not
+              # stored yet, and the worker cannot tell "missing" from "forbidden".
+              - Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt DataBucket.Arn
   WorkerTask:
     Type: AWS::ECS::TaskDefinition
     Properties:
@@ -259,6 +286,10 @@ Resources:
               Value: verify-full
             - Name: MEL_DATABASE_SSLROOTCERT
               Value: /app/certs/global-bundle.pem
+            - Name: MEL_VOICE_BUCKET
+              Value: !Ref DataBucket
+            - Name: MEL_VOICE_KEY_SECRET_ARN
+              Value: !Ref VoiceKeySecret
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -522,7 +553,17 @@ Resources:
             CustomOriginConfig:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols: [TLSv1.2]
+          - Id: voice-audio
+            DomainName: !GetAtt DataBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt UiOriginAccessControl.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ''
         CacheBehaviors:
+          # Survey speech the worker recorded. The voice page (/voice/) plays it.
+          - PathPattern: /voice/audio/*
+            TargetOriginId: voice-audio
+            ViewerProtocolPolicy: redirect-to-https
+            CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           - PathPattern: /api/*
             TargetOriginId: api
             ViewerProtocolPolicy: https-only
@@ -587,6 +628,9 @@ Outputs:
     Value: !Ref UiBucket
   UiDistributionId:
     Value: !Ref UiDistribution
+  VoiceKeySecretArn:
+    Description: Put the ElevenLabs API key here (voice/README.md).
+    Value: !Ref VoiceKeySecret
   UserPoolId:
     Value: !Ref UserPool
   UserPoolClientId:

@@ -369,6 +369,21 @@ def test_schema_initialization_is_once_per_app_and_configs_share_a_connection():
     assert initialized == [True]
 
 
+def test_the_voice_page_loads_an_accepted_survey_by_itself():
+    store = Store()
+    survey = {"survey_id": "S-0000000001", "items": []}
+    results = {
+        "I-1": {"status": "accepted", "outcome": {"survey": survey}},
+        "I-2": {"status": "rejected", "outcome": {"candidate_survey": survey}},
+    }
+    store.run_result = lambda run_id, insight_id: results.get(insight_id)
+    run = "00000000-0000-0000-0000-000000000001"
+    with TestClient(create_app(store_factory=lambda _: store)) as client:
+        assert client.get(f"/api/runs/{run}/results/I-1/survey").json() == survey
+        assert client.get(f"/api/runs/{run}/results/I-2/survey").status_code == 404
+        assert client.get(f"/api/runs/{run}/results/I-3/survey").status_code == 404
+
+
 def test_failed_schema_initialization_can_be_retried():
     store = Store()
     store.list_configs = lambda: []

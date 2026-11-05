@@ -1,0 +1,90 @@
+{
+  "items": [
+    {
+      "type": "survey-single-select",
+      "prompt": "क्या आपने अनुशंसित कीटनाशक का छिड़काव किया?",
+      "item_id": "q1",
+      "options": [
+        {
+          "label": "हाँ",
+          "value": "yes"
+        },
+        {
+          "label": "अभी नहीं",
+          "value": "not_yet"
+        },
+        {
+          "label": "नहीं",
+          "value": "no"
+        }
+      ]
+    },
+    {
+      "type": "survey-single-select",
+      "prompt": "सरसों की फूलों और तनों पर छोटी हरी कीड़े (माहू) कैसी हैं?",
+      "item_id": "q2",
+      "options": [
+        {
+          "label": "ठीक हो गई",
+          "value": "better"
+        },
+        {
+          "label": "जैसी ही है",
+          "value": "same"
+        },
+        {
+          "label": "और बढ़ गई",
+          "value": "worse"
+        },
+        {
+          "label": "नहीं जानता/जानती",
+          "value": "cannot_tell"
+        },
+        {
+          "label": "छिड़काव नहीं किया",
+          "value": "did_not_spray"
+        }
+      ]
+    },
+    {
+      "type": "survey-single-select",
+      "prompt": "आपने छिड़काव करते समय किस समय पर किया?",
+      "item_id": "q3",
+      "options": [
+        {
+          "label": "शाम को",
+          "value": "evening"
+        },
+        {
+          "label": "दिन में",
+          "value": "day"
+        },
+        {
+          "label": "सुबह",
+          "value": "morning"
+        },
+        {
+          "label": "छिड़काव नहीं किया",
+          "value": "not_sprayed"
+        }
+      ]
+    }
+  ],
+  "language": "hi-IN",
+  "farmer_id": "F-000123",
+  "rationale": "Corrected survey measures adoption (spray action), outcome (aphid severity), and adherence to critical evening timing. Uses neutral product language and provides 'did not spray' as a distinct option in q2 and q3 so non-adopters and different-time adopters remain interpretable.",
+  "self_eval": {
+    "schema_valid": true,
+    "relevance_score": 0.84,
+    "gives_new_advice": false,
+    "asks_personal_info": false
+  },
+  "survey_id": "S-0000000001",
+  "send_window": {
+    "not_after": "2026-12-09T19:00:00+05:30",
+    "not_before": "2026-12-06T07:00:00+05:30"
+  },
+  "source_insight_ids": [
+    "I-004512"
+  ]
+}
