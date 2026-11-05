@@ -1,5 +1,3 @@
-"""Public deployment evidence, refreshed lazily from one fixed GitHub workflow."""
-
 from __future__ import annotations
 
 import asyncio
@@ -170,7 +168,6 @@ class DeploymentStatus:
                     self._run = latest_run(json.loads(body))
             self._failures = 0
         except (httpx.HTTPError, TimeoutError, ValueError, UnicodeError, TypeError):
-            # Failed fresh evidence cannot preserve a previously green observation.
             self._run = None
             self._failures = min(self._failures + 1, 6)
             delay = max(delay, min(3600, REFRESH_SECONDS * 2 ** (self._failures - 1)))

@@ -1,5 +1,3 @@
-"""Offline deployment observations: no AWS, database, or real HTTP."""
-
 import asyncio
 from pathlib import Path
 
