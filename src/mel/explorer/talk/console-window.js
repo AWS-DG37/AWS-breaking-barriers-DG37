@@ -48,6 +48,7 @@
   let frame = null;
   let open = false;
   let busy = false;
+  let openedByKey = false;
 
   // Load the console once, ahead of the tap, and keep it: reopening resumes where the demo left off.
   function ensureFrame() {
@@ -122,8 +123,9 @@
 
   const pause = ms => new Promise(done => setTimeout(done, reduce ? 0 : ms));
 
-  async function openWindow() {
+  async function openWindow(byKey) {
     if (open || busy) return;
+    openedByKey = byKey === true;
     busy = true;
     open = true;
     ensureFrame();
@@ -155,13 +157,16 @@
     win.classList.remove('cw-card');
     open = false;
     busy = false;
-    card.focus();
+    // Keyboard users get focus back on the card. After a tap or click, clear focus so
+    // Space and the arrows drive the deck again instead of reopening the console.
+    if (openedByKey) card.focus();
+    else if (document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement) document.activeElement.blur();
   }
 
-  card.addEventListener('click', openWindow);
+  card.addEventListener('click', () => openWindow(false));
   card.addEventListener('keydown', e => {
     // Stop here: the deck reads Space as "next slide" on the document.
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openWindow(); }
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openWindow(true); }
   });
   card.addEventListener('pointerenter', ensureFrame);
   card.addEventListener('focus', ensureFrame);
