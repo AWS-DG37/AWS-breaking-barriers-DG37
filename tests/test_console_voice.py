@@ -2,7 +2,8 @@
 
 The demo writes a new survey on every run, so no recording can exist in advance: the
 console makes each line when the phone asks for it, and keeps recent lines so a replay is
-free. Each call spends ElevenLabs credits, so view-only users cannot make one.
+free. Each new line spends ElevenLabs credits, so view-only users share a small hourly
+allowance of new lines; replays never count against it.
 """
 
 from fastapi.testclient import TestClient
@@ -27,12 +28,13 @@ class Speaker:
         return MP3
 
 
-def client(speaker=None, settings=SETTINGS):
+def client(speaker=None, settings=SETTINGS, **options):
     app = create_app(
         settings=settings,
         store_factory=lambda _: Store(),
         auth_verifier=TokenVerifier(ISSUER, "console-client", keys=Keys()),
         speaker=speaker,
+        **options,
     )
     return TestClient(app, base_url="https://console.example", follow_redirects=False)
 
@@ -109,12 +111,48 @@ def test_a_failed_line_is_not_remembered():
     assert speaker.texts == [LINE, LINE]
 
 
-def test_voice_needs_a_session_and_viewers_cannot_spend_credits():
+def test_voice_needs_a_session():
     speaker = Speaker()
     with client(speaker, viewer_settings()) as http:
         assert speak(http).status_code == 401
-        assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
-        response = speak(http)
-        assert response.status_code == 403
-        assert "view-only" in response.json()["detail"].lower()
     assert speaker.texts == []
+
+
+def viewer(http):
+    assert http.post("/api/auth/viewer", json={"password": VIEWER_PASSWORD}).status_code == 200
+    return http
+
+
+def test_a_viewer_hears_the_elevenlabs_voice_and_a_replay_is_free():
+    speaker = Speaker()
+    with client(speaker, viewer_settings()) as http:
+        first = speak(viewer(http))
+        assert first.status_code == 200
+        assert first.content == MP3
+        assert speak(http).content == MP3
+    assert speaker.texts == [LINE]
+
+
+def test_viewers_share_a_capped_allowance_of_new_lines():
+    speaker = Speaker()
+    with client(speaker, viewer_settings(), viewer_voice_lines_per_hour=2) as http:
+        viewer(http)
+        assert speak(http, "one").status_code == 200
+        assert speak(http, "two").status_code == 200
+        refused = speak(http, "three")
+        assert refused.status_code == 429
+        assert int(refused.headers["retry-after"]) > 0
+        # A line already made is a replay, not a new line.
+        assert speak(http, "one").status_code == 200
+        # Signed-in users are not limited by the viewers' allowance.
+        http.cookies.clear()
+        assert speak(signed_in(http), "three").status_code == 200
+    assert speaker.texts == ["one", "two", "three"]
+
+
+def test_a_failed_viewer_line_does_not_use_the_allowance():
+    speaker = Speaker(fail=True)
+    with client(speaker, viewer_settings(), viewer_voice_lines_per_hour=1) as http:
+        assert speak(viewer(http)).status_code == 502
+        speaker.fail = False
+        assert speak(http).status_code == 200

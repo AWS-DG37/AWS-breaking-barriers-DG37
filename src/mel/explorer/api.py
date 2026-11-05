@@ -7,6 +7,9 @@ import argparse
 import hashlib
 import json
 import logging
+import math
+import time
+from collections import deque
 from decimal import Decimal
 from pathlib import Path
 from threading import Lock
@@ -273,6 +276,7 @@ def create_app(
     lifespan=None,
     agent_invoker=None,
     speaker=None,
+    viewer_voice_lines_per_hour: int = 60,
     translation_agent=build_agent,
 ) -> FastAPI:
     settings = settings or Settings()
@@ -311,9 +315,32 @@ def create_app(
     if speaker is None and settings.voice_api_key:
         speaker = ElevenLabs(settings.voice_api_key.get_secret_value).speak
     spoken = SpokenLines(speaker) if speaker else None
+    # View-only sessions hear the same voice, but every viewer shares one hourly allowance
+    # of new lines, so the shared password cannot drain the ElevenLabs account. A replay of
+    # a line already made is free and never counts.
+    # ponytail: in-process and lost on restart, so the worst case is one allowance per
+    # restart. Upgrade: keep the count in the database if the console ever runs replicas.
+    viewer_lines: deque[float] = deque()
+    viewer_lock = Lock()
+
+    def reserve_viewer_line() -> float:
+        with viewer_lock:
+            now = time.monotonic()
+            while viewer_lines and now - viewer_lines[0] >= 3600:
+                viewer_lines.popleft()
+            if len(viewer_lines) >= viewer_voice_lines_per_hour:
+                wait = math.ceil(3600 - (now - viewer_lines[0])) if viewer_lines else 3600
+                raise HTTPException(
+                    429,
+                    "View-only voice allowance used up for this hour",
+                    headers={"Retry-After": str(max(wait, 1))},
+                )
+            viewer_lines.append(now)
+            return now
 
     @app.get("/api/voice")
     def voice_line(
+        request: Request,
         language: Annotated[str, Query(pattern=r"^(hi|en)(-[A-Z]{2})?$")],
         text: Annotated[str, Query(max_length=600)],
     ):
@@ -322,9 +349,15 @@ def create_app(
             raise HTTPException(422, "text is empty")
         if spoken is None:
             raise HTTPException(503, "Voice is not configured. Set MEL_VOICE_API_KEY.")
+        reserved = None
+        if getattr(request.state, "read_only", False) and not spoken.has(language, text):
+            reserved = reserve_viewer_line()
         try:
             audio = spoken.audio(language, text)
         except Exception as error:
+            if reserved is not None:
+                with viewer_lock:
+                    viewer_lines.remove(reserved)
             # The provider's message can name the key or the account, so log it only.
             logger.warning("voice_line_failed: %s: %s", type(error).__name__, error)
             raise HTTPException(502, f"Text to speech failed ({type(error).__name__})") from None

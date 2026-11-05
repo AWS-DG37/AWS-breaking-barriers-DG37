@@ -37,8 +37,9 @@ OPEN_PATHS = frozenset(
         "/api/auth/viewer",
     }
 )
-# GET routes that spend money. View-only sessions cannot reach them.
-PAID_GETS = frozenset({"/api/agents/options", "/api/voice"})
+# GET routes that spend money. View-only sessions cannot reach them. /api/voice also spends
+# money, but viewers need the survey voice, so api.py caps their new lines instead.
+PAID_GETS = frozenset({"/api/agents/options"})
 SIGN_IN_SECONDS = 600
 VIEWER_SECONDS = 8 * 60 * 60
 
@@ -177,8 +178,7 @@ def install(app: FastAPI, settings: Settings, *, verifier=None, exchange=None) -
                     request.state.user = await asyncio.to_thread(verifier.claims, token)
             except (Unauthorized, jwt.PyJWTError):
                 return JSONResponse({"detail": "Sign in required"}, status_code=401)
-            # AgentCore option discovery invokes paid runtime compute, and /api/voice spends
-            # ElevenLabs credits, even on GET.
+            # AgentCore option discovery invokes paid runtime compute, even on GET.
             if request.state.read_only and (
                 request.method not in {"GET", "HEAD", "OPTIONS"} or path in PAID_GETS
             ):

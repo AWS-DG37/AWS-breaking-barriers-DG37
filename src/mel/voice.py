@@ -224,6 +224,10 @@ class SpokenLines:
         self._clips: OrderedDict[str, bytes] = OrderedDict()
         self._lock = Lock()
 
+    def has(self, language: str, text: str) -> bool:
+        with self._lock:
+            return clip_name(language, text) in self._clips
+
     def audio(self, language: str, text: str) -> bytes:
         name = clip_name(language, text)
         with self._lock:
