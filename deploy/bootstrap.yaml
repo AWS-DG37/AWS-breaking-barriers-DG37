@@ -1,0 +1,157 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Field Echo main-only artifact publication and constrained existing-host delivery
+Parameters:
+  CreateOidcProvider:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+    Description: Set true only if this account lacks the GitHub OIDC provider
+  HostRoleName:
+    Type: String
+    Default: dg37-explorer-workshop-host
+    AllowedPattern: '[A-Za-z0-9+=,.@_-]+'
+  InstanceId:
+    Type: AWS::EC2::Instance::Id
+    Default: i-01c706a91df84e556
+Conditions:
+  NeedsOidc: !Equals [!Ref CreateOidcProvider, 'true']
+Resources:
+  GithubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Condition: NeedsOidc
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+  Repository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RepositoryName: dg37-explorer
+      ImageTagMutability: IMMUTABLE
+      ImageScanningConfiguration:
+        ScanOnPush: true
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dg37-main-deploy
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - NeedsOidc
+                - !Ref GithubOidc
+                - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:AWS-DG37@352139567/AWS-breaking-barriers-DG37@1444724104:ref:refs/heads/main
+      Policies:
+        - PolicyName: PublishAndDeliverMain
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: '*'
+              - Effect: Allow
+                Action: [ecr:BatchCheckLayerAvailability, ecr:InitiateLayerUpload, ecr:UploadLayerPart, ecr:CompleteLayerUpload, ecr:PutImage, ecr:DescribeImages]
+                Resource: !GetAtt Repository.Arn
+              - Effect: Allow
+                Action: ssm:SendCommand
+                Resource:
+                  - !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:document/DG37-DeployMain-v1
+                  - !Sub arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}
+              - Effect: Allow
+                Action: ssm:GetCommandInvocation
+                Resource: '*'
+  HostPullPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: FieldEchoArtifactPull
+      Roles: [!Ref HostRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            Resource: '*'
+          - Effect: Allow
+            Action: [ecr:BatchGetImage, ecr:GetDownloadUrlForLayer, ecr:BatchCheckLayerAvailability]
+            Resource: !GetAtt Repository.Arn
+  DeployDocument:
+    Type: AWS::SSM::Document
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: DG37-DeployMain-v1
+      DocumentType: Command
+      UpdateMethod: NewVersion
+      Content:
+        schemaVersion: '2.2'
+        description: Fixed main release admission; no caller-controlled shell commands
+        parameters:
+          Action:
+            type: String
+            allowedValues: [deploy, status]
+            interpolationType: ENV_VAR
+          Sha:
+            type: String
+            allowedPattern: '^[0-9a-f]{40}$'
+            interpolationType: ENV_VAR
+          Digest:
+            type: String
+            allowedPattern: '^sha256:[0-9a-f]{64}$'
+            interpolationType: ENV_VAR
+          Sequence:
+            type: String
+            allowedPattern: '^[1-9][0-9]{0,18}$'
+            interpolationType: ENV_VAR
+        mainSteps:
+          - action: aws:runShellScript
+            name: DeliverMain
+            inputs:
+              timeoutSeconds: '1800'
+              runCommand:
+                - !Sub |
+                    #!/bin/bash
+                    set -euo pipefail
+                    umask 077
+                    export FIELDECHO_ACTIVATE_BY=$(( $(date +%s) + 1320 ))
+                    export FIELDECHO_RECOVER_BY=$(( FIELDECHO_ACTIVATE_BY + 360 ))
+                    bounded() {
+                      local remaining=$(( FIELDECHO_ACTIVATE_BY - $(date +%s) ))
+                      test "$remaining" -gt 0 || return 1
+                      timeout --signal=TERM --kill-after=10 "$remaining" "$@"
+                    }
+                    cd /opt/dg37
+                    exec 9>delivery-dispatch.lock
+                    bounded flock -w 120 9
+                    if [ "$SSM_Action" = status ]; then
+                      test -f delivery/current/handler.py
+                      exec python3 -I delivery/current/handler.py host-status --target delivery/current/target.json
+                    fi
+                    registry='${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com'
+                    image="$registry/dg37-explorer@$SSM_Digest"
+                    bounded aws ecr get-login-password --region '${AWS::Region}' | bounded docker login --username AWS --password-stdin "$registry" >/dev/null
+                    bounded docker pull "$image" >/dev/null
+                    test "$(bounded docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$image")" = "$SSM_Sha"
+                    release="delivery/releases/$SSM_Sha"
+                    bounded mkdir -p "$release"
+                    container=$(bounded docker create --entrypoint python "$image" --version)
+                    trap 'timeout --kill-after=2 10 docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+                    bounded docker cp "$container:/app/deploy/fieldecho.py" "$release/handler.py"
+                    bounded docker cp "$container:/app/deploy/target.json" "$release/target.json"
+                    bounded docker rm "$container" >/dev/null
+                    trap - EXIT
+                    exec python3 -I "$release/handler.py" host-activate --target "$release/target.json" --sha "$SSM_Sha" --digest "$SSM_Digest" --sequence "$SSM_Sequence"
+Outputs:
+  DeployRoleArn:
+    Value: !GetAtt DeployRole.Arn
+  RepositoryUri:
+    Value: !GetAtt Repository.RepositoryUri
+  DocumentName:
+    Value: !Ref DeployDocument

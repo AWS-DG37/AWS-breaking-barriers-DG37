@@ -27,13 +27,19 @@
           <label><input type="radio" name="lang" value="hi"> हिन्दी</label>
         </fieldset>
       </div>
+      <fieldset class="demo-controls" disabled>
+        <legend>Demo language</legend>
+        <label><input id="english-text" type="checkbox"> English text</label>
+        <label><input id="english-audio" type="checkbox"> English audio</label>
+        <p id="translation-note">Text and audio can use different languages. Answers keep the original survey language.</p>
+      </fieldset>
       <p id="provenance" class="provenance"></p>
     </section>
     <section class="phone" aria-label="FarmerChat survey">
       <div class="phone-top"><strong>FarmerChat</strong><span id="progress"></span></div>
       <div id="card" class="card" aria-live="polite"></div>
       <div class="voice-bar">
-        <button id="voice" class="mic" type="button">Read aloud</button>
+        <button id="voice" class="mic" type="button" disabled>Read aloud</button>
         <div class="voice-state"><span id="status" class="status"></span><span id="caption" class="caption"></span></div>
       </div>
     </section>

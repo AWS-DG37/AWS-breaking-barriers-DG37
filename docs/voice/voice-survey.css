@@ -43,6 +43,12 @@ h1 { font-size: clamp(1.5rem, 3vw, 2.1rem); line-height: 1.15; margin: 0 0 8px; 
 .lang { border: 0; padding: 0; margin: 0; display: flex; gap: 12px; }
 .lang legend { font-size: .85rem; color: var(--ink-soft); margin-bottom: 4px; }
 .lang label { display: flex; gap: 6px; align-items: center; padding: 8px 12px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); cursor: pointer; }
+.demo-controls { border: 1px solid var(--line); border-radius: 12px; margin: 16px 0; padding: 12px; display: flex; flex-wrap: wrap; gap: 12px 24px; }
+.demo-controls legend { font-weight: 600; }
+.demo-controls label { display: flex; gap: 8px; align-items: center; min-height: 44px; cursor: pointer; }
+.demo-controls input { accent-color: var(--green-dark); width: 18px; height: 18px; }
+.demo-controls p { flex-basis: 100%; font-size: .85rem; margin: 0; }
+.controls > label { min-width: 0; max-width: 100%; }
 .phone {
   background: var(--card); border-radius: 28px; border: 1px solid var(--line);
   box-shadow: 0 12px 30px rgb(0 29 9 / .12); overflow: hidden; display: flex; flex-direction: column; min-height: 560px;

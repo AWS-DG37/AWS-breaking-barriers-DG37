@@ -1016,3 +1016,5 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 @media (max-width:1360px) { .demo-layout { grid-template-columns:minmax(0,1fr) 360px; gap:18px; } .demo-stage { grid-template-columns:minmax(220px,260px) minmax(240px,1fr); gap:18px; } .demo-controls { grid-template-columns:1fr 1fr; } .demo-controls > label:first-child { grid-column:1/-1; } }
 @media (max-width:1100px) { .demo-layout { grid-template-columns:1fr; } .demo-phone-col { position:static; } }
 @media (max-width:1000px) { .demo-stage,.demo-controls { grid-template-columns:1fr; } }
+/* Demo: the phone's own हिंदी/English switch replaces the language panel, so the phone fits on screen. */
+.demo-phone .player-demo { display:none; }

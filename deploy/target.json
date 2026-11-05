@@ -1,0 +1,11 @@
+{
+  "account": "047640882913",
+  "region": "us-east-1",
+  "instance_id": "i-01c706a91df84e556",
+  "ecr_repository": "dg37-explorer",
+  "deploy_role_arn": "arn:aws:iam::047640882913:role/dg37-main-deploy",
+  "ssm_document": "DG37-DeployMain-v1",
+  "ssm_document_version": "1",
+  "workflow": ".github/workflows/main.yml",
+  "github_repository": "AWS-DG37/AWS-breaking-barriers-DG37"
+}
