@@ -99,6 +99,15 @@ def test_an_unusable_classifier_answer_fails_instead_of_guessing(model, reply):
     assert roles(model) == ["classify"]
 
 
+def test_classify_imports_on_its_own():
+    import subprocess
+
+    agents = Path(__file__).resolve().parents[1] / "agents"
+    code = "import classify; print(classify.parse('{\"rule\": \"R4\"}')['reason_code'])"
+    out = subprocess.run([sys.executable, "-c", code], cwd=agents, capture_output=True, text=True)
+    assert out.stdout.strip() == "waiting_for_details", out.stderr
+
+
 def test_a_failed_classification_counts_as_a_decision_miss():
     failed = {
         "insight_id": INSIGHT["insight_id"],

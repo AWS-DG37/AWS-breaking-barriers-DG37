@@ -9,12 +9,15 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
-from decide import REASON_CODES, decision  # path set up by run_one
-
 ROOT = Path(__file__).resolve().parent
-PROMPT = ROOT / "skills" / "mel-survey-rules" / "references" / "classifier_prompt.md"
+RULES = ROOT / "skills" / "mel-survey-rules"
+sys.path.insert(0, str(RULES / "scripts"))
+from decide import REASON_CODES, decision  # noqa: E402
+
+PROMPT = RULES / "references" / "classifier_prompt.md"
 
 
 def prompt_file():
