@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     # the secret holds the ElevenLabs key. Unset, no survey goes out on the voice channel.
     voice_bucket: str | None = None
     voice_key_secret_arn: str | None = None
+    # The console phone's live speech (GET /api/voice). Unset, the phone uses the browser voice.
+    voice_api_key: SecretStr | None = None
     # The Strands survey agents (agents/) deployed on Bedrock AgentCore Runtime. Unset hides
     # live runs in the console's Agents view; saved sweep results still show.
     agent_runtime_arn: str | None = None
