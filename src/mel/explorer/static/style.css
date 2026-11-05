@@ -1066,7 +1066,7 @@ option { font-weight:400; color:var(--ink); }
 @media (max-width:900px) { .ag-panel .form-grid { grid-template-columns:1fr; } }
 @media (max-width:700px) { .ag-panel { padding:20px 18px 0; } .ag-panel .launch { margin:8px -18px 0; padding:16px 18px; } .ag-results { grid-template-columns:minmax(0,1fr); } }
 /* Demo: one insight as a story */
-.demo-controls { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1.3fr) minmax(0,1.1fr) auto; gap:12px 20px; align-items:end; max-width:none; margin-bottom:20px; }
+.demo-controls { display:grid; grid-template-columns:minmax(0,1.8fr) minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,1fr) auto; gap:12px 20px; align-items:end; max-width:none; margin-bottom:20px; }
 .demo-controls > label { margin:0; }
 .demo-layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; align-items:start; }
 .demo-phone-col { position:sticky; top:calc(12px + var(--deployment-banner-height,0px)); }

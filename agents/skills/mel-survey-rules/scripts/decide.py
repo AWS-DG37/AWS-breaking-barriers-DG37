@@ -19,20 +19,32 @@ import json, sys
 REMOVED_RULES = {"R2"}
 TIMING_RULES = {"R6", "R7"}
 
+# Every rule this gate can return, with its no_survey reason code. R8 is the only survey rule.
+# The classifier gate (agents/classify.py) answers with one of these keys too.
+REASON_CODES = {"R1": "junk_insight", "R3": "nothing_to_verify", "R4": "waiting_for_details",
+                "R5": "no_check_needed", "R8": None}
+
+
+def decision(rule):
+    """The decision dict for a rule code."""
+    if rule == "R8":
+        return {"survey": True, "rule": "R8"}
+    return {"survey": False, "rule": rule, "reason_code": REASON_CODES[rule]}
+
 
 def decide(insight):
     """Return {survey: False, rule, reason_code} or {survey: True, rule: "R8"}."""
     i = insight
     if (i.get("concern") is None or not i.get("query_summary") or not i.get("advice_summary")
             or not i.get("resolution_type") or i.get("decision_episode_type") == "casual"):
-        return {"survey": False, "rule": "R1", "reason_code": "junk_insight"}
+        return decision("R1")
     if i["resolution_type"] == "generic_information":
-        return {"survey": False, "rule": "R3", "reason_code": "nothing_to_verify"}
+        return decision("R3")
     if i["resolution_type"] == "needs_more_context":
-        return {"survey": False, "rule": "R4", "reason_code": "waiting_for_details"}
+        return decision("R4")
     if not i["verification"]["needed"]:
-        return {"survey": False, "rule": "R5", "reason_code": "no_check_needed"}
-    return {"survey": True, "rule": "R8"}
+        return decision("R5")
+    return decision("R8")
 
 
 if __name__ == "__main__":

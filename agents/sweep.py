@@ -2,6 +2,9 @@
 """Model sweep harness: run the MEL survey pipeline across candidate generator models
 and score each run against the golden set.
 
+Two gates decide survey or no survey first (--gate): rules (decide.py, code only) or classifier
+(a Strands agent picks the rule, classify.py; --classifier sets its model).
+
 Two pipelines:
   direct     gate -> generator writes the survey in the farmer's language -> code checks -> verifier
   translate  gate -> generator writes English -> translator writes the farmer's language
@@ -40,15 +43,19 @@ from run_one import (  # noqa: E402
     HINDI, blocking_issues, build_user, build_verifier_user, check, decide, effective_verdict,
     load_prompts, load_retry_template, load_verifier_prompts, parse_json, verdict_issues,
 )
+import classify  # noqa: E402
 import translate  # noqa: E402
 from decide import REMOVED_RULES, TIMING_RULES  # noqa: E402  (path set up by run_one)
 
 DEFAULT_VERIFIER = "global.anthropic.claude-sonnet-5-5"
 DEFAULT_TRANSLATOR = "google.gemma-3-27b-it"
+DEFAULT_CLASSIFIER = "global.anthropic.claude-haiku-5-5"
+# rules: decide.py, code only. classifier: a Strands agent picks the rule (classify.py).
+GATES = ("rules", "classifier")
 # Verifier checks whose problems are about wording, so the translator can fix them
 # without regenerating the English survey.
 WORDING_CHECKS = {"language", "language_ok", "voice", "voice_ok", "fidelity", "fidelity_ok"}
-STAGES = ("generate", "translate", "verify")
+STAGES = ("classify", "generate", "translate", "verify")
 
 
 def _call(role, model_id, system, user, effort=None):
@@ -59,7 +66,7 @@ def _call(role, model_id, system, user, effort=None):
     from strands import Agent
     from strands.models import BedrockModel
     env_cap = {"generate": "MAX_TOKENS", "verify": "VERIFIER_MAX_TOKENS",
-               "translate": "TRANSLATOR_MAX_TOKENS"}[role]
+               "translate": "TRANSLATOR_MAX_TOKENS", "classify": "CLASSIFIER_MAX_TOKENS"}[role]
     kwargs = {"model_id": model_id, "region_name": os.environ.get("AWS_REGION", "us-east-1"),
               "max_tokens": int(os.environ.get(env_cap, "8000"))}
     if role == "generate" and os.environ.get("TEMPERATURE"):
@@ -82,18 +89,27 @@ def _glossary(insight, lang):
     return f"{name} = {HINDI[name]}" if lang == "hi-IN" and name in HINDI else "(not needed)"
 
 
+def gate_decision(insight, gate="rules", classifier=DEFAULT_CLASSIFIER, call=None):
+    """Survey or no survey from the chosen gate. Raises when the classifier answer is unusable.
+    call(stage, model_id, system, user) -> text; defaults to one uncounted model call."""
+    if gate != "classifier":
+        return decide(insight)
+    call = call or (lambda stage, model_id, system, user: _call(stage, model_id, system, user)[0])
+    csys, ctpl = classify.load_prompts()
+    return classify.parse(call("classify", classifier, csys, classify.build_user(ctpl, insight)))
+
+
 def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct",
                  translator=DEFAULT_TRANSLATOR, max_retries=1, use_translation_cache=True,
-                 verifier_effort=None):
+                 gate="rules", classifier=DEFAULT_CLASSIFIER, verifier_effort=None):
     """Run ONE insight through the chosen pipeline. Returns a result dict."""
     started = time.monotonic()
-    d = decide(insight)
     stages = {s: {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0} for s in STAGES}
     stages["translate"]["cache_hits"] = 0
     out = {
         "insight_id": insight["insight_id"], "resolution_type": insight["resolution_type"],
-        "language": insight["conversation_language"], "pipeline": pipeline,
-        "decision_rule": d["rule"], "decision_survey": d["survey"],
+        "language": insight["conversation_language"], "pipeline": pipeline, "gate": gate,
+        "decision_rule": None, "decision_survey": None, "decision_reason": None,
         "status": None, "verdict": None, "relevance": None, "attempts": 0,
         "code_errors": [], "items": None, "items_en": None, "error": None, "stages": stages,
     }
@@ -118,6 +134,13 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
         out["elapsed_seconds"] = round(time.monotonic() - started, 3)
         return out
 
+    try:
+        d = gate_decision(insight, gate, classifier, call)
+    except Exception as e:   # an unusable classifier answer must not turn into a survey or a skip
+        out["error"] = f"{type(e).__name__}: {e}"
+        return finish("failed")
+    out["decision_rule"], out["decision_survey"] = d["rule"], d["survey"]
+    out["decision_reason"] = d.get("reason")
     if not d["survey"]:
         return finish("skipped")
 
@@ -263,10 +286,13 @@ def run_pipeline(insight, generator, verifier=DEFAULT_VERIFIER, pipeline="direct
 
 def _stage(r, stage):
     """Stage stats from a result, tolerating run files written before stages existed."""
+    empty = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "seconds": 0.0, "cache_hits": 0}
     if r.get("stages"):
-        return r["stages"][stage]
-    key = {"generate": "gen_tokens", "verify": "ver_tokens", "translate": "tr_tokens"}[stage]
+        return r["stages"].get(stage) or empty   # files before the classifier have no classify stage
+    key = {"generate": "gen_tokens", "verify": "ver_tokens", "translate": "tr_tokens"}.get(stage)
     t = r.get(key) or {}
+    if not t:
+        return empty
     return {"calls": 0, "input_tokens": t.get("input_tokens", 0),
             "output_tokens": t.get("output_tokens", 0), "seconds": 0.0, "cache_hits": 0}
 
@@ -283,8 +309,9 @@ def score_run(results, golden_by_id):
         g = golden_by_id.get(r["insight_id"])
         if g and g["expected"]["rule"] not in elsewhere:
             decision_cases += 1
-            decision_hits += int((r["status"] in ("accepted", "rejected", "failed"))
-                                 == bool(g["expected"]["survey"]))
+            # None: the classifier gave no usable answer, which is a miss.
+            decision_hits += int(r.get("decision_survey") is not None
+                                 and r["decision_survey"] == bool(g["expected"]["survey"]))
             rule_hits += int(r["decision_rule"] == g["expected"]["rule"])
     rel = [r["relevance"] for r in results if r.get("relevance") is not None]
     item_counts = [len(r["items"]) for r in results if r.get("items")]
@@ -332,35 +359,41 @@ def load_golden(path):
     return [json.loads(l) for l in Path(path).read_text(encoding="utf-8").splitlines() if l.strip()]
 
 
-def prompt_fingerprint():
-    """Short hash of the prompt files in use, so run files show which prompt version produced them."""
+def prompt_fingerprint(gate="rules"):
+    """Short hash of the prompt files in use, so run files show which prompt version produced them.
+    The classifier prompt counts only for classifier runs, so rules-gate hashes stay comparable."""
     import hashlib
     from run_one import prompt_path
     h = hashlib.sha1()
     for name in ("generator_prompt.md", "verifier_prompt.md", "translator_prompt.md"):
         h.update(Path(prompt_path(name)).read_bytes())
+    if gate == "classifier":
+        h.update(classify.prompt_file().read_bytes())
     return h.hexdigest()[:10]
 
 
 def run_model(model_id, verifier_model_id, golden_rows, limit, max_retries, out_dir,
               progress=None, pipeline="direct", translator_model_id=DEFAULT_TRANSLATOR,
-              use_translation_cache=True, tag=None, golden_name=None):
+              use_translation_cache=True, tag=None, golden_name=None, gate="rules",
+              classifier_model_id=DEFAULT_CLASSIFIER):
     """Run one generator model over the first `limit` golden insights; write and return the run."""
     golden_by_id = {g["insight"]["insight_id"]: g for g in golden_rows}
     selected = golden_rows[:limit]
     results = []
     for i, g in enumerate(selected, 1):
         r = run_pipeline(g["insight"], model_id, verifier_model_id, pipeline, translator_model_id,
-                         max_retries, use_translation_cache)
+                         max_retries, use_translation_cache, gate, classifier_model_id)
         results.append(r)
         if progress:
             progress(model_id, i, len(selected), r)
     run = {
         "model_id": model_id,
         "pipeline": pipeline,
+        "gate": gate,
+        "classifier_model_id": classifier_model_id if gate == "classifier" else None,
         "tag": tag,
         "prompt_dir": os.environ.get("MEL_PROMPT_DIR"),
-        "prompt_sha": prompt_fingerprint(),
+        "prompt_sha": prompt_fingerprint(gate),
         "golden": golden_name,
         "translator_model_id": translator_model_id if pipeline == "translate" else None,
         "verifier_model_id": verifier_model_id,
@@ -375,7 +408,9 @@ def run_model(model_id, verifier_model_id, golden_rows, limit, max_retries, out_
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", model_id)
-    label = f"{pipeline}-{re.sub(r'[^A-Za-z0-9._-]', '_', tag)}" if tag else pipeline
+    label = pipeline if gate == "rules" else f"{pipeline}-classifier"
+    if tag:
+        label += f"-{re.sub(r'[^A-Za-z0-9._-]', '_', tag)}"
     path = out_dir / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}__{label}__{safe}.json"
     path.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
     run["_path"] = str(path)
@@ -387,6 +422,9 @@ def main():
     ap.add_argument("--golden", required=True, help="golden_set.jsonl path")
     ap.add_argument("--models", nargs="+", required=True, help="generator model IDs to compare")
     ap.add_argument("--pipeline", choices=("direct", "translate"), default="direct")
+    ap.add_argument("--gate", choices=GATES, default="rules",
+                    help="survey or no survey: rules (decide.py) or classifier (Strands agent)")
+    ap.add_argument("--classifier", default=DEFAULT_CLASSIFIER, help="classifier model (classifier gate)")
     ap.add_argument("--translator", default=DEFAULT_TRANSLATOR, help="translator model (translate pipeline)")
     ap.add_argument("--verifier-model", default=DEFAULT_VERIFIER, help="fixed verifier model")
     ap.add_argument("--limit", type=int, default=10, help="golden insights per model")
@@ -413,12 +451,13 @@ def main():
         print(f"\n=== {a.pipeline}: generator {m} ===", flush=True)
         runs.append(run_model(m, a.verifier_model, golden_rows, a.limit, a.max_retries, a.out,
                               progress, a.pipeline, a.translator, not a.no_translation_cache,
-                              a.tag, Path(a.golden).name))
-    print(f"\n{'generator':45} {'accept':>7} {'relev':>6} {'tok/srv':>8} {'s/srv':>6}")
+                              a.tag, Path(a.golden).name, a.gate, a.classifier))
+    print(f"\n{'generator':45} {'decide':>7} {'accept':>7} {'relev':>6} {'tok/srv':>8} {'s/srv':>6}")
     for run in runs:
         s = run["summary"]
-        print(f"{run['model_id']:45} {str(s['accept_rate']):>7} {str(s['relevance_mean']):>6} "
-              f"{str(s['tokens']['per_survey']):>8} {str(s['seconds_per_survey_mean']):>6}")
+        print(f"{run['model_id']:45} {str(s['decision_accuracy']):>7} {str(s['accept_rate']):>7} "
+              f"{str(s['relevance_mean']):>6} {str(s['tokens']['per_survey']):>8} "
+              f"{str(s['seconds_per_survey_mean']):>6}")
 
 
 if __name__ == "__main__":
