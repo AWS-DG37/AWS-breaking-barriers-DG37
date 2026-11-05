@@ -9,7 +9,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   stopActiveAudio();
   const english=translation?.items?.length && translation.language?.split('-')[0]==='en'
     ? {...survey, language:translation.language, items:translation.items} : englishSurvey(survey);
-  if(!english) Object.assign(session,{englishText:false,englishAudio:false});
+  if(!english) session.englishText=false;
   const copyFor=language=>language?.split('-')[0]==='hi' ? {
     feedback:'आपकी राय', intro:'आपका अनुभव जानना चाहते हैं', description:'कुछ छोटे सवालों के जवाब दें। यह केवल पूर्वावलोकन है। जवाब भेजे नहीं जाते।',
     start:'शुरू करें', back:'पीछे', next:'आगे', finish:'पूरा करें', thanks:'धन्यवाद', complete:'पूर्वावलोकन पूरा हुआ। जवाब केवल इस पेज पर हैं, भेजे नहीं गए हैं।', restart:'फिर से शुरू करें', required:'आगे बढ़ने के लिए एक जवाब चुनें।', missing:'कृपया बाकी सवालों के जवाब भी दें।'
@@ -29,17 +29,19 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     : 'This answer needs follow-up. This is a preview; no contact has been scheduled.';
   const completionCopy=language=>copyFor(language).complete
     + (survey.items.some(followUpFor) ? ` ${followUpCopy(language)}` : '');
-  let copy=copyFor(survey.language), displayed=survey, utterance=null;
+  let copy=copyFor(survey.language), displayed=survey, utterance=null, clip=null;
   const stopAudio=()=>{
     if(utterance) globalThis.speechSynthesis?.cancel();
+    clip?.pause();
     utterance=null;
+    clip=null;
     readButton.textContent='Read aloud';
     readButton.setAttribute('aria-pressed','false');
   };
   stopActiveAudio=stopAudio;
   function readQuestion() {
     stopAudio();
-    const spoken=session.englishAudio ? english : survey;
+    const spoken=session.englishText ? english : survey;
     const item=spoken.items[session.question];
     const spokenCopy=copyFor(spoken.language);
     const hindi=spoken.language?.split('-')[0]==='hi';
@@ -47,36 +49,41 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       : hindi ? `${item.scale_min} से ${item.scale_max} तक कोई नंबर छूएँ।` : `Tap a number from ${item.scale_min} to ${item.scale_max}.`;
     const text=session.phase==='intro' ? `${spokenCopy.intro}. ${spokenCopy.description}`
       : session.phase==='complete' ? `${spokenCopy.thanks}. ${completionCopy(spoken.language)}` : `${item.prompt} ${choices}`;
-    const line=new SpeechSynthesisUtterance(text);
-    line.lang=spoken.language;
-    utterance=line;
     readButton.textContent='Stop voice';
     readButton.setAttribute('aria-pressed','true');
+    // The console makes each line with ElevenLabs (GET /api/voice), because the demo writes a
+    // new survey on every run. Without it (no key, a view-only session, a static copy of this
+    // page), the browser's own voice reads the line.
+    const audio=new Audio(`/api/voice?${new URLSearchParams({language:spoken.language,text})}`);
+    clip=audio;
+    const fallback=()=>{
+      if(clip!==audio) return;
+      clip=null;
+      speakWithBrowser(text,spoken.language);
+    };
+    audio.onended=()=>{if(clip===audio) stopAudio();};
+    audio.onerror=fallback;
+    audio.play().catch(fallback);
+  }
+  function speakWithBrowser(text,language) {
+    if(!globalThis.speechSynthesis) return stopAudio();
+    const line=new SpeechSynthesisUtterance(text);
+    line.lang=language;
+    utterance=line;
     line.onend=line.onerror=()=>{if(utterance===line) stopAudio();};
     globalThis.speechSynthesis.speak(line);
   }
   const nativeEnglish=survey.language?.split('-')[0]==='en';
-  const textToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishText,disabled:!english || nativeEnglish,onChange:event=>{
-    session.englishText=event.target.checked;
-    syncSwitch();
-    render();
-  }});
-  const audioToggle=el('input',{type:'checkbox',checked:nativeEnglish || session.englishAudio,disabled:!english || nativeEnglish,onChange:event=>{
-    const reading=Boolean(utterance);
-    stopAudio();
-    session.englishAudio=event.target.checked;
-    if(reading) readQuestion();
-  }});
-  const readButton=el('button',{type:'button','aria-pressed':'false',disabled:!globalThis.speechSynthesis,onClick:()=>utterance?stopAudio():readQuestion()},'Read aloud');
-  const controls=el('fieldset',{class:'player-demo',lang:'en'},el('legend',{},'Demo language'),
-    el('label',{},textToggle,'English text'),el('label',{},audioToggle,'English audio'),readButton,
-    el('p',{},!english?'English demo translation is unavailable for this survey.':nativeEnglish?'This survey is already in English.':'Text and audio can use different languages. Answers stay in this preview.'),
-    !globalThis.speechSynthesis?el('p',{},'Audio is unavailable in this browser.'):null);
-  // The same English-text choice as a switch on the phone itself, for showing an audience.
+  const readButton=el('button',{type:'button',class:'read-aloud','aria-pressed':'false',onClick:()=>utterance||clip?stopAudio():readQuestion()},'Read aloud');
+  const controls=el('div',{class:'player-demo',lang:'en'},readButton);
+  // The language switch on the phone sets the language of both the text and the voice.
   const languageSwitch=english && !nativeEnglish ? el('div',{class:'language-switch',role:'group','aria-label':'Survey language'},
     [[false,'हिंदी','hi'],[true,'English','en']].map(([on,label,lang])=>el('button',{type:'button',lang,'aria-pressed':String(Boolean(session.englishText)===on),onClick:()=>{
       if(Boolean(session.englishText)===on) return;
-      session.englishText=on; textToggle.checked=on; syncSwitch(); render(true);
+      const reading=Boolean(utterance || clip);
+      stopAudio();
+      session.englishText=on; syncSwitch(); render(true);
+      if(reading) readQuestion();
     }},label))) : null;
   function syncSwitch() { languageSwitch?.querySelectorAll('button').forEach((b,i)=>b.setAttribute('aria-pressed',String(Boolean(session.englishText)===(i===1)))); }
   const phone=el('form',{onSubmit:event=>event.preventDefault(),class:'survey-phone',role:'region','aria-label':'FarmerChat survey preview',lang:survey.language || 'en'});
@@ -117,7 +124,6 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     displayed=session.englishText ? english : survey;
     copy=copyFor(displayed.language);
     phone.lang=displayed.language || 'en';
-    readButton.disabled=!globalThis.speechSynthesis;
     body.replaceChildren();
     footer.replaceChildren();
     let heading;

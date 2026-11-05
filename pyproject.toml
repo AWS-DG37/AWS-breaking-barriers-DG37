@@ -26,6 +26,7 @@ dependencies = [
   "fastapi>=0.115,<1",
   "uvicorn>=0.34,<1",
   "pyjwt[crypto]>=2.10,<3",
+  "imageio-ffmpeg>=0.6,<0.7",
 ]
 
 [dependency-groups]

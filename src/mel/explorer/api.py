@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
 
@@ -50,6 +50,7 @@ from mel.improvement import ImprovementSpec, ReviewComment, review_target
 from mel.jobs import BatchJobSpec, dispatch, estimate_batch
 from mel.models import Outcome
 from mel.store import Store
+from mel.voice import ElevenLabs, SpokenLines
 
 logger = logging.getLogger("mel.explorer")
 GOLDEN_HOLDOUT = Path("eval/golden_holdout.jsonl")
@@ -259,6 +260,7 @@ def create_app(
     admission_check=None,
     lifespan=None,
     agent_invoker=None,
+    speaker=None,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
@@ -285,6 +287,32 @@ def create_app(
     @app.put("/api/spend-cap")
     def update_spend_cap(value: CapUpdate):
         return database_call(lambda db: set_cap(db, value))
+
+    # The survey phone's voice. The demo writes a new survey on each run, so each line is
+    # made with ElevenLabs when the phone asks for it (survey-player.mjs).
+    if speaker is None and settings.voice_api_key:
+        speaker = ElevenLabs(settings.voice_api_key.get_secret_value).speak
+    spoken = SpokenLines(speaker) if speaker else None
+
+    @app.get("/api/voice")
+    def voice_line(
+        language: Annotated[str, Query(pattern=r"^(hi|en)(-[A-Z]{2})?$")],
+        text: Annotated[str, Query(max_length=600)],
+    ):
+        text = text.strip()
+        if not text:
+            raise HTTPException(422, "text is empty")
+        if spoken is None:
+            raise HTTPException(503, "Voice is not configured. Set MEL_VOICE_API_KEY.")
+        try:
+            audio = spoken.audio(language, text)
+        except Exception as error:
+            # The provider's message can name the key or the account, so log it only.
+            logger.warning("voice_line_failed: %s: %s", type(error).__name__, error)
+            raise HTTPException(502, f"Text to speech failed ({type(error).__name__})") from None
+        return Response(
+            audio, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"}
+        )
 
     @app.get("/api/runs/{run_id}/costs")
     def run_costs(

@@ -11,12 +11,17 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
+from threading import Lock
 from typing import Protocol
+
+import imageio_ffmpeg
 
 # "Mahi", a warm Indian female voice from the ElevenLabs library, in a model that speaks
 # Hindi and English. The clip name does not include the voice: after a change here,
@@ -26,7 +31,13 @@ VOICE = {
     "model_id": "eleven_multilingual_v2",
     "voice_settings": {"stability": 0.6, "similarity_boost": 0.8, "speed": 0.92},
 }
-TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_64"
+# 128 kbit/s from ElevenLabs, because louder() encodes the stored clip a second time.
+TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}?output_format=mp3_44100_128"
+# Speech for phones and the web is mixed to about -16 LUFS. ElevenLabs returns this voice
+# near -24 LUFS, about half as loud, and a page cannot play an <audio> element above
+# volume 1.0. So louder() brings each clip to -16 LUFS once, when it is recorded. The peak
+# limit is -2 dBTP because the MP3 encoder adds about 0.5 dB back.
+LOUDNESS = "I=-16:TP=-2:LRA=11"
 # Where the worker stores clips. The console serves this prefix at /voice/audio/.
 S3_PREFIX = "voice/audio/"
 
@@ -97,6 +108,44 @@ def survey_clips(survey: dict) -> dict[str, str]:
     return {clip_name(survey["language"], text): text for text in texts}
 
 
+def _ffmpeg(mp3: bytes, *args: str) -> subprocess.CompletedProcess:
+    result = subprocess.run(
+        [imageio_ffmpeg.get_ffmpeg_exe(), "-hide_banner", "-nostats", "-f", "mp3",
+         "-i", "pipe:0", *args],
+        input=mp3, capture_output=True, timeout=60,
+    )  # fmt: skip
+    if result.returncode:
+        detail = result.stderr.decode(errors="replace").strip()[-300:]
+        raise RuntimeError(f"ffmpeg could not normalize the clip: {detail}")
+    return result
+
+
+def louder(mp3: bytes) -> bytes:
+    """`mp3` at about -16 LUFS with peaks below -1.5 dBTP, as a 64 kbit/s mono MP3.
+
+    Two passes: one pass on a short clip misses the target by up to 1.5 LU. The ffmpeg
+    binary comes with the imageio-ffmpeg package, so the worker image needs no system ffmpeg.
+    """
+    log = _ffmpeg(mp3, "-af", f"loudnorm={LOUDNESS}:print_format=json", "-f", "null", "-")
+    text = log.stderr.decode(errors="replace")
+    try:
+        m = json.JSONDecoder().raw_decode(text[text.rindex("{") :])[0]
+        measured = (
+            f"measured_I={m['input_i']}:measured_TP={m['input_tp']}:"
+            f"measured_LRA={m['input_lra']}:measured_thresh={m['input_thresh']}:"
+            f"offset={m['target_offset']}"
+        )
+    except (ValueError, KeyError) as error:
+        raise RuntimeError(f"ffmpeg could not normalize the clip: {error}") from None
+    out = _ffmpeg(
+        mp3, "-af", f"loudnorm={LOUDNESS}:{measured}:linear=true", "-ar", "44100", "-ac", "1",
+        "-c:a", "libmp3lame", "-b:a", "64k", "-map_metadata", "-1", "-f", "mp3", "pipe:1",
+    ).stdout  # fmt: skip
+    if not out:
+        raise RuntimeError("ffmpeg could not normalize the clip: no output")
+    return out
+
+
 class VoiceRecordingFailed(RuntimeError):
     """A survey does not have all of its audio. It must not go out on the voice channel."""
 
@@ -133,7 +182,7 @@ class S3Clips:
 
 
 class ElevenLabs:
-    """Text to speech. `key` is called at most once, on the first recording."""
+    """Text to speech, at speech loudness. `key` is called at most once, on the first recording."""
 
     def __init__(self, key: Callable[[], str], timeout: float = 30) -> None:
         self._key_source, self._key, self.timeout = key, None, timeout
@@ -158,10 +207,37 @@ class ElevenLabs:
         )
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return response.read()
+                audio = response.read()
         except urllib.error.HTTPError as error:
             detail = error.read().decode(errors="replace")[:500]
             raise RuntimeError(f"ElevenLabs returned HTTP {error.code}: {detail}") from None
+        return louder(audio)
+
+
+class SpokenLines:
+    """Recent lines spoken for the console phone, so a replay costs no credits."""
+
+    # ponytail: in-process LRU of `limit` clips (about 50 KB each), lost on restart, and two
+    # first requests for one line at the same moment both pay. Upgrade: S3Clips as the store.
+    def __init__(self, speak: Callable[[str], bytes], limit: int = 300) -> None:
+        self.speak, self.limit = speak, limit
+        self._clips: OrderedDict[str, bytes] = OrderedDict()
+        self._lock = Lock()
+
+    def audio(self, language: str, text: str) -> bytes:
+        name = clip_name(language, text)
+        with self._lock:
+            if name in self._clips:
+                self._clips.move_to_end(name)
+                return self._clips[name]
+        audio = self.speak(text)
+        if not audio:
+            raise RuntimeError("text to speech returned no audio")
+        with self._lock:
+            self._clips[name] = audio
+            while len(self._clips) > self.limit:
+                self._clips.popitem(last=False)
+        return audio
 
 
 @dataclass

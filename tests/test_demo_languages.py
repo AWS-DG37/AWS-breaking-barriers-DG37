@@ -3,6 +3,7 @@ import http.server
 import json
 import threading
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 from playwright.sync_api import expect, sync_playwright
@@ -31,6 +32,18 @@ def demo_page():
                       window.spoken = [];
                       window.utterances = [];
                       window.cancelled = 0;
+                      window.played = [];
+                      window.paused = 0;
+                      const play = HTMLMediaElement.prototype.play;
+                      HTMLMediaElement.prototype.play = function () {
+                        window.played.push(this.src);
+                        return play.call(this);
+                      };
+                      const pause = HTMLMediaElement.prototype.pause;
+                      HTMLMediaElement.prototype.pause = function () {
+                        window.paused++;
+                        return pause.call(this);
+                      };
                       window.SpeechSynthesisUtterance = class {
                         constructor(text) { this.text = text; }
                       };
@@ -44,6 +57,8 @@ def demo_page():
                     """)
                     page.route("https://**/*", lambda route: route.abort())
                     page.route("**/audio/*.mp3", lambda route: route.abort())
+                    # No console server here: the phone falls back to the browser voice.
+                    page.route("**/api/voice?*", lambda route: route.abort())
                     yield page, f"http://127.0.0.1:{server.server_port}"
                 finally:
                     browser.close()
@@ -164,15 +179,17 @@ def test_console_demo_preserves_progress_and_cancels_previous_audio(demo_page):
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
     page.get_by_role("radio", name="हाँ", exact=True).check()
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     expect(page.get_by_role("radio", name="Yes", exact=True)).to_be_checked()
     page.get_by_role("button", name="Next", exact=True).click()
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
     page.get_by_role("button", name="Read aloud", exact=True).click()
+    page.wait_for_function("window.spoken.length > 0")
     assert page.evaluate("window.spoken.at(-1).lang") == "en-IN"
     cancelled = page.evaluate("window.cancelled")
-    page.get_by_role("checkbox", name="English audio", exact=True).uncheck()
+    page.get_by_role("button", name="हिंदी", exact=True).click()
     assert page.evaluate("window.cancelled") > cancelled
+    page.wait_for_function("window.spoken.at(-1).lang === 'hi-IN'")
+    page.get_by_role("button", name="English", exact=True).click()
     assert page.evaluate("window.session.question") == 1
     assert page.evaluate("window.session.answers") == {"q1": "yes"}
     expect(page.locator(".player-body h3")).to_have_text(
@@ -180,16 +197,49 @@ def test_console_demo_preserves_progress_and_cancels_previous_audio(demo_page):
     )
 
 
+def serve_console_voice(page):
+    """Answer /api/voice with a real recording, as the console does with ElevenLabs."""
+    clip = next((ROOT / "docs/voice/audio").glob("*.mp3")).read_bytes()
+    page.unroute("**/api/voice?*")
+    page.route(
+        "**/api/voice?*",
+        lambda route: route.fulfill(status=200, body=clip, headers={"content-type": "audio/mpeg"}),
+    )
+
+
+def asked_for(request):
+    return {k: v[0] for k, v in parse_qs(urlparse(request.url).query).items()}
+
+
+def test_console_phone_speaks_with_the_recorded_voice_not_the_browser(demo_page):
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    serve_console_voice(page)
+    mount_console_player(page, base, survey)
+    page.get_by_role("button", name="English", exact=True).click()
+    with page.expect_request("**/api/voice?*") as english:
+        page.get_by_role("button", name="Read aloud", exact=True).click()
+    asked = asked_for(english.value)
+    assert asked["language"] == "en-IN"
+    assert asked["text"].startswith(page.locator(".player-body h3").inner_text())
+    page.wait_for_function("window.played.length > 0")
+    expect(page.get_by_role("button", name="Stop voice", exact=True)).to_be_visible()
+    with page.expect_request("**/api/voice?*") as hindi:
+        page.get_by_role("button", name="हिंदी", exact=True).click()
+    assert asked_for(hindi.value)["language"] == "hi-IN"
+    paused = page.evaluate("window.paused")
+    page.get_by_role("button", name="Stop voice", exact=True).click()
+    assert page.evaluate("window.paused") > paused
+    expect(page.get_by_role("button", name="Read aloud", exact=True)).to_be_visible()
+    assert page.evaluate("window.spoken") == []
+
+
 def test_unknown_survey_does_not_offer_an_incorrect_translation(demo_page):
     page, base = demo_page
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     survey["items"][0]["prompt"] = "नया सवाल"
     mount_console_player(page, base, survey)
-    expect(page.get_by_role("checkbox", name="English text", exact=True)).to_be_disabled()
-    expect(page.get_by_role("checkbox", name="English audio", exact=True)).to_be_disabled()
-    expect(page.get_by_text(
-        "English demo translation is unavailable for this survey."
-    )).to_be_visible()
+    expect(page.get_by_role("group", name="Survey language")).to_have_count(0)
     expect(page.locator(".player-body h3")).to_have_text("नया सवाल")
 
 
@@ -223,13 +273,13 @@ def test_console_can_read_the_completion_in_english(demo_page):
     page, base = demo_page
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
-    page.get_by_role("checkbox", name="English text", exact=True).check()
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("radio", name="Yes", exact=True).check()
     page.get_by_role("button", name="Next", exact=True).click()
     page.get_by_role("radio", name="Fewer", exact=True).check()
     page.get_by_role("button", name="Finish", exact=True).click()
     page.get_by_role("button", name="Read aloud", exact=True).click()
+    page.wait_for_function("window.spoken.length > 0")
     assert page.evaluate("window.spoken.at(-1).lang") == "en-IN"
     assert "Thank you" in page.evaluate("window.spoken.at(-1).text")
 
@@ -238,18 +288,18 @@ def test_console_follow_up_reaction_switches_language_with_the_answer(demo_page)
     page, base = demo_page
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("radio", name="Could not get the insecticide", exact=True).check()
     expect(page.locator(".player-hint")).to_contain_text("follow-up")
-    page.get_by_role("checkbox", name="English text", exact=True).uncheck()
+    page.get_by_role("button", name="हिंदी", exact=True).click()
     expect(page.locator(".player-hint")).to_contain_text("आगे संपर्क")
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("button", name="Next", exact=True).click()
     page.get_by_role("radio", name="Fewer", exact=True).check()
     page.get_by_role("button", name="Finish", exact=True).click()
     expect(page.locator(".player-body")).to_contain_text("follow-up")
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
     page.get_by_role("button", name="Read aloud", exact=True).click()
+    page.wait_for_function("window.spoken.length > 0")
     assert "follow-up" in page.evaluate("window.spoken.at(-1).text")
     cancelled = page.evaluate("window.cancelled")
     page.locator("#player").evaluate("node => node.remove()")
