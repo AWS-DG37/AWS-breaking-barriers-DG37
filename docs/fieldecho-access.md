@@ -104,7 +104,7 @@ The bootstrap alone does not prove sign-in or remove Basic authentication.
 
 Set `MEL_VIEWER_PASSWORD` in the existing private `explorer.env` on the host, alongside
 the four Cognito settings, then restart explorer through the authorized operator path.
-Use a unique, randomly generated password of 16–128 characters. Keep it out of Git,
+Choose a shared viewer password of 10–128 characters. Keep it out of Git,
 CI variables, static files and logs; share it privately with viewers. An unset password
 keeps the existing Cognito-only login. A viewer password without complete Cognito
 settings is rejected at startup, so it cannot accidentally leave a local console open.

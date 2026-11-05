@@ -314,3 +314,72 @@ New offline normalization strips `--run-jobs`. If the older 426 handler retains 
 flag when normalizing a new image, the new CLI accepts both flags and gives
 `--no-live` precedence, so it starts no runner. No new flag is passed to an old image.
 The policy file adds no dependency to old-image rollback.
+
+## AgentCore code releases
+
+The same workflow checks an AgentCore CodeZip on a credentialless Linux ARM64
+Python 3.12 runner. `agents/requirements.lock` pins every transitive dependency and
+its allowed hashes; wheel-only installation rejects a source build. The package
+contains the runtime Python modules and skill prompts, schemas and reference
+examples. Workshop datasets, caches and local runtime state are excluded. The
+unpacked package imports the real entry point and exercises options and invalid
+rules input without model calls. Its embedded `release.json` records the tested
+commit. Only a main push or main dispatch uploads the tested artifact for release.
+
+`deploy/agentcore-target.json` records the existing runtime, execution role and
+versioned package bucket in account `047640882913`, `us-east-1`. No toolkit state or
+inherited account defaults are used. An operator applies
+`deploy/agentcore-policy.yaml` to the existing `dg37-main-deploy` role with those
+exact target values. The additive policy permits only that runtime's Get/Update,
+DEFAULT endpoint read and invocation, pass-role to its existing execution role,
+and package read/write under the declared S3 prefix. CI cannot create IAM roles or
+runtimes. The runtime execution role separately needs read access to that prefix.
+
+Before mutation, `deploy/agentcore.py` validates caller account, runtime identity,
+execution role, package revision and bucket versioning. Packages use
+`<prefix>/<commit>/<sha256>.zip`, conditional creation, SHA-256 checksums and a
+required non-null S3 version ID; retrying an existing package verifies its length,
+metadata and checksum before reusing that version. The update preserves the
+runtime's existing network, environment, protocol and other configuration. A
+fresh remote-main check immediately precedes the update. Superseded runs perform
+no runtime update. A same-package rerun verifies the running endpoint and returns
+`ALREADY_DEPLOYED` without another upload or runtime version. A runtime in
+`UPDATE_FAILED` is eligible for a fix-forward update after its underlying problem
+has been corrected, including when the tested package is unchanged. Other failed
+states and in-progress transitions are refused. The [UpdateAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateAgentRuntime.html)
+documents no READY-only prerequisite; the service remains the authority and any
+rejection exits nonzero. Failed-state recovery is covered at the client boundary,
+without deliberately breaking a live runtime to exercise the service.
+
+The release job allows 60 minutes for the aggregate agent, endpoint and console
+polling windows plus command overhead. Release logs record the prior runtime
+version before an update. The new version must become READY, match the exact versioned package, and be served by the READY
+DEFAULT endpoint. A new-session `options` invocation must return a successful
+application response. Any failed state, timeout or smoke exits nonzero and blocks
+console delivery. Prior runtime versions and immutable packages are retained for
+operator recovery; this does not claim an automatic rollback of DEFAULT after a
+failed smoke. AWS automatically advances DEFAULT to the new version on update
+([runtime versioning](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html)).
+
+After this gate, the existing console release resolves its tested image digest,
+checks current main again and uses the existing fixed SSM document. Ordinary agent
+updates retain the runtime ARN, so the operator-owned `/opt/dg37/explorer.env`
+requires no change. Runtime provisioning, first-time environment configuration and
+behavior verification remain operator-owned actions.
+
+To refresh locked dependencies deliberately, run:
+
+```sh
+uv pip compile agents/requirements.txt --generate-hashes --python-version 3.12 \
+  --python-platform aarch64-manylinux2014 -o agents/requirements.lock
+```
+
+Review the dependency changes and let both workflow check jobs pass before main
+release. The console image and CodeZip must always come from that same tested SHA.
+
+## Public talk
+
+The team presentation is static files in `src/mel/explorer/talk/`, served without
+sign-in at `https://fieldecho.org/talk/`. To change it, edit those files and merge to
+`main`. The ordinary release ships it. Keep its links relative, because the page lives
+under `/talk/`.

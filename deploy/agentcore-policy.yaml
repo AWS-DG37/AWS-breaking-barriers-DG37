@@ -1,0 +1,52 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Scoped CodeZip release permissions for the existing main-only OIDC role
+Parameters:
+  DeployRoleName:
+    Type: String
+    AllowedPattern: '[A-Za-z0-9+=,.@_-]+'
+  RuntimeId:
+    Type: String
+    AllowedPattern: '[A-Za-z][A-Za-z0-9_]{0,47}-[A-Za-z0-9]{10}'
+  ExecutionRoleArn:
+    Type: String
+    AllowedPattern: 'arn:aws:iam::047640882913:role/[A-Za-z0-9+=,.@_/-]+'
+  PackageBucket:
+    Type: String
+    AllowedPattern: '[a-z0-9][a-z0-9-]{1,61}[a-z0-9]'
+  PackagePrefix:
+    Type: String
+    AllowedPattern: '[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*'
+Resources:
+  MainAgentReleasePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: DG37AgentCoreMainRelease
+      Roles: [!Ref DeployRoleName]
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [bedrock-agentcore:GetAgentRuntime, bedrock-agentcore:UpdateAgentRuntime]
+            Resource: !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}
+          - Effect: Allow
+            Action: bedrock-agentcore:GetAgentRuntimeEndpoint
+            Resource:
+              - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}
+              - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}/runtime-endpoint/DEFAULT
+          - Effect: Allow
+            Action: bedrock-agentcore:InvokeAgentRuntime
+            Resource:
+              - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}
+              - !Sub arn:${AWS::Partition}:bedrock-agentcore:${AWS::Region}:${AWS::AccountId}:runtime/${RuntimeId}/runtime-endpoint/DEFAULT
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource: !Ref ExecutionRoleArn
+            Condition:
+              StringEquals:
+                iam:PassedToService: bedrock-agentcore.amazonaws.com
+          - Effect: Allow
+            Action: s3:GetBucketVersioning
+            Resource: !Sub arn:${AWS::Partition}:s3:::${PackageBucket}
+          - Effect: Allow
+            Action: [s3:PutObject, s3:GetObject, s3:GetObjectVersion]
+            Resource: !Sub arn:${AWS::Partition}:s3:::${PackageBucket}/${PackagePrefix}/*
