@@ -206,6 +206,6 @@ function phone(r) {
     el('figcaption',{},`What the farmer sees.${english?' Use the switch at the top to read it in English.':''} Answers are not sent.`)));
   requestAnimationFrame(()=>fitPhone(wrap));
   mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},translation:english,
-    session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
+    session:{phase:'questions',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
   return wrap;
 }

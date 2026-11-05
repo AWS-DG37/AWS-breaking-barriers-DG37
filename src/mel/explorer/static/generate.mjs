@@ -442,7 +442,7 @@ async function showDetail(panel,runId,insightId) {
     ];
     if (survey?.items?.length) {
       const host=el('div',{class:'survey-player'});
-      mountSurveyPlayer(host,{survey,session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
+      mountSurveyPlayer(host,{survey,session:{phase:'questions',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
       sections.push(el('h3',{},outcome.survey?'Survey preview':'Rejected draft'),el('figure',{class:'phone-stage'},host,el('figcaption',{},'Preview only · answers are not sent')),addToReviewList(runId,insightId,survey));
     }
     sections.push(

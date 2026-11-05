@@ -68,8 +68,6 @@ def main():
             expect(phone).to_have_count(0)
             candidate.select_option("0")
             page.get_by_role("button", name="Review survey", exact=False).click()
-            expect(phone.get_by_role("button", name="शुरू करें", exact=True)).to_be_visible()
-            phone.get_by_role("button", name="शुरू करें", exact=True).click()
             expect(phone.locator("input:checked")).to_have_count(0)
             if args.screenshots:
                 args.screenshots.mkdir(parents=True, exist_ok=True)

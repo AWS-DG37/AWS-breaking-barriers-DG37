@@ -162,6 +162,14 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     lifecycle.abort();
     removal.disconnect();
   }
+  // Callers open the phone on the first real question. The welcome screen ('intro') is still
+  // one Back away from question 1, so a demo can show how the survey first arrives.
+  function showWelcome() {
+    stopAudio();
+    session.phase='intro';
+    render(true);
+    onQuestionChange(session.question);
+  }
   const answered=item=>Object.hasOwn(session.answers,item.item_id);
   const button=(label,action,disabled=false,kind='primary')=>el('button',{type:'button',class:`player-${kind}`,onClick:action,disabled},label);
   const optionsOf=item=>item.options || Array.from({length:item.scale_max-item.scale_min+1},(_,i)=>({value:item.scale_min+i,label:String(item.scale_min+i)}));
@@ -179,7 +187,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
   }
   function reset() {
     stopAudio();
-    Object.assign(session,{phase:'intro',question:0,answers:{}});
+    Object.assign(session,{phase:'questions',question:0,answers:{}});
     render(true);
     onQuestionChange(0);
   }
@@ -233,7 +241,7 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
       }
       body.append(heading,answers,hint);
       if(message) body.append(el('p',{role:'status'},message));
-      footer.append(next,button(copy.back,()=>showQuestion(session.question-1),session.question===0,'back'));
+      footer.append(next,button(copy.back,()=>session.question===0 ? showWelcome() : showQuestion(session.question-1),false,'back'));
     }
     body.scrollTop=0;
     if(focus) heading.focus({preventScroll:true});
