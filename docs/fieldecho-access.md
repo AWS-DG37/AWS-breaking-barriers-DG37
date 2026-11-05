@@ -1,6 +1,7 @@
 # Field Echo website administrators
 
-Current main gives every authenticated Cognito pool member full console access. The
+Every authenticated Cognito pool member has full console access. The optional shared
+viewer login described below grants read-only access without creating a pool member. The
 `admins` group is an operator inventory label, not an application-enforced role and
 not AWS IAM administration. Self-registration is disabled. Admit only the five
 explicitly authorized website operators. This setup is independent of CI and image
@@ -98,3 +99,37 @@ Also test logout and confirm an unsigned `/api/health` or other protected API re
 401 while static assets still load. Deployment readiness must use its direct database
 probe and expected unsigned 401; do not add test tokens or bypass authentication.
 The bootstrap alone does not prove sign-in or remove Basic authentication.
+
+## Shared view-only login
+
+Set `MEL_VIEWER_PASSWORD` in the existing private `explorer.env` on the host, alongside
+the four Cognito settings, then restart explorer through the authorized operator path.
+Use a unique, randomly generated password of 16–128 characters. Keep it out of Git,
+CI variables, static files and logs; share it privately with viewers. An unset password
+keeps the existing Cognito-only login. A viewer password without complete Cognito
+settings is rejected at startup, so it cannot accidentally leave a local console open.
+
+Visitors can choose **View only** with that password or **Sign in for full access**
+with their existing Cognito account. Viewers land on Runs and can browse saved runs,
+comparisons, survey previews, review lists and configuration versions. Editing,
+generation, improvements, imports, deletion and spend-cap changes are hidden and
+refused by the server with HTTP 403, including direct API calls. Configuration reads
+do not seed or activate a baseline for viewers. Reading saved content still uses the
+existing website and database infrastructure; it does not invoke paid models.
+The Agents and Demo execution pages require full access. Their option discovery
+contacts the paid AgentCore runtime, so even that GET request is refused for viewers.
+
+Viewer sessions normally use a signed, Secure, HttpOnly, SameSite=Strict cookie valid
+for eight hours. Anyone who knows the shared password can recreate a viewer cookie
+with a later expiry. The expiry is a convenience, not a boundary on shared access;
+server-enforced read-only permissions apply regardless of that expiry. Rotating or
+removing the password and restarting explorer invalidates existing
+viewer cookies. This is shared access: individual viewers cannot be identified or
+revoked separately. Five incorrect passwords within one minute temporarily throttle
+viewer login for the process; full-access sign-in and existing sessions remain available.
+Multiple app processes need a shared proxy-level login rate limit.
+
+Before enabling access, verify a viewer can open a saved run and comparison, cannot
+start a batch or comparison or change the cap, and can sign out. Verify an operator
+can still sign in through Cognito. If an outer Basic-auth gate remains, viewers must
+also pass that gate; enabling this setting does not change nginx or CloudFront.
