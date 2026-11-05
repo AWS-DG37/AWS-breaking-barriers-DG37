@@ -140,7 +140,8 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     footer.replaceChildren();
     const done=session.phase==='complete' ? survey.items.length : session.phase==='intro' ? 0 : session.question+1;
     progress.style.width=`${done/survey.items.length*100}%`;
-    meta.replaceChildren(el('span',{},copy.feedback),session.phase==='questions' ? el('span',{},`${session.question+1} / ${survey.items.length}`) : null);
+    meta.replaceChildren(el('span',{},copy.feedback));
+    if(session.phase==='questions') meta.append(el('span',{},`${session.question+1} / ${survey.items.length}`));
     let heading;
     if(session.phase==='intro') {
       heading=el('h3',{tabindex:-1},copy.intro);
