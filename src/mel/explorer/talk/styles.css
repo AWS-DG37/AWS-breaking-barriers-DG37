@@ -89,6 +89,16 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
 
 .lead{font-size:clamp(1rem,1.5vw,1.25rem);color:var(--mut);max-width:680px;line-height:1.55}
 .center-lead{margin-left:auto;margin-right:auto}
+
+/* title-slide team names: a hairline rule, then names joined by small green dots */
+.byline{list-style:none;padding:clamp(18px,2.8vh,26px) 0 0;margin:clamp(22px,4vh,40px) -120px 0;
+  background:linear-gradient(90deg,transparent,var(--line2) 30%,var(--line2) 70%,transparent) top center/72% 1px no-repeat;
+  display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 0;
+  font-size:clamp(.86rem,1.15vw,1rem);font-weight:500;letter-spacing:.04em;color:var(--tx)}
+.byline li{white-space:nowrap}
+.byline li+li::before{content:"";display:inline-block;width:4px;height:4px;border-radius:50%;
+  background:var(--g);box-shadow:0 0 8px var(--g);vertical-align:middle;margin:0 clamp(12px,1.6vw,20px);
+  position:relative;top:-1px}
 .scene-head{margin-bottom:8px}
 
 .punch{font-size:clamp(1.2rem,2.3vw,1.85rem);font-weight:800;line-height:1.25;margin-top:clamp(18px,3vh,32px);letter-spacing:-.015em}
@@ -289,6 +299,8 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
 @media(max-width:600px){
   h1.display{font-size:clamp(2.4rem,11vw,3.2rem)}
   .team{display:none}
+  .byline{margin-left:0;margin-right:0;gap:6px 18px}
+  .byline li+li::before{display:none}
   .scene{padding:40px 22px}
 }
 @media(prefers-reduced-motion:reduce){
