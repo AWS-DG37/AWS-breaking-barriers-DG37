@@ -946,6 +946,11 @@ def create_app(
         def index():
             return FileResponse(static / "index.html")
 
+        # Browsers and link unfurlers ask for /favicon.ico without reading the page.
+        @app.get("/favicon.ico", include_in_schema=False)
+        def favicon():
+            return FileResponse(static / "assets" / "favicon.ico")
+
     return app
 
 
