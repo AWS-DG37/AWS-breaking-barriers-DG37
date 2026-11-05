@@ -150,9 +150,32 @@ def test_viewers_share_a_capped_allowance_of_new_lines():
     assert speaker.texts == ["one", "two", "three"]
 
 
-def test_a_failed_viewer_line_does_not_use_the_allowance():
+def test_a_failed_viewer_line_still_uses_the_allowance():
+    # ElevenLabs may charge before a later step fails, so a retry is a new spend.
     speaker = Speaker(fail=True)
     with client(speaker, viewer_settings(), viewer_voice_lines_per_hour=1) as http:
         assert speak(viewer(http)).status_code == 502
         speaker.fail = False
-        assert speak(http).status_code == 200
+        assert speak(http).status_code == 429
+    assert speaker.texts == [LINE]
+
+
+def test_an_evicted_line_is_a_new_line_for_viewers():
+    # A replay is free only while the clip is still cached; making it again is a spend.
+    speaker = Speaker()
+    app = create_app(
+        settings=viewer_settings(),
+        store_factory=lambda _: Store(),
+        auth_verifier=TokenVerifier(ISSUER, "console-client", keys=Keys()),
+        speaker=speaker,
+        viewer_voice_lines_per_hour=2,
+    )
+    route = next(r.endpoint for r in app.routes if getattr(r, "path", None) == "/api/voice")
+    spoken = route.__closure__[route.__code__.co_freevars.index("spoken")].cell_contents
+    spoken.limit = 1
+    with TestClient(app, base_url="https://console.example") as http:
+        viewer(http)
+        assert speak(http, "one").status_code == 200
+        assert speak(http, "two").status_code == 200  # evicts "one"
+        assert speak(http, "one").status_code == 429
+    assert speaker.texts == ["one", "two"]

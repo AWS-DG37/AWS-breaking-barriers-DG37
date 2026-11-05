@@ -317,13 +317,14 @@ def create_app(
     spoken = SpokenLines(speaker) if speaker else None
     # View-only sessions hear the same voice, but every viewer shares one hourly allowance
     # of new lines, so the shared password cannot drain the ElevenLabs account. A replay of
-    # a line already made is free and never counts.
+    # a line already made is free and never counts. A failed line still counts: ElevenLabs
+    # may have charged for it before the failure.
     # ponytail: in-process and lost on restart, so the worst case is one allowance per
     # restart. Upgrade: keep the count in the database if the console ever runs replicas.
     viewer_lines: deque[float] = deque()
     viewer_lock = Lock()
 
-    def reserve_viewer_line() -> float:
+    def admit_viewer_line() -> None:
         with viewer_lock:
             now = time.monotonic()
             while viewer_lines and now - viewer_lines[0] >= 3600:
@@ -336,7 +337,6 @@ def create_app(
                     headers={"Retry-After": str(max(wait, 1))},
                 )
             viewer_lines.append(now)
-            return now
 
     @app.get("/api/voice")
     def voice_line(
@@ -349,15 +349,12 @@ def create_app(
             raise HTTPException(422, "text is empty")
         if spoken is None:
             raise HTTPException(503, "Voice is not configured. Set MEL_VOICE_API_KEY.")
-        reserved = None
-        if getattr(request.state, "read_only", False) and not spoken.has(language, text):
-            reserved = reserve_viewer_line()
+        viewer = getattr(request.state, "read_only", False)
         try:
-            audio = spoken.audio(language, text)
+            audio = spoken.audio(language, text, admit_viewer_line if viewer else lambda: None)
+        except HTTPException:
+            raise
         except Exception as error:
-            if reserved is not None:
-                with viewer_lock:
-                    viewer_lines.remove(reserved)
             # The provider's message can name the key or the account, so log it only.
             logger.warning("voice_line_failed: %s: %s", type(error).__name__, error)
             raise HTTPException(502, f"Text to speech failed ({type(error).__name__})") from None
