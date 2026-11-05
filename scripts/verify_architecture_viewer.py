@@ -14,7 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def exercise(page, phone):
+    expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
+    phone.get_by_role("button", name="पीछे", exact=True).click()
+    expect(phone.get_by_role("heading", name="आपका अनुभव जानना चाहते हैं")).to_be_focused()
     phone.get_by_role("button", name="शुरू करें", exact=True).click()
+    expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
     next_button = phone.get_by_role("button", name="आगे", exact=True)
     expect(next_button).to_be_disabled()
     radios = phone.get_by_role("radio")
@@ -37,7 +41,7 @@ def exercise(page, phone):
     phone.get_by_role("button", name="पूरा करें", exact=True).click()
     expect(phone.get_by_role("heading", name="धन्यवाद")).to_be_visible()
     phone.get_by_role("button", name="फिर से शुरू करें").click()
-    phone.get_by_role("button", name="शुरू करें", exact=True).click()
+    expect(phone.get_by_text("1 / 2", exact=True)).to_be_visible()
     expect(phone.locator("input:checked")).to_have_count(0)
     expect(phone.get_by_role("button", name="आगे", exact=True)).to_be_disabled()
 
@@ -65,10 +69,9 @@ def check(url, screenshots=None):
             ).to_be_visible()
             expect(page.get_by_text("UnexpectedModelBehavior", exact=False)).to_be_visible()
             selector.select_option("2")
-            expect(phone.get_by_role("button", name="शुरू करें", exact=True)).to_be_visible()
+            expect(phone.get_by_role("radio").first).to_be_visible()
             selector.select_option("0")
-            expect(phone.get_by_role("button", name="शुरू करें", exact=True)).to_be_visible()
-            phone.get_by_role("button", name="शुरू करें", exact=True).click()
+            expect(phone.get_by_role("radio").first).to_be_visible()
             for width in (1440, 390):
                 page.set_viewport_size({"width": width, "height": 844})
                 assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
@@ -111,7 +114,6 @@ def check(url, screenshots=None):
             page.route(catalog_route, lambda route: route.fulfill(json=test_catalog))
             page.reload()
             expect(page.get_by_text("Rejected draft.", exact=False)).to_be_visible()
-            phone.get_by_role("button", name="Start", exact=True).click()
             phone.get_by_role("radio", name="0", exact=True).check()
             phone.get_by_role("button", name="Next", exact=True).click()
             phone.get_by_role("radio", name="Yes", exact=True).check()
@@ -121,14 +123,13 @@ def check(url, screenshots=None):
             page.evaluate(
                 """async survey => {
                 const {mountSurveyPlayer} = await import('./explorer-preview/survey-player.mjs');
-                window.testSession = {phase:'intro',question:0,answers:{}};
+                window.testSession = {phase:'questions',question:0,answers:{}};
                 window.testPlayer = mountSurveyPlayer(document.querySelector('#recorded-phone'), {
                     session: window.testSession, photoUrl:'./explorer-preview/mustard-field.webp',
                     survey});
             }""",
                 test_survey,
             )
-            phone.get_by_role("button", name="Start", exact=True).click()
             assert phone.evaluate(
                 """node => {
                     const footer = node.querySelector('.player-navigation').getBoundingClientRect();

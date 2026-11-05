@@ -96,7 +96,6 @@
 .survey-player .player-primary:hover:not(:disabled) { background:var(--deep); }
 .survey-player .player-primary:disabled { opacity:.45; cursor:default; }
 .survey-player .player-back { min-height:44px; border:0; background:none; color:#4B5F52; font-family:inherit; font-weight:600; font-size:15px; text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
-.survey-player .player-back:disabled { display:none; }
 
 /* Read aloud: a quiet speaker icon in the sheet header; it turns into a pulsing stop while playing. */
 .survey-player .read-aloud { display:grid; place-items:center; width:44px; height:44px; flex-shrink:0; padding:0; border:0; border-radius:50%; background:var(--mint); color:var(--action); cursor:pointer; transition:background .15s, color .15s; }

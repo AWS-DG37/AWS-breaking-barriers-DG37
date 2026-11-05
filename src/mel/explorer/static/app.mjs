@@ -135,7 +135,7 @@ function renderSurvey(outcome) {
   const key=JSON.stringify([state.detail.experiment_id,chosenRun.run_id,chosenResult.insight_id,chosenResult.input,survey]);
   if(key!==rehearsalKey) {
     rehearsalKey=key;
-    rehearsalSession={phase:'intro',question:0,answers:{}};
+    rehearsalSession={phase:'questions',question:0,answers:{}};
     state.question=0;
   }
   const tabs=el('div',{class:'question-tabs',role:'group','aria-label':'Questions'});

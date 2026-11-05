@@ -30,7 +30,7 @@ async function load() {
         const records=candidate.question_evidence.filter(record=>record.item_id===item.item_id);
         evidence.replaceChildren(el('p',{},`${item.item_id} · ${item.type}`),el('strong',{},'Model-supplied measurement evidence'),...records.map(record=>el('div',{},el('p',{},`${record.measurement} · ${record.explanation}`),el('p',{},`Source fields · ${record.source_fields.join(', ')}`))),el('p',{},'Diagnostic explanation, not independent quality validation.'),el('details',{},el('summary',{},'Question metadata'),el('pre',{},JSON.stringify(item,null,2))));
       };
-      mountSurveyPlayer(host,{survey,session:{phase:'intro',question:0,answers:{}},photoUrl:new URL('./mustard-field.webp',import.meta.url).href,onQuestionChange:update});
+      mountSurveyPlayer(host,{survey,session:{phase:'questions',question:0,answers:{}},photoUrl:new URL('./mustard-field.webp',import.meta.url).href,onQuestionChange:update});
       update(0);
     }
     choose(0);
