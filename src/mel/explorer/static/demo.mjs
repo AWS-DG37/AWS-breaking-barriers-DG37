@@ -4,7 +4,7 @@ import {mountSurveyPlayer} from './survey-player.mjs';
 import {englishVersion, runAgent} from './agents.mjs';
 import {renderDashboard} from './demo-dashboard.mjs';
 // Demo: one insight told as a story. What happened, whether FarmerChat follows up, and the
-// survey the farmer would get, written by the chosen model and checked by Sonnet 5.5.
+// survey the farmer would get, written by the chosen model and checked by the chosen checker.
 
 // Insights offered in the Demo drop-down, in order. Edit this list to change the demo.
 export const DEMO_INSIGHTS = [
@@ -23,7 +23,12 @@ export const TIERS = [
   {id:'balanced', label:'Balanced · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
   {id:'budget', label:'Lowest cost · GPT-5.5', model:'us.openai.gpt-5.5', name:'GPT-5.5'},
 ];
-const VERIFIER = {model:'global.anthropic.claude-sonnet-5-5', name:'Claude Sonnet 5.5'};
+// The checker reviews the survey and writes an English reading of each question. On the live
+// console (2026-11-05) Sonnet took about 14 s a check; Haiku is the faster choice to show.
+export const CHECKERS = [
+  {id:'thorough', label:'Thorough · Claude Sonnet 5.5', model:'global.anthropic.claude-sonnet-5-5', name:'Claude Sonnet 5.5'},
+  {id:'fast', label:'Faster · Claude Haiku 5.5', model:'global.anthropic.claude-haiku-5-5', name:'Claude Haiku 5.5'},
+];
 const RULE_TEXT = {
   R1:'This was not a real farming conversation (a greeting, or a message that could not be understood), so there is nothing to follow up on.',
   R3:'The farmer only asked for general information. They were not asked to do anything, so there is nothing to check.',
@@ -36,7 +41,7 @@ const words = value => String(value ?? '').replaceAll('_',' ');
 const cap = value => { const s=words(value); return s ? s[0].toUpperCase()+s.slice(1) : ''; };
 
 const requests=requestScope(), runs=requestScope();
-const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', run:0, mode:'live'};
+const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', checker:'thorough', run:0, mode:'live'};
 
 // Shrink the whole phone, never just its height, so it stays a normal phone shape and still
 // fits beside the story without scrolling the page.
@@ -78,6 +83,8 @@ function render() {
     [...view.insights.keys()].map(id=>el('option',{value:id,selected:id===view.insightId},title(id))));
   const tier=el('select',{onChange:e=>{view.tier=e.target.value;}},
     TIERS.map(t=>el('option',{value:t.id,selected:t.id===view.tier},t.label)));
+  const checker=el('select',{onChange:e=>{view.checker=e.target.value;}},
+    CHECKERS.map(c=>el('option',{value:c.id,selected:c.id===view.checker},c.label)));
   const go=el('button',{type:'submit',class:'primary'},'Run the follow-up');
   const live=el('div',{class:'demo-layout',id:'demo-live',hidden:view.mode!=='live'},
     el('div',{class:'demo-main'},
@@ -85,7 +92,8 @@ function render() {
         el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.')),modeSwitch()),
       el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
         el('label',{},'Conversation',insight),
-        el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
+        el('label',{},'Writer',tier),
+        el('label',{},'Checker',checker),
         go),
       el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
         el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'}))),
@@ -154,7 +162,7 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
 async function start() {
   runs.renew();
-  const ticket=++view.run, tier=TIERS.find(t=>t.id===view.tier);
+  const ticket=++view.run, tier=TIERS.find(t=>t.id===view.tier), checker=CHECKERS.find(c=>c.id===view.checker);
   const flow=document.getElementById('demo-flow'), phoneCol=document.getElementById('demo-phone');
   phoneCol.replaceChildren();
   const steps=el('ol',{class:'demo-steps'});
@@ -172,20 +180,20 @@ async function start() {
     if (!decision.survey) return;
     await pause(900);
     if (!alive()) return;
-    const write=step(`${tier.name} is writing the survey, and ${VERIFIER.name} is checking it…`,'active','0 s');
+    const write=step(`${tier.name} is writing the survey, and ${checker.name} is checking it…`,'active','0 s');
     const later=el('ol',{class:'demo-steps'},write);
     flow.append(later);
     const started=Date.now();
     const clock=setInterval(()=>{ if(!alive()) return clearInterval(clock); write.querySelector('p').textContent=`${Math.round((Date.now()-started)/1000)} s`; },1000);
     let record;
     try {
-      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:VERIFIER.model,pipeline:'direct',max_retries:1},runs);
+      record=await runAgent({insight_id:view.insightId,generator:tier.model,verifier:checker.model,pipeline:'direct',max_retries:1},runs);
     } finally { clearInterval(clock); }
     if (!alive()) return;
     const r=record.result, seconds=Math.round((Date.now()-started)/1000);
     const revisions=r.attempts>1 ? ` after ${r.attempts-1} revision${r.attempts>2?'s':''}` : '';
-    if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
-    else finish(write,r.status==='failed'?'The survey could not be written':`${VERIFIER.name} did not approve this survey${revisions}`,r.error || `${seconds} s · showing the last draft`,'warn');
+    if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${checker.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
+    else finish(write,r.status==='failed'?'The survey could not be written':`${checker.name} did not approve this survey${revisions}`,r.error || `${seconds} s · showing the last draft`,'warn');
     if (r.items?.length) phoneCol.append(phone(r));
   } catch (error) {
     if (error.name==='AbortError' || !alive()) return;
