@@ -3,6 +3,18 @@ import {englishSurvey} from './demo-language.mjs';
 
 let stopActiveAudio=()=>{};
 
+// The browser's voice for a language, or null. Without one, the browser reads the line with
+// its default voice: an English voice skips Hindi script and says only the "?" ("question
+// mark"). Silence is better than that.
+// ponytail: Chrome fills getVoices() a moment after load, so a tap in the first instant stays
+// silent. Upgrade: wait for the voiceschanged event once.
+export function browserVoice(language) {
+  const voices=globalThis.speechSynthesis?.getVoices?.() || [];
+  const base=tag=>String(tag || '').replace('_','-').split('-')[0].toLowerCase();
+  return voices.find(voice=>voice.lang===language)
+    || voices.find(voice=>base(voice.lang)===base(language)) || null;
+}
+
 // translation: optional {language, items} with the same item ids and option values (the survey
 // agents send the verifier's English reading). Without it, known wording comes from demo-language.mjs.
 export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionChange=()=>{}, translation=null}) {
@@ -115,9 +127,11 @@ export function mountSurveyPlayer(host, {survey, session, photoUrl, onQuestionCh
     audio.play().then(()=>{if(clip===audio && cues.length) cueFrame=requestAnimationFrame(follow);}).catch(fallback);
   }
   function speakWithBrowser(text,language,reach) {
-    if(!globalThis.speechSynthesis) return stopAudio();
+    const voice=browserVoice(language);
+    if(!voice) return stopAudio();
     const line=new SpeechSynthesisUtterance(text);
     line.lang=language;
+    line.voice=voice;
     utterance=line;
     // The browser voice reports each word as it starts, so its cues are exact.
     line.onboundary=event=>{if(utterance===line) reach(event.charIndex);};
