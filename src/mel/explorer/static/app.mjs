@@ -6,6 +6,7 @@ import {showGenerate, showRuns, leaveGenerate} from './generate.mjs';
 import {showConfigure, leaveConfigure} from './configure.mjs';
 import {showReview, leaveReview, addToReviewList} from './review.mjs';
 import {showAgents, leaveAgents} from './agents.mjs';
+import {showDemo, leaveDemo} from './demo.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {displayValue, questionAssessments, eventsForStage} from './domain.mjs';
 import {insightJourney} from './journey.mjs';
@@ -263,14 +264,14 @@ let compareLoaded=false;
 let activeTab=null;
 function route() {
   const hash=location.hash || '#generate';
-  const tab=['runs','compare','review','configure','agents'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
+  const tab=['runs','compare','review','configure','agents','demo'].find(name=>hash.startsWith(`#${name}`)) || 'generate';
   if (tab!==activeTab) {
-    leaveGenerate(); leaveConfigure(); leaveReview(); leaveAgents();
+    leaveGenerate(); leaveConfigure(); leaveReview(); leaveAgents(); leaveDemo();
     clearTimeout(poll); ++state.request; requests.renew();
     activeTab=tab;
   }
   applyDetail(tab);
-  for (const name of ['generate','runs','compare','review','configure','agents']) $(`${name}-view`).hidden=name!==tab;
+  for (const name of ['generate','runs','compare','review','configure','agents','demo']) $(`${name}-view`).hidden=name!==tab;
   document.querySelectorAll('[data-tab]').forEach(link=>link.setAttribute('aria-current',String(link.dataset.tab===tab)));
   if (tab==='runs') { clearTimeout(poll); showRuns($('runs-view'),hash); return; }
   if (tab==='generate') { clearTimeout(poll); showGenerate($('generate-view'),hash); return; }
@@ -278,6 +279,7 @@ function route() {
   if (tab==='configure') { clearTimeout(poll); showConfigure($('configure-view'),hash); return; }
   if (tab==='review') { clearTimeout(poll); showReview($('review-view'),hash); return; }
   if (tab==='agents') { clearTimeout(poll); showAgents($('agents-view')); return; }
+  if (tab==='demo') { clearTimeout(poll); showDemo($('demo-view')); return; }
   const id=hash.split('/')[1];
   if (!compareLoaded) { compareLoaded=true; bootCompare(id); }
   else if (id) openExperiment(id,id===state.detail?.experiment_id);
@@ -307,7 +309,7 @@ async function bootCompare(id) {
 }
 mountDial($('detail-dial'));
 boot();
-window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();leaveAgents();});
+window.addEventListener('pagehide',()=>{clearTimeout(poll);++state.request;requests.cancel();leaveGenerate();leaveConfigure();leaveReview();leaveAgents();leaveDemo();});
 $('sign-out').addEventListener('click',signOut);
 // The skip link focuses the visible section; a hash link would switch tabs.
-document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','review-view','configure-view','agents-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});
+document.querySelector('.skip').addEventListener('click',event=>{event.preventDefault();(['generate-view','runs-view','review-view','configure-view','agents-view','demo-view'].map($).find(v=>!v.hidden) || $('workspace')).focus();});

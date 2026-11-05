@@ -68,10 +68,7 @@ def _pick(value, allowed, default, label):
     return value
 
 
-def generate_survey(
-    insight, generator=None, verifier=None, pipeline="direct", translator=None, max_retries=1
-):
-    """Run one insight through the pipeline and return the result dict."""
+def _check_insight(insight):
     if not isinstance(insight, dict):
         raise BadRequest("insight must be a JSON object")
     missing = [f for f in REQUIRED_FIELDS if f not in insight]
@@ -79,6 +76,24 @@ def generate_survey(
         raise BadRequest(f"insight is missing fields: {', '.join(missing)}")
     if not isinstance(insight.get("asset"), dict):
         raise BadRequest("insight.asset must be an object")
+
+
+def decide_only(insight):
+    """The survey / no-survey rules on their own. Code only, so it answers at once."""
+    from decide import decide  # path set up by run_one, imported through sweep
+
+    _check_insight(insight)
+    try:
+        return decide(insight)
+    except (KeyError, TypeError) as error:
+        raise BadRequest(f"insight is missing data the rules need ({error})") from None
+
+
+def generate_survey(
+    insight, generator=None, verifier=None, pipeline="direct", translator=None, max_retries=1
+):
+    """Run one insight through the pipeline and return the result dict."""
+    _check_insight(insight)
     generator = _pick(generator, GENERATORS, DEFAULT_GENERATOR, "generator")
     verifier = _pick(verifier, VERIFIERS, DEFAULT_VERIFIER, "verifier")
     translator = _pick(translator, TRANSLATORS, DEFAULT_TRANSLATOR, "translator")

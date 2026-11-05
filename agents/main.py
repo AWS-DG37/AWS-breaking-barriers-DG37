@@ -32,6 +32,11 @@ def invoke(payload, context=None):
     payload = payload or {}
     if payload.get("action") == "options":
         return {"ok": True, "result": service.options()}
+    if payload.get("action") == "decide":  # the rules gate alone: code only, no model calls
+        try:
+            return {"ok": True, "result": service.decide_only(payload.get("insight"))}
+        except service.BadRequest as error:
+            return {"ok": False, "error": str(error)}
     try:
         result = service.generate_survey(
             payload.get("insight"),

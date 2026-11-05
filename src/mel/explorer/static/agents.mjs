@@ -77,13 +77,13 @@ const runs=requestScope();
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 // The server starts the run in the background (a survey outlasts the hosted API's 29 s limit);
 // poll until it is done. Gives up after 5 minutes.
-async function runAgent(body) {
-  const {run_id}=await runs.api('/agents/runs',{method:'POST',body:JSON.stringify(body)});
+export async function runAgent(body, scope=runs) {
+  const {run_id}=await scope.api('/agents/runs',{method:'POST',body:JSON.stringify(body)});
   const deadline=Date.now()+300000;
   while (Date.now()<deadline) {
     await sleep(3000);
-    runs.signal.throwIfAborted();
-    const record=await runs.api(`/agents/runs/${run_id}`);
+    scope.signal.throwIfAborted();
+    const record=await scope.api(`/agents/runs/${run_id}`);
     if (record.status==='done') return record;
     if (record.status==='failed') throw new Error(record.error || 'The run failed.');
   }
@@ -109,7 +109,7 @@ function start() {
 // English for the phone's language switch. Translate pipeline: the English survey the translator
 // started from. Direct pipeline: the verifier's back-translation of the final survey, laid over
 // the farmer's items so ids and answer values stay the same.
-function englishVersion(r) {
+export function englishVersion(r) {
   if (!r.items?.length || String(r.language).startsWith('en')) return null;
   if (r.items_en?.length) return {language:'en-IN', items:r.items_en};
   const back=new Map(((r.reviews || []).at(-1)?.back_translation || []).map(b=>[b.item_id,b]));

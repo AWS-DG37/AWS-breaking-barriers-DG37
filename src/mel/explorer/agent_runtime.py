@@ -272,6 +272,22 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
             ]
         }
 
+    @app.get("/api/agents/insights/{insight_id}")
+    def agent_insight(insight_id: str):
+        row = golden_insights().get(insight_id)
+        if row is None:
+            raise HTTPException(404, "Unknown insight")
+        return {"insight": row["insight"], "expected": row.get("expected")}
+
+    # The rules gate alone (code, no model calls). Answers in a second or two, so it runs
+    # inside the API's 29 s limit; the Demo tab shows it before the survey is written.
+    @app.post("/api/agents/decide")
+    def agent_decide(value: AgentRun):
+        row = golden_insights().get(value.insight_id)
+        if row is None:
+            raise HTTPException(404, "Unknown insight")
+        return {"decision": call({"action": "decide", "insight": row["insight"]})}
+
     @app.post("/api/agents/runs", status_code=202)
     def agent_run(value: AgentRun):
         if runtime is None:
