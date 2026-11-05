@@ -48,7 +48,10 @@ def demo_page():
                       window.SpeechSynthesisUtterance = class {
                         constructor(text) { this.text = text; }
                       };
+                      // The voices a browser with Hindi and English installed offers.
+                      window.voices = [{lang: 'hi-IN', name: 'Lekha'}, {lang: 'en-IN', name: 'Rishi'}];
                       Object.defineProperty(window, 'speechSynthesis', {value: {
+                        getVoices() { return window.voices; },
                         cancel() { window.cancelled++; },
                         speak(line) {
                           window.spoken.push({text: line.text, lang: line.lang});
@@ -277,6 +280,37 @@ def test_recorded_voice_glows_answers_in_order_without_choosing(demo_page):
     assert page.evaluate("window.glowed")[:count] == list(range(count))
     assert page.evaluate("window.spoken") == []
     expect(page.locator("input:checked")).to_have_count(0)
+
+
+def test_browser_without_a_hindi_voice_stays_silent_instead_of_saying_question_mark(demo_page):
+    # At the demo the console's voice failed, and the laptop had no Hindi voice: the English
+    # default voice skipped the Devanagari and said only "question mark".
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    page.add_init_script("window.voices = [{lang: 'en-US', name: 'Samantha'}];")
+    mount_console_player(page, base, survey)
+    with page.expect_request("**/api/voice?*"):
+        page.get_by_role("button", name="Read aloud", exact=True).click()
+    expect(page.get_by_role("button", name="Read aloud", exact=True)).to_be_visible()
+    assert page.evaluate("window.spoken") == []
+    page.get_by_role("button", name="English", exact=True).click()
+    page.get_by_role("button", name="Read aloud", exact=True).click()
+    page.wait_for_function("window.spoken.length > 0")
+    assert page.evaluate("window.spoken.at(-1).lang") == "en-IN"
+    assert page.evaluate("window.utterances.at(-1).voice.name") == "Samantha"
+
+
+def test_voice_page_without_a_hindi_voice_stays_silent(demo_page):
+    page, base = demo_page
+    survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
+    survey["items"][0]["prompt"] = "नया सवाल?"  # no recording exists for this line
+    page.add_init_script("window.voices = [{lang: 'en-US', name: 'Samantha'}];")
+    page.route(base + "/custom-survey.json", lambda route: route.fulfill(json=survey))
+    page.goto(f"{base}/docs/voice/?survey=/custom-survey.json")
+    expect(page.locator("#card h2")).to_have_text("नया सवाल?")
+    page.locator("#voice").click()
+    expect(page.get_by_text("this browser has no hi-IN voice")).to_be_visible()
+    assert page.evaluate("window.spoken") == []
 
 
 def test_unknown_survey_does_not_offer_an_incorrect_translation(demo_page):
