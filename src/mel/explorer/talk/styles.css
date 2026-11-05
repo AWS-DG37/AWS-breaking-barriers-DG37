@@ -296,3 +296,42 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   .scene,.scene .content>*,.scene-head>*,.cards>*,.steps li,.bullets li,
   .flow>*,.rules .rule,.cases>*{opacity:1;transform:none;filter:none}
 }
+
+/* ─── slide 4: AWS deployment diagram ───
+   The SVG is generated from docs/aws-deployment.html by scripts/build_talk_diagram.py and
+   carries its own namespaced styles. This slide only gives it room: it widens past the
+   1040px column and keeps 16:9 inside the space between the bar and the footer. */
+.scene.scene-arch{padding:clamp(8px,1.5vh,20px) max(16px,2vw)}
+.content.arch{max-width:none;width:min(100%,calc((100vh - 92px - 10vh) * 16 / 9))}
+.arch svg{display:block;width:100%;height:auto}
+
+/* The MEL Console card opens the live console (console-window.js). */
+#deployment #ad-console{cursor:pointer;outline:none}
+#deployment #ad-console .ad-card{transition:stroke .25s,filter .25s}
+#deployment #ad-console:hover .ad-card,#deployment #ad-console:focus-visible .ad-card{
+  stroke:var(--ad-green);filter:drop-shadow(0 0 10px rgba(94,230,138,.45))}
+#deployment .ad-live-hint{fill:var(--ad-green);opacity:.8}
+
+/* The console window: a small browser frame that grows to fill the screen. */
+.cw{position:fixed;z-index:60;overflow:hidden;display:flex;flex-direction:column;container-type:inline-size;
+  background:var(--card);border:1px solid #2d6b43;
+  box-shadow:0 30px 90px rgba(0,0,0,.6),0 0 40px rgba(94,230,138,.12)}
+.cw-chrome{flex:0 0 40px;display:flex;align-items:center;gap:12px;padding:0 8px 0 14px;
+  background:var(--card2);border-bottom:1px solid var(--line);transition:opacity .35s ease}
+.cw-dots{display:flex;gap:6px}
+.cw-dots i{width:10px;height:10px;border-radius:50%;background:var(--line2)}
+.cw-url{flex:1;min-width:0;height:26px;display:flex;align-items:center;gap:8px;padding:0 12px;
+  border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--mut);font-size:.8rem;white-space:nowrap}
+.cw-addr{overflow:hidden;text-overflow:ellipsis}
+.cw-lock{flex:0 0 auto;width:8px;height:8px;border:1.5px solid var(--g);border-radius:2px}
+.cw-tab{color:var(--mut);font-size:.78rem;text-decoration:none;white-space:nowrap}
+.cw-tab:hover,.cw-tab:focus-visible{color:var(--tx)}
+.cw-back{font:800 .8rem var(--font);color:var(--ink);background:var(--g);border:0;border-radius:999px;
+  padding:6px 14px;cursor:pointer;white-space:nowrap}
+.cw-back:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.cw-view{position:relative;flex:1;min-height:0;overflow:hidden;background:#fff;transition:opacity .35s ease}
+.cw-frame{position:absolute;top:0;left:0;border:0;transform-origin:0 0;background:#fff}
+.cw-loading{position:absolute;inset:0;margin:0;display:grid;place-items:center;color:#52635A;font-size:.9rem}
+.cw[hidden]{display:none}
+.cw.cw-card .cw-chrome,.cw.cw-card .cw-view{opacity:0}
+@container (max-width:640px){.cw-tab{display:none}}

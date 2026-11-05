@@ -184,10 +184,13 @@ body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--f
   <text class="ad-grp-sub" x="730" y="248">instance fieldecho · Docker Compose · nginx sign-in proxy</text>
 
   <!-- Containers -->
-  <rect class="ad-card" x="530" y="290" width="290" height="84" rx="8"/>
-  <text class="ad-tag" x="546" y="310">CONTAINER</text>
-  <text class="ad-lbl" x="546" y="335">MEL Console</text>
-  <text class="ad-sub" x="546" y="356">FastAPI API and web UI</text>
+  <!-- The talk (slide 4) turns this group into a button that opens the live console. -->
+  <g id="ad-console">
+    <rect class="ad-card" x="530" y="290" width="290" height="84" rx="8"/>
+    <text class="ad-tag" x="546" y="310">CONTAINER</text>
+    <text class="ad-lbl" x="546" y="335">MEL Console</text>
+    <text class="ad-sub" x="546" y="356">FastAPI API and web UI</text>
+  </g>
 
   <rect class="ad-card" x="880" y="290" width="290" height="84" rx="8"/>
   <image class="ad-mono" href="assets/aws-icons/Database.svg" x="1118" y="304" width="40" height="40"/>
