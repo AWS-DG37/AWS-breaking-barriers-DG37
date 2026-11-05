@@ -966,6 +966,10 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .demo-verifier { font-weight:400; }
 .demo-layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:24px; align-items:start; }
 .demo-phone-col { position:sticky; top:12px; }
+/* No survey on screen (before a run, while it runs, or no follow-up): the controls, story and
+   steps use the full width instead of leaving an empty phone column. */
+.demo-layout:has(> .demo-phone-col:empty) { grid-template-columns:minmax(0,1fr); }
+.demo-layout > .demo-phone-col:empty { display:none; }
 .demo-stage { display:grid; grid-template-columns:minmax(260px,320px) minmax(300px,1fr); gap:24px; align-items:start; }
 #demo-view { padding-top:20px; }
 #demo-view .heading { margin-bottom:12px; }
