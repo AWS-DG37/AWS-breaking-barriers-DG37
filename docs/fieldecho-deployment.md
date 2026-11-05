@@ -376,3 +376,10 @@ uv pip compile agents/requirements.txt --generate-hashes --python-version 3.12 \
 
 Review the dependency changes and let both workflow check jobs pass before main
 release. The console image and CodeZip must always come from that same tested SHA.
+
+## Public talk
+
+The team presentation is static files in `src/mel/explorer/talk/`, served without
+sign-in at `https://fieldecho.org/talk/`. To change it, edit those files and merge to
+`main`. The ordinary release ships it. Keep its links relative, because the page lives
+under `/talk/`.
