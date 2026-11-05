@@ -2,6 +2,7 @@ import {el, skeleton} from './dom.mjs';
 import {requestScope} from './api.mjs';
 import {mountSurveyPlayer} from './survey-player.mjs';
 import {englishVersion, runAgent} from './agents.mjs';
+import {renderDashboard} from './demo-dashboard.mjs';
 // Demo: one insight told as a story. What happened, whether FarmerChat follows up, and the
 // survey the farmer would get, written by the chosen model and checked by Sonnet 5.5.
 
@@ -35,7 +36,7 @@ const words = value => String(value ?? '').replaceAll('_',' ');
 const cap = value => { const s=words(value); return s ? s[0].toUpperCase()+s.slice(1) : ''; };
 
 const requests=requestScope(), runs=requestScope();
-const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', run:0};
+const view={root:null, request:0, insights:new Map(), insightId:DEMO_INSIGHTS[0], tier:'premium', run:0, mode:'live'};
 
 // Shrink the whole phone, never just its height, so it stays a normal phone shape and still
 // fits beside the story without scrolling the page.
@@ -78,17 +79,37 @@ function render() {
   const tier=el('select',{onChange:e=>{view.tier=e.target.value;}},
     TIERS.map(t=>el('option',{value:t.id,selected:t.id===view.tier},t.label)));
   const go=el('button',{type:'submit',class:'primary'},'Run the follow-up');
-  view.root.replaceChildren(el('div',{class:'demo-layout'},
+  const live=el('div',{class:'demo-layout',id:'demo-live',hidden:view.mode!=='live'},
     el('div',{class:'demo-main'},
       el('div',{class:'heading'},el('div',{},el('h1',{},'Demo'),
-        el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.'))),
+        el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.')),modeSwitch()),
       el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
         el('label',{},'Conversation',insight),
         el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
         go),
       el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
         el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'}))),
-    el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'})));
+    el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'}));
+  const dashboard=el('div',{class:'demo-dashboard',id:'demo-dashboard',hidden:view.mode!=='dashboard'},
+    el('div',{class:'heading'},el('div',{},el('h1',{},'After 1,000 surveys'),
+      el('p',{class:'muted'},'What a Digital Green programme team could see once farmers answer their follow-ups.')),modeSwitch()),
+    ...renderDashboard());
+  view.root.replaceChildren(live,dashboard);
+}
+
+// Two views of the demo. Switching keeps the live run and its phone where they were.
+function modeSwitch() {
+  const options=[['live','Live follow-up'],['dashboard','After 1,000 surveys']];
+  return el('div',{class:'demo-mode',role:'group','aria-label':'Demo view'},options.map(([mode,label])=>
+    el('button',{type:'button','data-mode':mode,'aria-pressed':String(view.mode===mode),onClick:()=>setMode(mode)},label)));
+}
+function setMode(mode) {
+  view.mode=mode;
+  document.getElementById('demo-live').hidden=mode!=='live';
+  document.getElementById('demo-dashboard').hidden=mode!=='dashboard';
+  view.root.querySelectorAll('.demo-mode button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode===mode)));
+  if (mode==='live') { const wrap=document.querySelector('.demo-phone'); if (wrap) fitPhone(wrap); }
+  window.scrollTo({top:0});
 }
 
 function reset() {
