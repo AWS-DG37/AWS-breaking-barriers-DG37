@@ -138,7 +138,7 @@ function resultCard(generator,{result:r,expected}) {
   if (r.items?.length) {
     const host=el('div',{class:'survey-player'});
     out.push(el('figure',{class:'phone-stage'},host));
-    mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},translation:englishVersion(r),session:{phase:'intro',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
+    mountSurveyPlayer(host,{survey:{language:r.language,items:r.items},translation:englishVersion(r),session:{phase:'questions',question:0,answers:{}},photoUrl:'/static/assets/mustard-field.webp'});
   } else if (r.status!=='skipped') out.push(el('p',{class:'muted'},'No survey questions came back.'));
   for (const issue of r.code_errors || []) out.push(el('p',{class:'missing small'},`Code check: ${issue}`));
   const last=(r.reviews || []).at(-1);
