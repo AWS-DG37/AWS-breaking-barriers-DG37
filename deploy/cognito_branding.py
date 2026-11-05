@@ -7,8 +7,9 @@ favicon reuse the console's own assets. Run with operator credentials:
         --pool-id POOL_ID --client-id CLIENT_ID --region us-east-1
 
 The style shows only when the pool domain uses managed login version 2
-(deploy/auth-bootstrap.yaml). Apply the style before that stack update, so the
-new page never renders without it.
+(deploy/auth-bootstrap.yaml). On a new stack, apply it right after the deploy,
+before anyone signs in. On a pool still on version 1, apply it before the stack
+update, so the new page never renders without it.
 """
 
 import argparse

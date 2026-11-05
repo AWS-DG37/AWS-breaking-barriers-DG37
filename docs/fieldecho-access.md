@@ -37,8 +37,10 @@ aws cloudformation describe-stacks --stack-name fieldecho-auth --region REGION \
 ```
 
 The stack puts the domain on Cognito managed login, which shows a FieldEcho-styled
-sign-in page. Apply that style before the first stack deploy and after any change
-to `deploy/cognito-branding/`:
+sign-in page. Apply that style with the pool and client IDs from the stack outputs,
+before anyone signs in. Apply it again after any change to `deploy/cognito-branding/`.
+For an existing pool still on the old hosted page, apply the style before the stack
+update that moves the domain to managed login:
 
 ```sh
 uv run python deploy/cognito_branding.py --pool-id POOL_ID --client-id CLIENT_ID \
