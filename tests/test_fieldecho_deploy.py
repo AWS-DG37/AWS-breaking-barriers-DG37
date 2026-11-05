@@ -163,6 +163,9 @@ class Runtime:
     def compose(self, release):
         return json.dumps({"services": {"explorer": {"image": release["image"]}}})
 
+    def boot_compose(self, release):
+        return self.compose(release)
+
     def validate_compose(self, compose, name):
         self.events.append("validate:" + name)
         if self.fail == "compose-" + name:
@@ -1155,3 +1158,339 @@ def test_expired_startup_command_substitution_never_runs_unbounded(tmp_path):
     )
     assert result.returncode != 0
     assert not marker.exists()
+
+
+class BootRuntime(Runtime):
+    def __init__(self, root):
+        super().__init__(root)
+        self.original = {
+            "services": {
+                "postgres": {"image": "postgres:16"},
+                "explorer": {
+                    "image": OLD_IMAGE,
+                    "entrypoint": ["mel-explorer", "--host", "127.0.0.1", "--allow-live"],
+                    "environment": {"BOOT_CONFIG": "original"},
+                },
+            }
+        }
+        self.active = copy.deepcopy(self.original)
+        self.old_smokes = 0
+        self.failed_old_smokes = set()
+        self.fail_original = False
+        self.fail_candidate = False
+        self.observe_smoke = lambda: None
+
+    def compose(self, release):
+        result = copy.deepcopy(self.original)
+        app = result["services"]["explorer"]
+        app["image"] = release["image"]
+        app["entrypoint"] = ["mel-explorer", "--no-live"]
+        app["environment"]["BOOT_CONFIG"] = "rendered"
+        return json.dumps(result)
+
+    def boot_compose(self, release):
+        result = copy.deepcopy(self.original)
+        app = result["services"]["explorer"]
+        app["image"] = release["image"]
+        app["entrypoint"].remove("--allow-live")
+        app["entrypoint"].append("--no-live")
+        return json.dumps(result)
+
+    def switch(self, compose):
+        self.active = json.loads(compose)
+        super().switch(compose)
+
+    def smoke(self, release):
+        self.observe_smoke()
+        app = self.active["services"]["explorer"]
+        args = app["entrypoint"] + app.get("command", [])
+        assert args.count("--no-live") == 1
+        assert "--allow-live" not in args
+        if release["image"] == OLD_IMAGE:
+            self.old_smokes += 1
+            if self.old_smokes in self.failed_old_smokes:
+                raise ValueError("rendered previous is unhealthy")
+            if self.fail_original and app["environment"]["BOOT_CONFIG"] == "original":
+                raise ValueError("original offline fallback is unhealthy")
+        elif self.fail_candidate:
+            raise ValueError("candidate unhealthy")
+        super().smoke(release)
+
+
+@pytest.fixture
+def boot_host(tmp_path, d, target):
+    runtime = BootRuntime(tmp_path)
+    (tmp_path / "compose.yaml").write_text(json.dumps(runtime.original))
+    return d.Host(tmp_path, target, runtime), runtime
+
+
+def test_initial_previous_failure_uses_original_offline_before_boot_promotion(d, target, boot_host):
+    h, r = boot_host
+    original = (h.root / "compose.yaml").read_text()
+    observed_boot = []
+    r.observe_smoke = lambda: observed_boot.append((h.root / "compose.yaml").read_text())
+    r.failed_old_smokes = {1, 2}
+    result = h.activate(d.Release(SHA, target.registry + "@" + DIGEST, 20))
+    assert result["outcome"] == "FAILED_BEFORE_SWITCH"
+    assert observed_boot == [original] * 3
+    boot = json.loads((h.root / "compose.yaml").read_text())["services"]["explorer"]
+    assert boot["environment"] == {"BOOT_CONFIG": "original"}
+    assert boot["image"] == OLD_IMAGE
+    assert boot["entrypoint"] == ["mel-explorer", "--host", "127.0.0.1", "--no-live"]
+    assert "snapshot" not in r.events
+    assert h.read().transition is None
+    assert h.read().highest_sequence == 20
+    assert (h.root / "compose.original.yaml").read_text() == original
+
+
+def test_failed_recovery_and_fallback_preserve_boot_intent_and_fence(d, target, boot_host):
+    h, r = boot_host
+    original = (h.root / "compose.yaml").read_text()
+    r.failed_old_smokes = {1, 2}
+    r.fail_original = True
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 21)
+    with pytest.raises(ValueError):
+        h.activate(release)
+    assert (h.root / "compose.yaml").read_text() == original
+    state = h.read()
+    assert state.transition is not None
+    fallback = json.loads(state.transition["boot_compose"])["services"]["explorer"]
+    assert fallback["image"] == OLD_IMAGE
+    assert "--allow-live" not in fallback["entrypoint"]
+    assert "--no-live" in fallback["entrypoint"]
+    assert state.highest_sequence == 21
+    assert state.highest_release == vars(release)
+    assert r.old_smokes == 3
+    r.fail_original = False
+    h = d.Host(h.root, target, r)
+    assert h.activate(d.Release(SHA, release.image, 20))["outcome"] == "REFUSED_STALE"
+    assert h.read().transition is None
+    assert r.running == OLD_IMAGE
+
+
+def test_failed_postmigration_rollback_gets_one_proven_boot_fallback(d, target, boot_host):
+    h, r = boot_host
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 22)
+    r.fail_candidate = True
+    r.failed_old_smokes = {2}
+    result = h.activate(release)
+    assert result["outcome"] == "FAILED_ROLLED_BACK"
+    assert "migrate-production" in r.events
+    assert r.old_smokes == 3
+    assert r.running == OLD_IMAGE
+    boot = json.loads((h.root / "compose.yaml").read_text())["services"]["explorer"]
+    assert boot["environment"] == {"BOOT_CONFIG": "rendered"}
+    assert boot["entrypoint"] == ["mel-explorer", "--no-live"]
+    assert h.read().transition is None
+    assert h.read().highest_sequence == 22
+
+
+def test_recovery_after_candidate_boot_write_uses_persisted_previous_snapshot(
+    d, target, boot_host
+):
+    h, r = boot_host
+
+    class Crash(BaseException):
+        pass
+
+    def crash_after_boot(name):
+        if name == "compose":
+            raise Crash()
+
+    h.checkpoint = crash_after_boot
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 23)
+    with pytest.raises(Crash):
+        h.activate(release)
+    candidate_boot = (h.root / "compose.yaml").read_text()
+    assert json.loads(candidate_boot)["services"]["explorer"]["image"] == release.image
+    r.failed_old_smokes = {2}
+    observed_boot = []
+    r.observe_smoke = lambda: observed_boot.append((h.root / "compose.yaml").read_text())
+    h = d.Host(h.root, target, r)
+    assert h.activate(d.Release(SHA, release.image, 22))["outcome"] == "REFUSED_STALE"
+    assert observed_boot == [candidate_boot, candidate_boot]
+    assert r.old_smokes == 3
+    assert r.running == OLD_IMAGE
+    assert h.read().deployed["sha"] == OLD
+    assert h.read().transition is None
+    boot = json.loads((h.root / "compose.yaml").read_text())
+    assert boot["services"]["explorer"]["image"] == OLD_IMAGE
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_fallback_uses_only_remaining_absolute_recovery_budget(
+    d, target, boot_host, monkeypatch, expired
+):
+    h, r = boot_host
+    clock = [100.0]
+    monkeypatch.setattr(d.time, "monotonic", lambda: clock[0])
+    budget = d.ActivationDeadline(110.0, 130.0)
+    monkeypatch.setattr(d, "HOST_DEADLINE", budget)
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 24)
+    r.failed_old_smokes = {1, 2}
+    switches = []
+    switch = r.switch
+
+    def bounded_switch(compose):
+        switches.append(budget.remaining())
+        switch(compose)
+
+    def advance_recovery_clock():
+        if r.old_smokes == 1:
+            clock[0] = 131.0 if expired else 125.0
+
+    r.switch = bounded_switch
+    r.observe_smoke = advance_recovery_clock
+    try:
+        if expired:
+            with pytest.raises(d.ActivationInterrupted):
+                h.activate(release)
+            assert len(switches) == 2
+            assert h.read().transition is not None
+        else:
+            assert h.activate(release)["outcome"] == "FAILED_BEFORE_SWITCH"
+            assert switches == [10.0, 15.0, 5.0]
+            assert h.read().transition is None
+        assert budget.recover_by == 130.0
+        assert h.read().highest_sequence == 24
+    finally:
+        d.signal.setitimer(d.signal.ITIMER_REAL, 0)
+
+
+def test_recovery_state_write_failure_keeps_in_memory_and_persisted_intent(d, target, boot_host):
+    h, r = boot_host
+
+    class Crash(BaseException):
+        pass
+
+    h.checkpoint = lambda name: (_ for _ in ()).throw(Crash())
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 25)
+    with pytest.raises(Crash):
+        h.activate(release)
+    state = h.read()
+    save = h.save
+
+    def fail_recovery_commit(recovered):
+        if recovered.transition is None:
+            raise OSError("state commit failed")
+        save(recovered)
+
+    h.save = fail_recovery_commit
+    with pytest.raises(OSError):
+        h.recover(state)
+    assert state.transition is not None
+    assert h.read().transition is not None
+    h.save = save
+    assert h.recover(h.read()).transition is None
+    assert h.read().highest_sequence == 25
+
+
+@pytest.mark.parametrize("shell", [False, True])
+def test_boot_snapshot_pins_image_and_disables_all_live_flags(d, target, tmp_path, shell):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target = tmp_path, target
+    original = {
+        "services": {
+            "postgres": {"image": "postgres:16"},
+            "explorer": {
+                "build": {"context": "."},
+                "image": "mutable-tag",
+                "entrypoint": ["mel-explorer", "--allow-live", "--no-live"],
+                "command": ["--host", "127.0.0.1", "--allow-live"],
+                "environment": {"MEL_DATABASE_HOST": "127.0.0.1"},
+                "volumes": ["/data:/data:ro"],
+            },
+        }
+    }
+    runtime.current = copy.deepcopy(original)
+    if shell:
+        runtime.current["services"]["explorer"]["entrypoint"] = "sh -c 'mel-explorer --allow-live'"
+        with pytest.raises(ValueError):
+            runtime.boot_compose({"image": OLD_IMAGE})
+        return
+    result = json.loads(runtime.boot_compose({"image": OLD_IMAGE}))
+    app = result["services"]["explorer"]
+    assert app["entrypoint"] == ["mel-explorer", "--no-live"]
+    assert app["command"] == ["--host", "127.0.0.1"]
+    assert app["image"] == OLD_IMAGE
+    assert "build" not in app
+    assert app["environment"] == original["services"]["explorer"]["environment"]
+    assert app["volumes"] == original["services"]["explorer"]["volumes"]
+    assert result["services"]["postgres"] == original["services"]["postgres"]
+    assert runtime.current == original
+
+
+@pytest.mark.parametrize("window", ["intent", "compose"])
+def test_legacy_pending_recovery_never_falls_back_to_disk_or_original(d, target, boot_host, window):
+    h, r = boot_host
+
+    class Crash(BaseException):
+        pass
+
+    def crash(name):
+        if name == window:
+            raise Crash()
+
+    h.checkpoint = crash
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 26)
+    with pytest.raises(Crash):
+        h.activate(release)
+    raw = json.loads(h.state_path.read_text())
+    raw["transition"].pop("boot_compose", None)
+    h.state_path.write_text(json.dumps(raw))
+    boot = (h.root / "compose.yaml").read_text()
+    r.failed_old_smokes = {r.old_smokes + 1}
+    with pytest.raises(ValueError):
+        h.activate(release)
+    assert (h.root / "compose.yaml").read_text() == boot
+    assert h.read().transition is not None
+    assert h.read().highest_sequence == 26
+    r.failed_old_smokes.clear()
+    assert h.activate(d.Release(SHA, release.image, 25))["outcome"] == "REFUSED_STALE"
+    assert h.read().transition is None
+
+
+def test_real_primary_recovery_timeout_leaves_budget_for_offline_fallback(
+    d, target, boot_host, monkeypatch
+):
+    import signal
+    import sys
+    import time
+
+    h, r = boot_host
+
+    class Crash(BaseException):
+        pass
+
+    h.checkpoint = lambda name: (_ for _ in ()).throw(Crash())
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 27)
+    with pytest.raises(Crash):
+        h.activate(release)
+    smoke = r.smoke
+    original_boot = (h.root / "compose.yaml").read_text()
+    attempts = []
+
+    def blocked_rendered(release):
+        assert (h.root / "compose.yaml").read_text() == original_boot
+        mode = r.active["services"]["explorer"]["environment"]["BOOT_CONFIG"]
+        attempts.append(mode)
+        if mode == "rendered":
+            d.command([sys.executable, "-c", "import time; time.sleep(20)"])
+        else:
+            assert budget.remaining() > 0
+            smoke(release)
+
+    r.smoke = blocked_rendered
+    now = time.monotonic()
+    budget = d.ActivationDeadline(now + 0.1, now + 2)
+    monkeypatch.setattr(d, "HOST_DEADLINE", budget)
+    previous = signal.signal(signal.SIGALRM, d.interrupt_activation)
+    try:
+        assert h.recover(h.read()).transition is None
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous)
+    assert attempts == ["rendered", "original"]
+    assert budget.recover_by == now + 2
+    assert r.running == OLD_IMAGE
+    assert h.read().transition is None
