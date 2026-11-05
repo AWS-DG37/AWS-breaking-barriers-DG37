@@ -155,7 +155,8 @@ def test_viewer_can_preview_a_saved_survey_without_mutation_controls(viewer_serv
                 if path != english:
                     return route.fulfill(json=fixtures[path])
                 if route.request.method == "GET":
-                    return route.fulfill(status=404, json={"detail": "No English version yet"})
+                    # JSON null, as the server answers when none is stored yet.
+                    return route.fulfill(body="null", content_type="application/json")
                 # Making a translation spends money: the real viewer guard must refuse it.
                 response = route.fetch()
                 asked_to_translate.append(response.status)

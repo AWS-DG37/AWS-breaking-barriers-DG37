@@ -858,7 +858,7 @@ class Store:
             self.connection.execute(
                 "UPDATE spend_cap SET deleted_usd=deleted_usd+("
                 f"SELECT {CALL_EXPOSURE} FROM model_calls c JOIN run_costs r USING(run_id) "
-                "WHERE r.capped AND c.run_id=%s)",
+                "WHERE (r.capped OR c.role='translate') AND c.run_id=%s)",
                 (run_id,),
             )
             counts = {

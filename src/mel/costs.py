@@ -107,9 +107,11 @@ CALL_EXPOSURE = (
     "coalesce(sum(CASE WHEN c.state='complete' THEN c.estimated_usd "
     "ELSE greatest(c.reserved_usd,coalesce(c.estimated_usd,0)) END),0)"
 )
+# Console translations (mel.translate) count toward the cap whatever run they are charged
+# to, including command-line runs whose own calls stay outside it.
 CAP_EXPOSURE = (
     f"SELECT (SELECT deleted_usd FROM spend_cap)+{CALL_EXPOSURE} "
-    "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped"
+    "FROM model_calls c JOIN run_costs r USING(run_id) WHERE r.capped OR c.role='translate'"
 )
 
 
@@ -221,7 +223,7 @@ class RunCosts:
         with self.store.lock, self.store.connection.transaction():
             capped = self.store.connection.execute(
                 "SELECT capped FROM run_costs WHERE run_id=%s", (self.run_id,)
-            ).fetchone()[0]
+            ).fetchone()[0] or role == "translate"
             # Lock order is spend_cap, then run_costs, so concurrent workers cannot deadlock.
             cap_remaining = _cap_remaining(self.store.connection) if capped else None
             budget, stopped = self.store.connection.execute(

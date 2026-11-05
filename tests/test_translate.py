@@ -117,7 +117,7 @@ def test_the_console_translates_a_saved_survey_once_and_then_serves_it():
     app = create_app(store_factory=lambda _: store, translation_agent=translator(ENGLISH, calls))
     path = f"/api/runs/{RUN}/results/I-1/english"
     with TestClient(app) as client:
-        assert client.get(path).status_code == 404
+        assert client.get(path).json() is None  # none yet: only this lets the page pay
         made = client.post(path)
         assert made.status_code == 200, made.text
         assert made.json()["language"] == "en-IN"
@@ -186,3 +186,32 @@ def test_translation_is_charged_to_the_run_under_the_console_cap(database):  # n
     assert database.translation(survey_key(SURVEY))["items"][0]["prompt"] == ENGLISH["items"][0][
         "prompt"
     ]
+
+
+@requires_postgres
+def test_a_command_line_run_cannot_take_translations_outside_the_cap(database):  # noqa: F811
+    run = str(uuid4())
+    database.start_run(run, "translate-cli", {})
+    insight = {"insight_id": "I-1", "farmer_id": "F-1"}
+    database.save(
+        run, insight, Outcome(insight_id="I-1", status="rejected", candidate_survey=SURVEY)
+    )
+    database.finish(run, "completed")
+    # A command-line run: its cost record exists and sits outside the console cap.
+    database.connection.execute(
+        "INSERT INTO run_costs(run_id,budget_usd,capped) VALUES (%s,NULL,false)", (run,)
+    )
+    database.close = lambda: None
+    app = create_app(store_factory=lambda _: database, translation_agent=translator(ENGLISH, []))
+    path = f"/api/runs/{run}/results/I-1/english"
+    with TestClient(app) as client:
+        refused = client.post(path)
+        assert refused.status_code == 409 and "spend cap" in refused.json()["detail"]
+        version = cap_view(database)["version"]
+        set_cap(database, CapUpdate(expected_version=version, budget_usd=Decimal("5")))
+        before = Decimal(cap_view(database)["committed_usd"])
+        assert client.post(path).status_code == 200
+    after = Decimal(cap_view(database)["committed_usd"])
+    assert after > before  # the translation counts toward the cap
+    database.delete_run(run)
+    assert Decimal(cap_view(database)["committed_usd"]) == after  # and keeps counting

@@ -426,10 +426,18 @@ function resultsTable(summary,rows) {
 
 // The stored English version of a saved survey, or a new one (a paid model call that
 // view-only sessions and the offline demo cannot make). Null when neither is possible.
-async function englishVersion(runId,insightId) {
+// Both requests carry the detail screen's signal: leaving the insight cancels them, and
+// only a confirmed "none stored yet" (null) leads to the paid request.
+async function englishVersion(runId,insightId,signal) {
   const path=`/runs/${runId}/results/${encodeURIComponent(insightId)}/english`;
-  try { return await details.api(path); }
-  catch { try { return await details.api(path,{method:'POST'}); } catch { return null; } }
+  try {
+    const stored=await details.api(path,{signal});
+    if (signal.aborted) return null;
+    if (stored?.items?.length) return stored;
+    if (stored!==null) return null;  // not a "none stored yet" answer: never pay on a guess
+    const made=await details.api(path,{method:'POST',signal});
+    return made?.items?.length ? made : null;
+  } catch { return null; }
 }
 
 async function showDetail(panel,runId,insightId) {
@@ -455,7 +463,7 @@ async function showDetail(panel,runId,insightId) {
       // Saved runs keep only the farmer's language. The English version comes from the
       // console (made once per survey); when it arrives the phone gains its language switch
       // and keeps the reviewer's place and answers.
-      if (!String(survey.language || '').startsWith('en')) englishVersion(runId,insightId).then(english=>{
+      if (!String(survey.language || '').startsWith('en')) englishVersion(runId,insightId,signal).then(english=>{
         if (english && !signal.aborted && host.isConnected) mount(english);
       });
       sections.push(el('h3',{},outcome.survey?'Survey preview':'Rejected draft'),el('figure',{class:'phone-stage'},host,el('figcaption',{},'Preview only · answers are not sent')),addToReviewList(runId,insightId,survey));

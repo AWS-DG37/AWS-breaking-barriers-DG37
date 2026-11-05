@@ -665,13 +665,11 @@ def create_app(
 
     @app.get("/api/runs/{run_id}/results/{insight_id}/english")
     def run_survey_english(run_id: UUID, insight_id: str):
-        """The stored English version of a saved survey, when the console has made one."""
-        found = database_call(
+        """The stored English version of a saved survey, or null when none is made yet.
+        Only that null tells the page it may ask for a paid translation (POST)."""
+        return database_call(
             lambda db: db.translation(survey_key(saved_survey(db, str(run_id), insight_id)))
         )
-        if found is None:
-            raise HTTPException(404, "No English version yet")
-        return found
 
     @app.post("/api/runs/{run_id}/results/{insight_id}/english")
     def translate_run_survey(run_id: UUID, insight_id: str):
@@ -701,8 +699,9 @@ def create_app(
             )  # fmt: skip
             if hasattr(db, "connection"):
                 costs = TranslationCosts(db, str(run_id))
-                # Runs made outside the console have no cost record; theirs counts toward the cap.
-                costs.initialize(None, capped=True)
+                # Runs saved without request accounting get an empty cost record. A translation
+                # counts toward the console cap through its role, whatever the run's own setting.
+                costs.initialize(None)
                 metered = agent.override(
                     model=CostedModel(agent.model, costs, model, settings.aws_region, "translate")
                 )
