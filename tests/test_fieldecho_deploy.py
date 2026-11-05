@@ -161,7 +161,16 @@ class Runtime:
         self.events.append("cleanup")
 
     def compose(self, release):
-        return json.dumps({"services": {"explorer": {"image": release["image"]}}})
+        return json.dumps(
+            {
+                "services": {
+                    "explorer": {
+                        "image": release["image"],
+                        "entrypoint": ["mel-explorer", "--no-live"],
+                    }
+                }
+            }
+        )
 
     def boot_compose(self, release):
         return self.compose(release)
@@ -810,7 +819,7 @@ def test_already_deployed_is_a_successful_host_command(d, tmp_path, monkeypatch,
     assert '"outcome": "ALREADY_DEPLOYED"' in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("failure", ["healthy", "candidate"])
+@pytest.mark.parametrize("failure", ["healthy", "candidate", "boot"])
 def test_invalid_rendered_compose_preserves_original_before_any_switch(d, target, host, failure):
     h, r = host
     original = "# exact operator compose\n" + (h.root / "compose.yaml").read_text()
@@ -1033,6 +1042,8 @@ def test_real_compose_accepts_supported_host_and_rejects_bridge_before_image_run
             "postgres": {"image": "postgres:16", "env_file": "database.env"},
             "explorer": {
                 "image": OLD_IMAGE,
+                "entrypoint": ["mel-explorer", "--allow-live"],
+                "command": ["--host", "127.0.0.1", "--port", "8877", "--allow-live"],
                 "network_mode": "host",
                 "env_file": "explorer.env",
                 "environment": {"MEL_DATABASE_HOST": "127.0.0.1", "MEL_DATABASE_PORT": "55437"},
@@ -1052,6 +1063,14 @@ def test_real_compose_accepts_supported_host_and_rejects_bridge_before_image_run
     release = {"sha": SHA, "image": target.registry + "@" + DIGEST, "sequence": 17}
     runtime.preflight(release)
     assert len(image_runs) == 2
+    boot = runtime.boot_compose({"image": OLD_IMAGE})
+    runtime.validate_compose(boot, "boot")
+    parsed_boot = json.loads(
+        runtime.compose_command("config", "--format", "json", file="compose.boot.json")
+    )["services"]["explorer"]
+    assert parsed_boot["image"] == OLD_IMAGE
+    assert parsed_boot["entrypoint"] == ["mel-explorer", "--no-live"]
+    assert parsed_boot["command"] == ["--host", "127.0.0.1", "--port", "8877"]
     for name, image in (("healthy", OLD_IMAGE), ("candidate", release["image"])):
         runtime.validate_compose(runtime.compose({"image": image}), name)
     compose["services"]["explorer"].pop("network_mode")
@@ -1386,7 +1405,9 @@ def test_recovery_state_write_failure_keeps_in_memory_and_persisted_intent(d, ta
 
 
 @pytest.mark.parametrize("shell", [False, True])
-def test_boot_snapshot_pins_image_and_disables_all_live_flags(d, target, tmp_path, shell):
+def test_boot_snapshot_pins_image_and_disables_all_live_flags(
+    d, target, tmp_path, monkeypatch, shell
+):
     runtime = d.DockerHost.__new__(d.DockerHost)
     runtime.root, runtime.target = tmp_path, target
     original = {
@@ -1403,6 +1424,7 @@ def test_boot_snapshot_pins_image_and_disables_all_live_flags(d, target, tmp_pat
         }
     }
     runtime.current = copy.deepcopy(original)
+    monkeypatch.setattr(runtime, "compose_command", lambda *a: json.dumps(runtime.current))
     if shell:
         runtime.current["services"]["explorer"]["entrypoint"] = "sh -c 'mel-explorer --allow-live'"
         with pytest.raises(ValueError):
@@ -1494,3 +1516,125 @@ def test_real_primary_recovery_timeout_leaves_budget_for_offline_fallback(
     assert budget.recover_by == now + 2
     assert r.running == OLD_IMAGE
     assert h.read().transition is None
+
+
+@pytest.mark.parametrize("argument", ["--allow", "--allow-l", "--allow-live=true", "--no"])
+def test_ambiguous_boot_live_arguments_are_rejected(d, target, tmp_path, monkeypatch, argument):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target = tmp_path, target
+    runtime.current = {
+        "services": {
+            "explorer": {"entrypoint": ["mel-explorer"], "command": [argument], "image": OLD_IMAGE}
+        }
+    }
+    monkeypatch.setattr(runtime, "compose_command", lambda *a: json.dumps(runtime.current))
+    with pytest.raises(ValueError):
+        runtime.boot_compose({"image": OLD_IMAGE})
+
+
+def test_boot_snapshot_uses_current_disk_after_pending_recovery(d, target, tmp_path, monkeypatch):
+    runtime = d.DockerHost.__new__(d.DockerHost)
+    runtime.root, runtime.target = tmp_path, target
+    original = {
+        "services": {
+            "explorer": {
+                "image": OLD_IMAGE,
+                "entrypoint": ["mel-explorer", "--no-live"],
+                "environment": {"BOOT_CONFIG": "proven-original"},
+            }
+        }
+    }
+    runtime.current = copy.deepcopy(original)
+    runtime.current["services"]["explorer"]["environment"]["BOOT_CONFIG"] = "cached-candidate"
+    calls = []
+
+    def config(*args):
+        calls.append(args)
+        return json.dumps(original)
+
+    monkeypatch.setattr(runtime, "compose_command", config)
+    actual = json.loads(runtime.boot_compose({"image": OLD_IMAGE}))
+    assert actual == original
+    assert calls == [("config", "--no-env-resolution", "--format", "json")]
+
+
+@pytest.mark.parametrize("corruption", ["image", "live", "shell"])
+def test_invalid_persisted_boot_snapshot_blocks_recovery_before_switch(
+    d, target, boot_host, corruption
+):
+    h, r = boot_host
+
+    class Crash(BaseException):
+        pass
+
+    h.checkpoint = lambda name: (_ for _ in ()).throw(Crash())
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 28)
+    with pytest.raises(Crash):
+        h.activate(release)
+    raw = json.loads(h.state_path.read_text())
+    boot = json.loads(raw["transition"]["boot_compose"])
+    app = boot["services"]["explorer"]
+    if corruption == "image":
+        app["image"] = release.image
+    elif corruption == "live":
+        app["command"] = ["--allow-live"]
+    else:
+        app["entrypoint"] = "sh -c 'mel-explorer --no-live'"
+    raw["transition"]["boot_compose"] = json.dumps(boot)
+    h.state_path.write_text(json.dumps(raw))
+    original = (h.root / "compose.yaml").read_text()
+    r.events.clear()
+    with pytest.raises(ValueError):
+        h.activate(release)
+    assert not r.events
+    assert (h.root / "compose.yaml").read_text() == original
+    assert json.loads(h.state_path.read_text()) == raw
+
+
+def test_cleanup_failure_starts_offline_fallback_but_keeps_pending_intent(d, target, boot_host):
+    h, r = boot_host
+    original = (h.root / "compose.yaml").read_text()
+    r.failed_old_smokes = {1}
+
+    def failed_cleanup(candidate):
+        raise ValueError("cleanup failed")
+
+    r.recover_cleanup = failed_cleanup
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 29)
+    with pytest.raises(ValueError, match="cleanup failed"):
+        h.activate(release)
+    assert r.active["services"]["explorer"]["environment"] == {"BOOT_CONFIG": "original"}
+    assert r.old_smokes == 2
+    assert h.read().transition is not None
+    assert h.read().highest_sequence == 29
+    assert (h.root / "compose.yaml").read_text() == original
+
+
+def test_candidate_state_commit_failure_and_failed_render_recover_from_boot_snapshot(
+    d, target, boot_host
+):
+    h, r = boot_host
+    save = h.save
+    release = d.Release(SHA, target.registry + "@" + DIGEST, 30)
+    r.failed_old_smokes = {2}
+    observed_boot = []
+    r.observe_smoke = lambda: observed_boot.append((h.root / "compose.yaml").read_text())
+
+    def fail_candidate_commit(state):
+        if state.last_outcome == "DEPLOYED":
+            raise OSError("candidate state commit failed")
+        save(state)
+
+    h.save = fail_candidate_commit
+    result = h.activate(release)
+    assert result["outcome"] == "FAILED_ROLLED_BACK"
+    assert r.old_smokes == 3
+    assert all(
+        json.loads(compose)["services"]["explorer"]["image"] == release.image
+        for compose in observed_boot[-2:]
+    )
+    assert r.running == OLD_IMAGE
+    assert h.read().deployed["sha"] == OLD
+    assert h.read().transition is None
+    assert h.read().highest_sequence == 30
+    assert (h.root / "COMMIT").read_text() == OLD + "\n"

@@ -37,6 +37,7 @@ class ActivationDeadline:
     activate_by: float
     recover_by: float
     recovering: bool = False
+    attempt_by: float | None = None
 
     @classmethod
     def from_environment(cls):
@@ -50,6 +51,8 @@ class ActivationDeadline:
 
     def remaining(self):
         end = self.recover_by if self.recovering else self.activate_by
+        if self.attempt_by is not None:
+            end = min(end, self.attempt_by)
         remaining = end - time.monotonic()
         if remaining <= 0:
             raise ActivationInterrupted("activation deadline exceeded")
@@ -289,6 +292,36 @@ def render_compose(current, image):
     return result
 
 
+def offline_boot_compose(current, image):
+    result = json.loads(json.dumps(current))
+    app = result["services"]["explorer"]
+    entrypoint = app.get("entrypoint")
+    if not isinstance(entrypoint, list) or not entrypoint or entrypoint[0] != "mel-explorer":
+        raise ValueError("boot Compose must explicitly invoke mel-explorer without a shell")
+    for name in ("entrypoint", "command"):
+        args = app.get(name)
+        if name == "command" and args is None:
+            app.pop(name, None)
+            continue
+        if not isinstance(args, list) or any(not isinstance(arg, str) for arg in args):
+            raise ValueError("boot Compose arguments must be explicit lists")
+        if any(
+            arg.startswith("--")
+            and arg not in ("--allow-live", "--no-live")
+            and any(
+                flag.startswith(arg.split("=", 1)[0]) or arg.startswith(flag)
+                for flag in ("--allow-live", "--no-live")
+            )
+            for arg in args
+        ):
+            raise ValueError("unsupported live-mode argument")
+        app[name] = [arg for arg in args if arg not in ("--allow-live", "--no-live")]
+    app["entrypoint"].append("--no-live")
+    app.pop("build", None)
+    app["image"] = image
+    return result
+
+
 def check_readiness(proof, health_status, health_body, static_statuses, worker_present):
     if proof.get("database") != "connected" or proof.get("live_enabled") is not False:
         raise ValueError("database or offline-mode proof failed")
@@ -344,12 +377,22 @@ class Host:
                 ):
                     raise ValueError("invalid persisted release sequence")
             if state.transition:
-                if set(state.transition) != {"healthy_compose", "candidate"}:
+                if set(state.transition) not in (
+                    {"healthy_compose", "candidate"},
+                    {"healthy_compose", "candidate", "boot_compose"},
+                ):
                     raise ValueError("invalid transition")
                 Release.parse(state.transition["candidate"], self.target)
-                healthy = json.loads(state.transition["healthy_compose"])
-                if healthy["services"]["explorer"]["image"] != state.deployed["image"]:
-                    raise ValueError("transition does not preserve deployed image")
+                for name in ("healthy_compose", "boot_compose"):
+                    if name not in state.transition:
+                        continue
+                    compose = json.loads(state.transition[name])
+                    if compose["services"]["explorer"]["image"] != state.deployed["image"]:
+                        raise ValueError("transition does not preserve deployed image")
+                    if name == "boot_compose" and compose != offline_boot_compose(
+                        compose, state.deployed["image"]
+                    ):
+                        raise ValueError("boot snapshot must be explicitly offline")
             if state.highest_release is None and state.highest_sequence:
                 candidates = [state.deployed]
                 if state.transition:
@@ -367,20 +410,42 @@ class Host:
         return HostState(self.runtime.adopt(), None, 0, self.target.workflow)
 
     def recover(self, state):
-        if state.transition:
-            if HOST_DEADLINE:
-                HOST_DEADLINE.recover()
-                HOST_DEADLINE.arm()
+        if not state.transition:
+            return state
+        if HOST_DEADLINE:
+            HOST_DEADLINE.recover()
+            if "boot_compose" in state.transition:
+                # Reserve half the remaining absolute budget for the offline boot fallback.
+                HOST_DEADLINE.attempt_by = time.monotonic() + HOST_DEADLINE.remaining() / 2
+            HOST_DEADLINE.arm()
+        cleanup_complete = False
+        compose = state.transition["healthy_compose"]
+        try:
             self.runtime.recover_cleanup(state.transition["candidate"])
-            compose = state.transition["healthy_compose"]
-            atomic_write(self.root / "compose.yaml", compose)
+            cleanup_complete = True
             self.runtime.switch(compose)
             self.runtime.smoke(state.deployed)
-            atomic_write(self.root / "COMMIT", state.deployed["sha"] + "\n")
-            state.transition = None
-            state.last_outcome = "RECOVERED_PREVIOUS"
-            self.save(state)
-        return state
+        except Exception:
+            if HOST_DEADLINE:
+                HOST_DEADLINE.attempt_by = None
+                HOST_DEADLINE.arm()
+            if "boot_compose" not in state.transition:
+                raise
+            compose = state.transition["boot_compose"]
+            self.runtime.switch(compose)
+            self.runtime.smoke(state.deployed)
+            if not cleanup_complete:
+                raise
+        finally:
+            if HOST_DEADLINE:
+                HOST_DEADLINE.attempt_by = None
+        if HOST_DEADLINE:
+            HOST_DEADLINE.arm()
+        atomic_write(self.root / "compose.yaml", compose)
+        atomic_write(self.root / "COMMIT", state.deployed["sha"] + "\n")
+        recovered = dataclasses.replace(state, transition=None, last_outcome="RECOVERED_PREVIOUS")
+        self.save(recovered)
+        return recovered
 
     def activate(self, release):
         state = self.recover(self.read())
@@ -410,14 +475,22 @@ class Host:
             next_compose = self.runtime.compose(candidate)
             self.runtime.validate_compose(healthy, "healthy")
             self.runtime.validate_compose(next_compose, "candidate")
+            boot = self.runtime.boot_compose(state.deployed)
+            self.runtime.validate_compose(boot, "boot")
             original = self.root / "compose.original.yaml"
             if not original.exists():
                 atomic_write(original, (self.root / "compose.yaml").read_text())
-            state.transition = {"healthy_compose": healthy, "candidate": candidate}
+            state.transition = {
+                "healthy_compose": healthy,
+                "candidate": candidate,
+                "boot_compose": boot,
+            }
             self.save(state)
             self.checkpoint("intent")
             self.runtime.switch(healthy)
             self.runtime.smoke(state.deployed)
+            state.transition["boot_compose"] = healthy
+            self.save(state)
             atomic_write(self.root / "compose.yaml", healthy)
             self.runtime.rehearse_and_migrate(candidate, state.deployed)
             switched = True
@@ -440,7 +513,7 @@ class Host:
             return result
         except Exception:
             if state.transition:
-                self.recover(state)
+                state = self.recover(state)
             state.last_outcome = "FAILED_ROLLED_BACK" if switched else "FAILED_BEFORE_SWITCH"
             self.save(state)
             return self.report(state)
@@ -616,6 +689,12 @@ class DockerHost:
 
     def compose(self, release):
         return json.dumps(render_compose(self.current, release["image"]), sort_keys=True)
+
+    def boot_compose(self, release):
+        current = json.loads(
+            self.compose_command("config", "--no-env-resolution", "--format", "json")
+        )
+        return json.dumps(offline_boot_compose(current, release["image"]), sort_keys=True)
 
     def validate_compose(self, compose, name):
         filename = "compose." + name + ".json"

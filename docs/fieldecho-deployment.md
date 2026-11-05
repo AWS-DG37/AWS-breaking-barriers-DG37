@@ -116,9 +116,14 @@ and transition.
    previous and candidate Compose files and validate each with the installed
    `docker compose config --quiet` parser. Preserve the exact original Compose as
    root-readable `compose.original.yaml`, without overwriting an existing copy.
-   Persist the admitted sequence and explicit transition before any replacement.
+   Normalize the current boot file separately, pin its explorer to the previous
+   image, remove live-mode flags, and add exactly one `--no-live`. The boot command
+   must explicitly invoke `mel-explorer` with argument lists, without a shell.
+   Validate this offline boot snapshot with Compose before persisting it in the
+   transition alongside the admitted candidate and rendered healthy Compose.
    Start the previous image from the rendered healthy Compose and prove readiness
-   before taking a snapshot or migrating. Only then persist healthy boot Compose.
+   before taking a snapshot or migrating. Only then update the persisted boot
+   snapshot and boot file to that proven healthy Compose.
 2. Stop the explorer; leave PostgreSQL running. Capture the migration ledger,
    original column names, counts and hashes of all existing public-table rows,
    and a root-readable SQL dump under a unique `backups/<sequence>-<sha>/attempt-*/` directory. Earlier dumps are retained.
@@ -143,9 +148,17 @@ and transition.
 Compose and state are two files, not an atomic pair. The transition remains until
 both activation and compose persistence succeed. A crash before the container
 switch, after the switch, or between compose and state commits therefore causes
-recovery to start the saved healthy release. Recovery failure preserves the intent
-and stops further admission. On reboot, the existing systemd unit starts the last
-committed compose; the next deploy performs recovery before any new activation.
+recovery to start the saved healthy release. Recovery leaves the boot file unchanged
+until readiness passes. If the rendered recovery fails, it attempts the persisted
+offline boot snapshot once, verifies the previous image and readiness, and only then
+commits that boot file and clears the transition. It never selects the current disk
+file, which may already name the candidate, or the initial `compose.original.yaml`
+as an automatic fallback. The original archive may contain `--allow-live`.
+Legacy pending transitions without a boot snapshot can retry only their saved
+healthy Compose. An unsuccessful recovery retains the transition and stops admission.
+A cleanup failure also retains the transition even if the offline fallback starts.
+On reboot, the existing systemd unit starts the last committed Compose. The next
+deploy performs recovery before any new activation.
 
 The SSM document establishes one deadline before lock acquisition, image pull, and
 handler extraction. Startup commands are bounded by the same activation cutoff.
@@ -154,8 +167,11 @@ reserved for recovery, with a final cutoff at 1680 seconds, below SSM's 1800-sec
 hard timeout. Each host subprocess is clamped to the remaining phase budget.
 An activation alarm, SIGTERM, or SIGINT becomes a recoverable exception. The same
 invocation restores the prior image and Compose without waiting for a new push.
-Recovery never extends the cutoff. If recovery itself fails or exhausts its budget,
-the transition and sequence fence remain for operator attention or the next attempt.
+When a boot snapshot is available, the first recovery attempt, including cleanup,
+gets half the remaining recovery budget. The single offline fallback can use the
+rest, within the same original cutoff. Recovery never extends that cutoff or starts
+a fallback after it expires. If recovery itself fails or exhausts its budget, the
+transition and sequence fence remain for operator attention or the next attempt.
 SIGKILL, host loss, and a Docker daemon that cannot execute recovery still need that
 persisted-intent recovery path. These limits do not make those failures recoverable
 inside a killed process.
