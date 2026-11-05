@@ -15,8 +15,10 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
+from threading import Lock
 from typing import Protocol
 
 import imageio_ffmpeg
@@ -210,6 +212,32 @@ class ElevenLabs:
             detail = error.read().decode(errors="replace")[:500]
             raise RuntimeError(f"ElevenLabs returned HTTP {error.code}: {detail}") from None
         return louder(audio)
+
+
+class SpokenLines:
+    """Recent lines spoken for the console phone, so a replay costs no credits."""
+
+    # ponytail: in-process LRU of `limit` clips (about 50 KB each), lost on restart, and two
+    # first requests for one line at the same moment both pay. Upgrade: S3Clips as the store.
+    def __init__(self, speak: Callable[[str], bytes], limit: int = 300) -> None:
+        self.speak, self.limit = speak, limit
+        self._clips: OrderedDict[str, bytes] = OrderedDict()
+        self._lock = Lock()
+
+    def audio(self, language: str, text: str) -> bytes:
+        name = clip_name(language, text)
+        with self._lock:
+            if name in self._clips:
+                self._clips.move_to_end(name)
+                return self._clips[name]
+        audio = self.speak(text)
+        if not audio:
+            raise RuntimeError("text to speech returned no audio")
+        with self._lock:
+            self._clips[name] = audio
+            while len(self._clips) > self.limit:
+                self._clips.popitem(last=False)
+        return audio
 
 
 @dataclass

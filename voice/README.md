@@ -135,6 +135,22 @@ The hackathon key expires on 2026-11-11. After that, every recording fails and s
 leave the voice channel until you put a key from your own ElevenLabs account in the
 secret. The worker reads the secret at the start of each run, so no deploy is needed.
 
+## The console phone speaks live
+
+The survey phone in the MEL Console (Demo, Runs and Agents tabs) shows a survey that a
+model wrote a moment ago, so no recording can exist in advance. **Read aloud** asks the
+console for each line, `GET /api/voice?language=<lang>&text=<line>`. The console makes it
+with ElevenLabs in the same "Mahi" voice at about -16 LUFS (`louder()`), and keeps the
+last 300 lines in memory, so a replay costs no credits.
+
+- **Turn it on:** add `MEL_VOICE_API_KEY=<key>` to `explorer.env` on the console host, then
+  deploy or restart the explorer container. Without the key the endpoint returns 503.
+- **Fallback:** the phone uses the browser's own voice when the endpoint is not available:
+  no key, a view-only session (403, because each line spends credits), an ElevenLabs
+  error, or a static copy of the page such as the architecture viewer.
+- **Cost:** one line is about 50 to 150 characters. The hackathon key has a
+  300,000-character cap and expires on 2026-11-11.
+
 ## Run the page locally
 
 ```bash
