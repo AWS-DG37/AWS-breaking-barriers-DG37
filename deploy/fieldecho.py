@@ -37,13 +37,40 @@ http {
   }
 }
 """
-MAINTENANCE_PROXY = LEGACY_PROXY.replace(
-    "      proxy_pass",
-    "      error_page 502 503 504 =503 @maintenance;\n"
-    "      proxy_pass",
-).replace(
-    "    location / {",
-    """    location = /__fieldecho_maintenance__ {
+INCLUDED_PROXY_ROOT = """user nginx;
+worker_processes auto;
+error_log /var/log/nginx/error.log;
+pid /run/nginx.pid;
+events { worker_connections 1024; }
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    access_log /var/log/nginx/access.log combined;
+    sendfile on;
+    include /etc/nginx/conf.d/*.conf;
+}
+"""
+INCLUDED_PROXY_SITE = """server {
+    listen 80 default_server;
+    server_name _;
+    server_tokens off;
+    client_max_body_size 2m;
+    auth_basic off;
+    auth_basic_user_file /etc/nginx/dg37.htpasswd;
+    add_header Cache-Control "no-store" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "same-origin" always;
+    location / {
+        proxy_pass http://127.0.0.1:8877;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Authorization "";
+        proxy_read_timeout 120s;
+    }
+}
+"""
+MAINTENANCE_LOCATIONS = """    location = /__fieldecho_maintenance__ {
       error_page 503 =503 @maintenance;
       return 503;
     }
@@ -59,7 +86,23 @@ MAINTENANCE_PROXY = LEGACY_PROXY.replace(
         <p>If you already have Field Echo open, leave that tab open to keep your work.</p>
         <p><a href="/">Try again</a></p></main></body></html>';
     }
-    location / {""",
+"""
+MAINTENANCE_PROXY = LEGACY_PROXY.replace(
+    "      proxy_pass",
+    "      error_page 502 503 504 =503 @maintenance;\n      proxy_pass",
+).replace("    location / {", MAINTENANCE_LOCATIONS + "    location / {")
+MAINTENANCE_SITE = INCLUDED_PROXY_SITE.replace(
+    "        proxy_pass",
+    "        error_page 502 503 504 =503 @maintenance;\n        proxy_pass",
+).replace(
+    "    location / {",
+    MAINTENANCE_LOCATIONS.replace(
+        '      add_header Retry-After "10" always;',
+        '      add_header X-Content-Type-Options "nosniff" always;\n'
+        '      add_header Referrer-Policy "same-origin" always;\n'
+        '      add_header Retry-After "10" always;',
+    )
+    + "    location / {",
 )
 
 
@@ -335,7 +378,7 @@ def read_live_policy(root):
     return value
 
 
-def prepare_maintenance_proxy(root, path=Path("/etc/nginx/nginx.conf")):
+def read_proxy_config(path):
     metadata = path.lstat()
     if (
         not stat.S_ISREG(metadata.st_mode)
@@ -343,16 +386,39 @@ def prepare_maintenance_proxy(root, path=Path("/etc/nginx/nginx.conf")):
         or metadata.st_mode & 0o022
     ):
         raise ValueError("proxy must be an operator-owned regular file")
-    original = path.read_text()
-    if original not in (LEGACY_PROXY, MAINTENANCE_PROXY):
-        raise ValueError("custom proxy requires a separate reviewed maintenance configuration")
+    return path.read_text()
+
+
+def prepare_maintenance_proxy(root, path=Path("/etc/nginx/nginx.conf")):
+    original = read_proxy_config(path)
+    staged = root / "nginx.maintenance.conf"
+    validation = staged
+    desired = MAINTENANCE_PROXY
     backup = root / "nginx.before-maintenance.conf"
+    if original == INCLUDED_PROXY_ROOT:
+        directory = path.parent / "conf.d"
+        path = directory / "dg37.conf"
+        if directory.is_symlink() or set(directory.glob("*.conf")) != {path}:
+            raise ValueError("included proxy must have exactly the managed dg37 site")
+        original = read_proxy_config(path)
+        if original not in (INCLUDED_PROXY_SITE, MAINTENANCE_SITE):
+            raise ValueError("custom site requires a separate reviewed maintenance configuration")
+        desired = MAINTENANCE_SITE
+        backup = root / "nginx.site.before-maintenance.conf"
+        validation = root / "nginx.maintenance-root.conf"
+        atomic_write(
+            validation,
+            INCLUDED_PROXY_ROOT.replace(
+                "include /etc/nginx/conf.d/*.conf;", "include " + json.dumps(str(staged)) + ";"
+            ),
+        )
+    elif original not in (LEGACY_PROXY, MAINTENANCE_PROXY):
+        raise ValueError("custom proxy requires a separate reviewed maintenance configuration")
     if not backup.exists():
         atomic_write(backup, original)
-    staged = root / "nginx.maintenance.conf"
-    atomic_write(staged, MAINTENANCE_PROXY)
-    command(["nginx", "-t", "-c", str(staged)])
-    atomic_write(path, MAINTENANCE_PROXY)
+    atomic_write(staged, desired)
+    command(["nginx", "-t", "-c", str(validation)])
+    atomic_write(path, desired)
     try:
         # Reload even on exact replay: a prior process may have died after the write.
         command(["systemctl", "reload", "nginx"])

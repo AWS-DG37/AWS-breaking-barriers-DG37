@@ -9,12 +9,14 @@ import uuid
 import httpx
 import pytest
 
+from deploy import fieldecho
 from deploy.fieldecho import MAINTENANCE_PROXY, probe_maintenance_proxy
 
 NGINX = "nginx@sha256:a8b39bd9cf0f83869a2162827a0caf6137ddf759d50a171451b335cecc87d236"
 
 
-def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_path):
+@pytest.mark.parametrize("layout", ["bootstrap", "included"])
+def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_path, layout):
     if not shutil.which("docker"):
         pytest.skip("Docker is required for the real Nginx check")
 
@@ -24,11 +26,18 @@ def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_pa
         return result.stdout
 
     name = "fieldecho-proxy-test-" + uuid.uuid4().hex
-    (tmp_path / "proxy.conf").write_text(MAINTENANCE_PROXY)
+    config = MAINTENANCE_PROXY
+    if layout == "included":
+        config = fieldecho.INCLUDED_PROXY_ROOT.replace(
+            "/etc/nginx/conf.d/*.conf", "/test/site.conf"
+        )
+        (tmp_path / "site.conf").write_text(fieldecho.MAINTENANCE_SITE)
+    (tmp_path / "proxy.conf").write_text(config)
     (tmp_path / "backend.conf").write_text("""events {} http { server {
       listen 8877;
       location / { return 200 'healthy'; }
       location /api/health { return 401; }
+      location /api/authorization { return 200 '[$http_authorization]'; }
       location /api/unavailable {
         default_type application/json;
         return 503 '{"detail":"Specific application error"}';
@@ -79,6 +88,9 @@ def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_pa
             assert "Field Echo is temporarily unavailable" in response.text
             assert "502 Bad Gateway" not in response.text
             assert "refresh" not in response.text.lower()  # Never replay a failed POST.
+            if layout == "included":
+                assert response.headers["x-content-type-options"] == "nosniff"
+                assert response.headers["referrer-policy"] == "same-origin"
 
         docker(
             "run",
@@ -105,6 +117,17 @@ def test_missing_upstream_serves_maintenance_and_recovers_without_caching(tmp_pa
         assert error.json() == {"detail": "Specific application error"}
         assert "retry-after" not in error.headers
         assert "retry-after" not in httpx.get(base).headers
+        if layout == "included":
+            healthy = httpx.get(base)
+            assert healthy.headers["x-content-type-options"] == "nosniff"
+            assert healthy.headers["referrer-policy"] == "same-origin"
+            assert (
+                httpx.get(
+                    base + "/api/authorization", headers={"Authorization": "test-authorization"}
+                ).text
+                == "[]"
+            )
+            assert httpx.post(base, content=b"x" * (2 * 1024 * 1024 + 1)).status_code == 413
 
         docker("stop", "--time", "2", name + "-backend")
         assert wait_for(503).headers["cache-control"] == "no-store"
