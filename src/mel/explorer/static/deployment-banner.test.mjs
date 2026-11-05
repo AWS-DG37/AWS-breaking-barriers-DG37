@@ -39,7 +39,7 @@ function fixture(fetchImpl) {
   return {doc, timers, listeners, seen, stop};
 }
 
-test('polls every20s while visible, pauses hidden and refreshes on resume', async () => {
+test('polls active updates every5s, pauses hidden and refreshes on resume', async () => {
   let calls=0;
   const f=fixture(async (url,options) => {
     calls++; assert.equal(url,'/api/deployment-status'); assert.equal(options.cache,'no-store');
@@ -47,12 +47,21 @@ test('polls every20s while visible, pauses hidden and refreshes on resume', asyn
   });
   await flush();
   assert.equal(calls,1);
-  assert.equal([...f.timers.values()][0].ms,20000);
+  assert.equal([...f.timers.values()][0].ms,5000);
   f.doc.hidden=true; f.listeners.get('visibilitychange')();
   assert.equal(f.timers.size,0);
   f.doc.hidden=false; f.listeners.get('visibilitychange')(); await flush();
   assert.equal(calls,2);
   f.stop(); assert.equal(f.timers.size,0); assert.equal(f.listeners.size,0);
+});
+
+test('idle and unknown status keep the slower local polling interval', async () => {
+  for (const state of ['current', 'failed', 'unconfirmed', 'unknown']) {
+    const f=fixture(async () => ({ok:true,text:async () => JSON.stringify(evidence(state))}));
+    await flush();
+    assert.equal([...f.timers.values()][0].ms,20000);
+    f.stop();
+  }
 });
 
 test('disabled ends polling; transport failures stay visible; teardown ignores late response', async () => {

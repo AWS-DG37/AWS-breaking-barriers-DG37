@@ -77,7 +77,7 @@ copy the approved dataset into a stable host data directory, mount it read-only
 for explorer, and set `MEL_PACK_URI` to that container path in `explorer.env`.
 Review and verify that one-time setup separately; ordinary releases retain it.
 
-The handler never edits `explorer.env`, `database.env`, passwords, nginx, Basic auth,
+The handler never edits `explorer.env`, `database.env`, passwords, Basic auth,
 project identity, database service or existing volumes. It renders Compose as JSON
 (valid YAML) through the installed Docker Compose parser, keeping env-file
 references unexpanded. Only the explorer image, execution entrypoint, stop grace
@@ -88,6 +88,26 @@ workers. Operators resolve these inventories before delivery. The boot Compose
 has only explorer/postgres. Missing host policy means explicit `--no-live`;
 normal candidates honor retained live policy. Previous-image checks, rehearsal and
 recovery always use explicit offline arguments supported by the previous image.
+
+Before stopping the app, preflight upgrades the exact Nginx configuration generated
+by `ec2_setup.py` with an upstream-error maintenance response. It retains the original
+as `nginx.before-maintenance.conf`, validates a staged configuration with `nginx -t`,
+installs it atomically and reloads Nginx. A failed reload restores the original file.
+An HTTP probe of `/__fieldecho_maintenance__` must observe the expected 503 body and
+headers before the application can stop, so a pending reload cannot leave a 502 gap.
+Replay validates and reloads again, covering interruption after installation. Custom
+configurations, including those with additional authentication, are refused before
+the app stops and need a separate reviewed operator change. There is no general
+Nginx configuration rewrite or authentication change.
+
+During the single-host database pause, new loads get an explicit HTTP 503 Field Echo
+maintenance page with `Cache-Control: no-store` and `Retry-After: 10`, instead of an
+Nginx 502. Application responses, including JSON errors and authentication failures,
+pass through unchanged; error interception remains off.
+Existing tabs retain their state and can resume requests when the app returns. The
+maintenance page does not automatically reload or retry writes. This is explicit
+maintenance availability, not uninterrupted application operation; backup, quiescence,
+migration rehearsal, single-runner ownership and rollback are unchanged.
 
 The existing explorer must already use host networking, without attached networks
 or published ports. Its effective `MEL_*` settings, resolved by Docker Compose, must
@@ -246,6 +266,28 @@ admission, journal recovery windows, rollback, malformed inputs and health seman
 they do not prove the actual EC2 rollout or real-data migration. Live rehearsal,
 Cognito sign-in, host recovery and deployed identity need independent target evidence
 before claiming end-to-end delivery.
+
+## Deployment banner freshness
+
+The public deployment-status route uses one process-wide single-flight GitHub cache,
+not a GitHub request per browser. Valid anonymous quota headers enable checks as fast
+as 15 seconds while the latest eligible main workflow is queued or running. Each
+interval is at least the reset window divided by the remaining requests above the
+five-request reserve, so long releases cannot burn the budget in a short burst. With
+an otherwise unused full-hour quota, active checks are about 67 seconds apart.
+Completed runs retain the prior 90-second interval, so discovering a newly queued run
+is not slowed down. Visible browsers poll active local status every five
+seconds and other states every 20 seconds. These intervals are scheduling targets,
+not a completion-latency guarantee under upstream failure or quota pressure.
+
+Five anonymous requests are reserved for other host callers. At that reserve, the
+service waits past GitHub's reset, and expired evidence becomes unavailable rather
+than continuing to claim a release is running. A restarted process reads the same
+upstream remaining quota on its first request. Missing or invalid quota headers keep
+the conservative 90-second interval. Failures retain exponential backoff and respect
+Retry-After/reset headers. No GitHub credential is added. The app's serving SHA must
+match a successful latest workflow before the banner clears; matching the SHA of an
+active workflow, including an unchanged-SHA dispatch, never clears it.
 
 ## Hosted queue opt-in and shutdown
 
