@@ -76,12 +76,17 @@ def _pages(client, method, result_key, **kwargs):
         kwargs["PaginationToken" if method == "list_users" else "NextToken"] = token
 
 
-def _validate(client, pool_id, client_id, account_id, region):
+def _validate(client, pool_id, client_id, account_id, region, console_url):
     if (
         not re.fullmatch(r"\d{12}", account_id)
         or not re.fullmatch(r"[a-z]{2}-[a-z]+-\d", region)
         or not re.fullmatch(re.escape(region) + r"_[A-Za-z0-9]+", pool_id)
         or not re.fullmatch(r"[a-z0-9]+", client_id)
+        or not re.fullmatch(
+            r"https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+            r"(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+",
+            console_url,
+        )
     ):
         raise AccessError("Invalid account, region, pool or client identifier")
     pool = client.describe_user_pool(UserPoolId=pool_id)["UserPool"]
@@ -105,18 +110,28 @@ def _validate(client, pool_id, client_id, account_id, region):
         or app.get("AllowedOAuthFlows") != ["code"]
         or set(app.get("AllowedOAuthScopes", [])) != {"openid", "email"}
         or app.get("SupportedIdentityProviders") != ["COGNITO"]
-        or app.get("CallbackURLs") != ["https://fieldecho.org/api/auth/callback"]
-        or app.get("LogoutURLs") != ["https://fieldecho.org/"]
+        or app.get("CallbackURLs") != [console_url + "/api/auth/callback"]
+        or app.get("LogoutURLs") != [console_url + "/"]
     ):
         raise AccessError("Client must be a public code-flow client for the Field Echo origin")
     return pool
 
 
-def provision(client, path, *, pool_id, client_id, account_id, region, send_invitations=False):
+def provision(
+    client,
+    path,
+    *,
+    pool_id,
+    client_id,
+    account_id,
+    region,
+    send_invitations=False,
+    console_url="https://fieldecho.org",
+):
     """Validate the entire boundary before adding missing accounts and labels."""
     addresses = read_addresses(path)
     try:
-        pool = _validate(client, pool_id, client_id, account_id, region)
+        pool = _validate(client, pool_id, client_id, account_id, region, console_url)
         existing = {}
         for user in _pages(client, "list_users", "Users", UserPoolId=pool_id):
             attributes = {item["Name"]: item["Value"] for item in user.get("Attributes", [])}
@@ -184,7 +199,7 @@ def provision(client, path, *, pool_id, client_id, account_id, region, send_invi
                 "MEL_AUTH_DOMAIN": f"https://{pool['Domain']}.auth.{region}.amazoncognito.com",
                 "MEL_AUTH_CLIENT_ID": client_id,
                 "MEL_AUTH_ISSUER": f"https://cognito-idp.{region}.amazonaws.com/{pool_id}",
-                "MEL_CONSOLE_URL": "https://fieldecho.org",
+                "MEL_CONSOLE_URL": console_url,
             },
         }
     except AccessError:
@@ -202,6 +217,7 @@ def main(argv=None):
     parser.add_argument("--client-id", required=True)
     parser.add_argument("--account-id", required=True)
     parser.add_argument("--region", required=True)
+    parser.add_argument("--console-url", default="https://fieldecho.org")
     parser.add_argument(
         "--send-invitations",
         action="store_true",
@@ -217,6 +233,7 @@ def main(argv=None):
             client_id=args.client_id,
             account_id=args.account_id,
             region=args.region,
+            console_url=args.console_url,
             send_invitations=args.send_invitations,
         )
     except (AccessError, BotoCoreError):
