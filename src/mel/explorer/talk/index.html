@@ -13,6 +13,8 @@
 <link rel="stylesheet" href="styles.css?v=5">
 <link rel="stylesheet" href="/static/deployment-banner.css">
 <script type="module" src="/static/deployment-banner.mjs"></script>
+<link rel="stylesheet" href="/static/demo-video.css">
+<script type="module" src="/static/demo-video.mjs"></script>
 </head>
 <body class="deployment-talk">
 
@@ -24,6 +26,7 @@
   <span class="sep"></span>
   <span class="sub">Field&nbsp;Echo</span>
   <span class="spacer"></span>
+  <button type="button" class="demo-btn" data-demo-video><span class="demo-tri" aria-hidden="true"></span>Watch demo<span class="demo-len">&nbsp;· 2:17</span></button>
   <span class="team">Team 37 · AWS Breaking Barriers 2026</span>
 </nav>
 
@@ -381,7 +384,7 @@
 </div>
 
 <footer class="foot">
-  <span class="keys">← → move · <kbd>F</kbd> fullscreen</span>
+  <span class="keys">← → move · <kbd>F</kbd> fullscreen<span class="demo-key"> · <kbd>D</kbd> demo</span></span>
   <nav id="dots" aria-label="Slides"></nav>
   <span class="brand-mini">Field Echo</span>
 </footer>

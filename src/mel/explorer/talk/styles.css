@@ -50,6 +50,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);
 .sub{color:var(--mut);font-weight:700;letter-spacing:.01em}
 .spacer{flex:1}
 .team{color:var(--mut);font-size:.74rem;letter-spacing:.04em;text-transform:uppercase}
+.demo-btn{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:999px;cursor:pointer;
+  border:1px solid rgba(94,230,138,.55);background:rgba(94,230,138,.12);color:var(--g);
+  font:700 .72rem/1 var(--font);letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+.demo-btn:hover{background:rgba(94,230,138,.22)}
+.demo-btn:focus-visible{outline:2px solid var(--lime);outline-offset:2px}
+.demo-tri{width:0;height:0;border-style:solid;border-width:5px 0 5px 8px;border-color:transparent transparent transparent currentColor}
 
 /* ─── deck ─── */
 #deck{position:fixed;top:calc(52px + var(--deployment-banner-height,0px));bottom:40px;left:0;right:0;display:flex;
@@ -301,6 +307,8 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   .team{display:none}
   .byline{margin-left:0;margin-right:0;gap:6px 18px}
   .byline li+li::before{display:none}
+  .wordmark{white-space:nowrap}
+  .demo-len,.demo-key{display:none}
   .scene{padding:40px 22px}
 }
 @media(prefers-reduced-motion:reduce){

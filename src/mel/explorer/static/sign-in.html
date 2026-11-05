@@ -11,6 +11,8 @@
   <script type="module" src="/static/sign-in.mjs"></script>
 <link rel="stylesheet" href="/static/deployment-banner.css">
 <script type="module" src="/static/deployment-banner.mjs"></script>
+<link rel="stylesheet" href="/static/demo-video.css">
+<script type="module" src="/static/demo-video.mjs"></script>
 </head>
 <body>
   <main class="sign-in">
@@ -27,5 +29,9 @@
     <p class="muted small">View-only access cannot start runs, spend on models, or change saved data.</p>
     <a class="button secondary" href="/api/auth/login">Sign in for full access</a>
   </main>
+  <button type="button" class="sign-in-demo" data-demo-video>
+    <span class="sign-in-demo-thumb"><img src="/static/assets/demo-video-poster.jpg" alt="" width="128" height="80"><span class="sign-in-demo-play" aria-hidden="true"></span></span>
+    <span><b>New here? Watch the 2-minute demo</b><small>No sign-in needed · 2:17</small></span>
+  </button>
 </body>
 </html>

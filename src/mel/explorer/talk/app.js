@@ -60,6 +60,9 @@
 
   // keyboard
   document.addEventListener('keydown', e => {
+    // While the demo video is open, its keys (space, arrows) belong to the video.
+    if (document.querySelector('dialog[open]')) return;
+    if (e.key.toLowerCase() === 'd' && !e.metaKey && !e.ctrlKey && !e.altKey) { document.querySelector('[data-demo-video]')?.click(); return; }
     if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
     else if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(cur - 1);
     else if (e.key === 'Home') go(0);
