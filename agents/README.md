@@ -12,6 +12,8 @@ Dry-run uses a bundled example survey as fake model output, so it proves the gat
 
 gate (`decide.py`, code only) -> survey cache (`cache.py`) -> generator -> code checks (`check_survey.py`) -> verifier.
 
+The gate has two options. `rules` (the default) runs `decide.py`. `classifier` asks a Strands agent to pick the same rule code (R1, R3, R4, R5 or R8) from the same insight fields (`classify.py`, `skills/mel-survey-rules/references/classifier_prompt.md`). The model returns only a rule code and a one-sentence reason, and code builds the decision from it. An answer that is not JSON or names another rule makes the run `failed`, never a survey or a skip. Pick it with `--gate classifier --classifier <model>` in `sweep.py`, `"gate": "classifier"` in the AgentCore payload, or the console's "Survey or no survey" menu. The sweep's `decide` column (decision accuracy against the golden set) compares the two gates. `--prompt-dir` also accepts a `classifier_prompt.md` variant. `service.CLASSIFIERS` holds the allowed classifier models, all of which are already generator models in the runtime's IAM role.
+
 - The agents decide whether an insight gets a survey and write it. They do not decide when it is sent: no send window, and no rules that need one (R6 season end, R7 crop harvested). A separate timing script owns that and adds the send window. Questions and answers may still use timing words such as "on time" or "in the last few days"; exact dates are not allowed.
 - Every farmer sees every question. There is no skip logic, so the verifier does not ask for it.
 - Surveys have 1 to 3 questions and at most 4 answers per question. Answer labels are natural short phrases, up to 20 characters (WhatsApp limit).

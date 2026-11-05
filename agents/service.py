@@ -14,7 +14,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
-from sweep import DEFAULT_TRANSLATOR, DEFAULT_VERIFIER, run_pipeline  # noqa: E402
+from sweep import (  # noqa: E402
+    DEFAULT_CLASSIFIER,
+    DEFAULT_TRANSLATOR,
+    DEFAULT_VERIFIER,
+    GATES,
+    gate_decision,
+    run_pipeline,
+)
 
 DEFAULT_GENERATOR = os.environ.get("MODEL_ID", "global.anthropic.claude-haiku-5-5")
 
@@ -28,6 +35,7 @@ GENERATORS = (
 )
 VERIFIERS = ("global.anthropic.claude-sonnet-5-5", "global.anthropic.claude-haiku-5-5")
 TRANSLATORS = (DEFAULT_TRANSLATOR,)
+CLASSIFIERS = (DEFAULT_CLASSIFIER, "global.anthropic.claude-sonnet-5-5")
 PIPELINES = ("direct", "translate")
 MAX_RETRIES = 2
 
@@ -45,17 +53,25 @@ class BadRequest(ValueError):
     """The request cannot run as given. The message is safe to show to the caller."""
 
 
+class DecisionFailed(RuntimeError):
+    """The classifier gave no usable answer. The message is safe to show to the caller."""
+
+
 def options():
     return {
         "generators": list(GENERATORS),
         "verifiers": list(VERIFIERS),
         "translators": list(TRANSLATORS),
+        "classifiers": list(CLASSIFIERS),
         "pipelines": list(PIPELINES),
+        "gates": list(GATES),
         "defaults": {
             "generator": DEFAULT_GENERATOR,
             "verifier": DEFAULT_VERIFIER,
             "translator": DEFAULT_TRANSLATOR,
+            "classifier": DEFAULT_CLASSIFIER,
             "pipeline": "direct",
+            "gate": "rules",
             "max_retries": 1,
         },
     }
@@ -78,36 +94,50 @@ def _check_insight(insight):
         raise BadRequest("insight.asset must be an object")
 
 
-def decide_only(insight):
-    """The survey / no-survey rules on their own. Code only, so it answers at once."""
-    from decide import decide  # path set up by run_one, imported through sweep
-
+def decide_only(insight, gate="rules", classifier=None):
+    """Survey or no survey on its own. The rules answer at once; the classifier in a few seconds."""
     _check_insight(insight)
+    gate = _pick(gate, GATES, "rules", "gate")
+    classifier = _pick(classifier, CLASSIFIERS, DEFAULT_CLASSIFIER, "classifier")
     try:
-        return decide(insight)
+        decision = gate_decision(insight, gate, classifier)
     except (KeyError, TypeError) as error:
         raise BadRequest(f"insight is missing data the rules need ({error})") from None
+    except Exception as error:  # an unusable answer or a model call that failed
+        raise DecisionFailed(f"The classifier could not decide ({type(error).__name__})") from None
+    return {
+        **decision,
+        "gate": gate,
+        "classifier": classifier if gate == "classifier" else None,
+    }
 
 
 def generate_survey(
-    insight, generator=None, verifier=None, pipeline="direct", translator=None, max_retries=1
+    insight, generator=None, verifier=None, pipeline="direct", translator=None, max_retries=1,
+    gate="rules", classifier=None,
 ):
     """Run one insight through the pipeline and return the result dict."""
     _check_insight(insight)
     generator = _pick(generator, GENERATORS, DEFAULT_GENERATOR, "generator")
     verifier = _pick(verifier, VERIFIERS, DEFAULT_VERIFIER, "verifier")
     translator = _pick(translator, TRANSLATORS, DEFAULT_TRANSLATOR, "translator")
+    classifier = _pick(classifier, CLASSIFIERS, DEFAULT_CLASSIFIER, "classifier")
     pipeline = _pick(pipeline, PIPELINES, "direct", "pipeline")
+    gate = _pick(gate, GATES, "rules", "gate")
     try:
         max_retries = int(max_retries)
     except (TypeError, ValueError):
         raise BadRequest("max_retries must be a whole number") from None
     if not 0 <= max_retries <= MAX_RETRIES:
         raise BadRequest(f"max_retries must be between 0 and {MAX_RETRIES}")
-    result = run_pipeline(insight, generator, verifier, pipeline, translator, max_retries)
+    result = run_pipeline(
+        insight, generator, verifier, pipeline, translator, max_retries,
+        gate=gate, classifier=classifier,
+    )
     result["models"] = {
         "generator": generator,
         "verifier": verifier,
         "translator": translator if pipeline == "translate" else None,
+        "classifier": classifier if gate == "classifier" else None,
     }
     return result

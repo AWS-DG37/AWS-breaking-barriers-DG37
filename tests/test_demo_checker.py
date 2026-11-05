@@ -76,3 +76,44 @@ def test_demo_runs_the_chosen_checker_and_names_it(demo, choice, model, name):
     )
     assert started[-1]["verifier"] == model
     assert started[-1]["generator"] == "global.anthropic.claude-opus-5-5"
+    assert "gate" not in started[-1]
+
+
+SECOND_READS = [
+    ({"status": "skipped", "decision_rule": "R3", "decision_survey": False,
+      "decision_reason": "Second read: general information only."},
+     "No survey after all", "No survey for this conversation"),
+    ({"status": "failed", "decision_rule": None, "decision_survey": None,
+      "error": "ValueError: classifier output was not JSON"},
+     "The classifier did not decide", "No decision for this conversation"),
+]
+
+
+@pytest.mark.parametrize("second,step_text,verdict_text", SECOND_READS)
+def test_a_classifier_second_read_that_says_no_or_fails_replaces_the_verdict(
+    demo, second, step_text, verdict_text
+):
+    page, _ = demo
+    sent = []
+
+    def decide(route):
+        sent.append(route.request.post_data_json)
+        route.fulfill(json={"decision": {"rule": "R8", "survey": True, "gate": "classifier",
+                                          "reason": "First read: advice to check."}})
+
+    def runs(route):
+        if route.request.method == "POST":
+            sent.append(route.request.post_data_json)
+            return route.fulfill(json={"run_id": "r2", "status": "running"})
+        route.fulfill(json={"status": "done", "result": {"attempts": 0, **second}})
+
+    page.route("**/api/agents/decide", decide)
+    page.route("**/api/agents/runs**", runs)
+    page.get_by_label("Who decides to follow up").select_option("classifier")
+    page.get_by_role("button", name="Run the follow-up").click()
+    expect(page.locator(".demo-step").first).to_contain_text("Decided by Claude Haiku 5.5")
+    expect(page.locator(".demo-step").last).to_contain_text(step_text, timeout=15000)
+    expect(page.locator(".demo-verdict")).to_contain_text(verdict_text)
+    expect(page.get_by_text("We will follow up")).to_have_count(0)
+    classifier = {"gate": "classifier", "classifier": "global.anthropic.claude-haiku-5-5"}
+    assert [{k: body[k] for k in classifier} for body in sent] == [classifier, classifier]

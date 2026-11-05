@@ -6,7 +6,7 @@ import {mountSurveyPlayer} from './survey-player.mjs';
 const requests=requestScope();
 const api=(path,options)=>requests.api(path,options);
 const view={root:null, request:0, options:null, insights:[], runs:[], form:null, cards:[]};
-const STATUS={accepted:'Accepted', skipped:'Skipped by rules', rejected:'Rejected by reviewer', failed:'Failed'};
+const STATUS={accepted:'Accepted', skipped:'No survey', rejected:'Rejected by reviewer', failed:'Failed'};
 const short=id=>String(id || '').replace(/^(global|us)\./,'').replace(/^(anthropic|openai|amazon|google|meta|qwen)\./,'').replace(/-\d{8}-v\d:\d$/,'');
 const pct=v=>v===null || v===undefined ? '—' : `${Math.round(v*100)}%`;
 const num=(v,d=0)=>v===null || v===undefined ? '—' : Number(v).toFixed(d);
@@ -61,7 +61,7 @@ function insightCard(i) {
 
 function tryPanel() {
   const o=view.options, d=o.defaults;
-  const f=view.form || (view.form={insight:view.insights.find(i=>i.expected?.survey)?.insight_id, generators:[d.generator], verifier:d.verifier, pipeline:d.pipeline, retries:d.max_retries, surveysOnly:true});
+  const f=view.form || (view.form={insight:view.insights.find(i=>i.expected?.survey)?.insight_id, generators:[d.generator], verifier:d.verifier, pipeline:d.pipeline, gate:d.gate || 'rules', classifier:d.classifier, retries:d.max_retries, surveysOnly:true});
   const list=view.insights.filter(i=>!f.surveysOnly || i.expected?.survey);
   // Grouped by crop; each option leads with its golden ID, then the language and the farmer's question.
   const crops=[...new Set(list.map(cropName))].sort((a,b)=>a==='No crop'?1:b==='No crop'?-1:a.localeCompare(b));
@@ -84,6 +84,9 @@ function tryPanel() {
     el('div',{class:'form-grid'},
       select('Verifier model',o.verifiers,f.verifier,v=>f.verifier=v,short),
       select('Pipeline',o.pipelines,f.pipeline,v=>f.pipeline=v,v=>v==='direct'?'Direct: write in the farmer’s language':'Translate: write English, then translate'),
+      // Agents deployed before the classifier gate send no gates list; they only have the rules.
+      o.gates ? select('Survey or no survey',o.gates,f.gate,v=>{f.gate=v;render();},v=>v==='rules'?'Rules: code checks, instant':'Classifier: a Strands agent decides') : null,
+      o.gates && f.gate==='classifier' ? select('Classifier model',o.classifiers,f.classifier,v=>f.classifier=v,short) : null,
       select('Revise rounds after the first',[0,1,2],f.retries,v=>f.retries=Number(v))),
     el('div',{class:'launch'},el('p',{class:'small muted'},'Each model runs as its own AgentCore request, in parallel. A survey usually takes 15–60 seconds; the first one after a quiet spell can take longer.'),run));
   return el('section',{class:'gen-panel ag-panel'},el('h2',{},'Try an insight'),form);
@@ -114,7 +117,8 @@ function start() {
   const caption=el('p',{class:'small muted ag-wide'},insight ? insightLabel(insight) : f.insight);
   view.cards=[{node:caption},...f.generators.map(generator=>{
     const card={generator,node:el('section',{class:'survey-panel ag-card'},el('h2',{},short(generator)),el('div',{class:'gen-waiting'},el('div',{class:'spinner','aria-hidden':true}),el('p',{},'Running on AgentCore…')))};
-    runAgent({insight_id:f.insight,generator,verifier:f.verifier,pipeline:f.pipeline,max_retries:f.retries})
+    runAgent({insight_id:f.insight,generator,verifier:f.verifier,pipeline:f.pipeline,max_retries:f.retries,
+      ...(f.gate==='classifier'?{gate:'classifier',classifier:f.classifier}:{})})
       .then(data=>card.node.replaceChildren(...resultCard(generator,data)))
       .catch(error=>{ if(error.name!=='AbortError') card.node.replaceChildren(el('h2',{},short(generator)),el('p',{class:'notice error'},error.message)); });
     return card;
@@ -149,9 +153,10 @@ function resultCard(generator,{result:r,expected}) {
       r.relevance!==null && r.relevance!==undefined ? badge(`relevance ${num(r.relevance,2)}`) : null,
       r.attempts ? badge(`${r.attempts} attempt${r.attempts>1?'s':''}`) : null,
       badge(`${num(r.elapsed_seconds,1)} s`), tokens ? badge(`${tokens.toLocaleString()} tokens`) : null),
-    el('p',{class:'small'},`Rule ${r.decision_rule} · ${r.decision_survey?'survey':'no survey'}`,
+    el('p',{class:'small'},`${r.gate==='classifier'?'Classifier':'Rules'}: ${r.decision_rule ?? 'no answer'} · ${r.decision_survey==null?'undecided':r.decision_survey?'survey':'no survey'}`,
       expected ? el('span',{class:decisionOk?'':'missing'},` · golden expects ${expected.rule} (${decisionOk?'match':'mismatch'})`) : null),
-    el('p',{class:'small muted'},`Verifier ${short(r.models?.verifier)}${r.models?.translator?` · translator ${short(r.models.translator)}`:''}`)];
+    r.decision_reason ? el('p',{class:'small muted'},r.decision_reason) : null,
+    el('p',{class:'small muted'},`Verifier ${short(r.models?.verifier)}${r.models?.translator?` · translator ${short(r.models.translator)}`:''}${r.models?.classifier?` · classifier ${short(r.models.classifier)}`:''}`)];
   if (r.error) out.push(el('p',{class:'notice error'},r.error));
   if (r.items?.length) {
     const host=el('div',{class:'survey-player'});
@@ -170,7 +175,7 @@ function comparisonPanel() {
   const section=el('section',{class:'comparison'},el('h2',{},'Model sweeps'),
     el('p',{class:'muted'},'Saved runs of agents/sweep.py over golden insights. Accept rate counts surveys the verifier passed out of those generated. Compare rows on the same golden file and prompt version.'));
   if (!view.runs.length) { section.append(el('p',{class:'empty-note'},'No sweep results found. Run agents/sweep.py to add some.')); return section; }
-  const cols=[['Model',r=>short(r.model_id)],['Pipeline',r=>r.tag?`${r.pipeline} · ${r.tag}`:r.pipeline],['Golden',r=>r.golden || (r.file.startsWith('dev/')?'golden_dev.jsonl':'—')],['Prompt',r=>r.prompt_sha || '—'],
+  const cols=[['Model',r=>short(r.model_id)],['Pipeline',r=>[r.pipeline,r.gate==='classifier'?`classifier ${short(r.classifier_model_id)}`:null,r.tag].filter(Boolean).join(' · ')],['Golden',r=>r.golden || (r.file.startsWith('dev/')?'golden_dev.jsonl':'—')],['Prompt',r=>r.prompt_sha || '—'],
     ['Cases',r=>r.cases],['Accepted',r=>r.status_counts?.accepted ?? 0],['Rejected',r=>r.status_counts?.rejected ?? 0],['Failed',r=>r.status_counts?.failed ?? 0],
     ['Accept rate',r=>pct(r.accept_rate)],['Decision accuracy',r=>pct(r.decision_accuracy)],['Relevance',r=>num(r.relevance_mean,3)],['Attempts',r=>num(r.attempts_mean,2)],
     ['Tokens / survey',r=>r.tokens_per_survey?.toLocaleString() ?? '—'],['Seconds / survey',r=>num(r.seconds_per_survey,1)],['Run',r=>(r.created_at || '').slice(0,16).replace('T',' ')]];

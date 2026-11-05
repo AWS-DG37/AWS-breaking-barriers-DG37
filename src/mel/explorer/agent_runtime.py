@@ -45,6 +45,8 @@ class AgentRun(StrictModel):
     generator: str | None = Field(default=None, max_length=120)
     verifier: str | None = Field(default=None, max_length=120)
     pipeline: Literal["direct", "translate"] = "direct"
+    gate: Literal["rules", "classifier"] = "rules"
+    classifier: str | None = Field(default=None, max_length=120)
     max_retries: int = Field(default=1, ge=0, le=2)
 
 
@@ -163,6 +165,8 @@ def sweep_summaries(runs_dir: Path) -> list[dict]:
                 "created_at": run.get("created_at"),
                 "model_id": run.get("model_id"),
                 "pipeline": run.get("pipeline") or "direct",
+                "gate": run.get("gate") or "rules",
+                "classifier_model_id": run.get("classifier_model_id"),
                 "tag": run.get("tag"),
                 "prompt_sha": run.get("prompt_sha"),
                 "golden": run.get("golden"),
@@ -221,6 +225,8 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
                     "verifier": value.verifier,
                     "pipeline": value.pipeline,
                     "max_retries": value.max_retries,
+                    "gate": value.gate,
+                    "classifier": value.classifier,
                 }
             )
             record = {"status": "done", "result": result, "expected": row.get("expected")}
@@ -279,14 +285,17 @@ def install(app: FastAPI, settings: Settings, *, invoker=None, results=None, dis
             raise HTTPException(404, "Unknown insight")
         return {"insight": row["insight"], "expected": row.get("expected")}
 
-    # The rules gate alone (code, no model calls). Answers in a second or two, so it runs
-    # inside the API's 29 s limit; the Demo tab shows it before the survey is written.
+    # The gate alone: the rules, or one classifier call of about 3 s. Either fits inside the
+    # API's 29 s limit; the Demo tab shows it before the survey is written.
     @app.post("/api/agents/decide")
     def agent_decide(value: AgentRun):
         row = golden_insights().get(value.insight_id)
         if row is None:
             raise HTTPException(404, "Unknown insight")
-        return {"decision": call({"action": "decide", "insight": row["insight"]})}
+        payload = {"action": "decide", "insight": row["insight"], "gate": value.gate}
+        if value.gate == "classifier":
+            payload["classifier"] = value.classifier
+        return {"decision": call(payload)}
 
     @app.post("/api/agents/runs", status_code=202)
     def agent_run(value: AgentRun):
