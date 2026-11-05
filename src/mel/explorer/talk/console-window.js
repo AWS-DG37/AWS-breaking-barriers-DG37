@@ -46,8 +46,12 @@
   const newTab = win.querySelector('.cw-tab');
   newTab.href = CONSOLE;
   let frame = null;
+  // The presenter's latest request (want) and the settled state (open) are separate:
+  // settle() plays transitions until they agree, checking the request between phases,
+  // so Back during an opening reverses it and a tap during a close reopens.
+  let want = false;
   let open = false;
-  let busy = false;
+  let running = false;
   let openedByKey = false;
 
   // Load the console once, ahead of the tap, and keep it: reopening resumes where the demo left off.
@@ -123,44 +127,70 @@
 
   const pause = ms => new Promise(done => setTimeout(done, reduce ? 0 : ms));
 
-  async function openWindow(byKey) {
-    if (open || busy) return;
-    openedByKey = byKey === true;
-    busy = true;
+  const setInert = on => behind.forEach(el => { if (el) el.inert = on; });
+
+  async function growToFull(from) {
+    await morph(from, full(), 760, 12, 14);
+    place(full(), 14);  // the viewport may have changed during the animation
     open = true;
+    frame.focus();
+  }
+
+  async function shrinkToCard(from) {
+    const c = cardRect();
+    win.classList.add('cw-card');
+    await morph(from, c, 480, 12, 8);
+    win.hidden = true;
+    win.classList.remove('cw-card');
+    setInert(false);
+    // Keyboard users get focus back on the card. After a tap or click, clear focus so
+    // Space and the arrows drive the deck again instead of reopening the console.
+    if (openedByKey) card.focus();
+    else if (document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement) document.activeElement.blur();
+  }
+
+  // Card -> mini browser -> full window. Turns back at a phase boundary if Back was pressed.
+  async function openFromCard() {
     ensureFrame();
     size();
     const c = cardRect();
     win.hidden = false;
     win.classList.add('cw-card');
     place(c, 8);
-    behind.forEach(el => { if (el) el.inert = true; });
+    setInert(true);
     win.getBoundingClientRect();  // commit the card frame before the fade starts
     win.classList.remove('cw-card');
     await morph(c, miniRect(c), 560, 8, 12);
-    await pause(240);
-    await morph(miniRect(c), full(), 760, 12, 14);
-    place(full(), 14);  // the viewport may have changed during the animation
-    busy = false;
-    frame.focus();
+    if (want) await pause(240);
+    if (want) await growToFull(miniRect(cardRect()));
+    else await shrinkToCard(miniRect(cardRect()));
   }
 
-  async function closeWindow() {
-    if (!open || busy) return;
-    busy = true;
-    behind.forEach(el => { if (el) el.inert = false; });
-    const c = cardRect();
-    await morph(full(), miniRect(c), 600, 14, 12);
-    win.classList.add('cw-card');
-    await morph(miniRect(c), c, 480, 12, 8);
-    win.hidden = true;
-    win.classList.remove('cw-card');
+  // Full window -> mini browser -> card. Turns back at the mini stage if reopened.
+  async function closeToCard() {
+    const m = miniRect(cardRect());
+    await morph(full(), m, 600, 14, 12);
+    if (want) return growToFull(m);
     open = false;
-    busy = false;
-    // Keyboard users get focus back on the card. After a tap or click, clear focus so
-    // Space and the arrows drive the deck again instead of reopening the console.
-    if (openedByKey) card.focus();
-    else if (document.activeElement instanceof HTMLElement || document.activeElement instanceof SVGElement) document.activeElement.blur();
+    await shrinkToCard(m);
+  }
+
+  async function settle() {
+    if (running) return;
+    running = true;
+    while (want !== open) await (want ? openFromCard() : closeToCard());
+    running = false;
+  }
+
+  function openWindow(byKey) {
+    if (!want && !running) openedByKey = byKey === true;
+    want = true;
+    settle();
+  }
+
+  function closeWindow() {
+    want = false;
+    settle();
   }
 
   card.addEventListener('click', () => openWindow(false));
@@ -172,16 +202,16 @@
   card.addEventListener('focus', ensureFrame);
   win.querySelector('.cw-back').addEventListener('click', closeWindow);
 
-  // While the console is open, keys never reach the deck, so slides cannot change behind it.
+  // While the console is open or moving, keys never reach the deck, so slides cannot change behind it.
   window.addEventListener('keydown', e => {
-    if (!open) return;
+    if (!open && !running) return;
     e.stopImmediatePropagation();
     if (e.key === 'Escape') closeWindow();
   }, true);
 
   addEventListener('resize', () => {
     size();
-    if (open && !busy) place(full(), 14);
+    if (open && !running) place(full(), 14);
   });
 
   new MutationObserver(() => {
