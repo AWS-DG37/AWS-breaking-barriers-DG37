@@ -961,12 +961,18 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .ag-card pre { max-height:360px; overflow:auto; font-size:12px; }
 .ag-badges { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
 /* Demo: one insight as a story */
-.demo-controls { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,1.4fr) auto; gap:16px 20px; align-items:end; max-width:none; margin-bottom:28px; }
+.demo-controls { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,1.4fr) auto; gap:12px 20px; align-items:end; max-width:none; margin-bottom:20px; }
 .demo-controls > label { margin:0; }
-.demo-verifier { grid-column:1/-1; grid-row:2; margin:-6px 0 0; }
-.demo-controls button { grid-column:3; grid-row:1; }
-.demo-stage { display:grid; grid-template-columns:minmax(300px,1fr) minmax(360px,1.2fr); gap:28px; align-items:start; }
-.demo-scenario, .demo-flow:not(:empty) { border:1px solid var(--line); border-radius:12px; padding:20px 22px; }
+.demo-verifier { font-weight:400; }
+.demo-stage { display:grid; grid-template-columns:minmax(260px,320px) minmax(300px,1fr) 380px; gap:24px; align-items:start; }
+#demo-view { padding-top:20px; }
+#demo-view .heading { margin-bottom:12px; }
+#demo-view .heading p { margin-top:4px; }
+#demo-view .heading h1 { font-size:30px; line-height:1.2; }
+#demo-view .heading p { font-size:15px; }
+.demo-scenario, .demo-flow:not(:empty) { border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+.demo-scenario { font-size:15px; }
+.demo-facts { grid-template-columns:1fr 1fr; }
 .demo-scenario h2, .demo-flow h2 { margin:0 0 6px; }
 .demo-bubble { border-radius:14px; padding:12px 14px; margin:14px 0 0; max-width:92%; }
 .demo-bubble p { margin:2px 0 0; }
@@ -993,8 +999,18 @@ th[aria-sort=ascending] .gen-sort-mark, th[aria-sort=descending] .gen-sort-mark 
 .demo-verdict-icon::after { content:''; display:block; }
 .demo-verdict-icon.tick::after { width:10px; height:18px; border:solid white; border-width:0 4px 4px 0; transform:translateY(-2px) rotate(45deg); }
 .demo-verdict-icon.dash::after { width:18px; height:4px; border-radius:2px; background:var(--gold-ink); }
-.demo-phone { margin-top:18px; animation:demo-in .5s ease-out both; }
+.demo-phone { animation:demo-in .5s ease-out both; }
+.demo-phone .phone-stage { padding:12px 10px 10px; }
+/* The phone shrinks with the window so it fits on screen next to the story. */
+.demo-phone .survey-player .phone-screen { height:clamp(400px, calc(100vh - 360px), 680px); }
+.demo-phone .survey-player .phone-field { height:clamp(64px, calc((100vh - 600px) / 3), 126px); }
+.demo-phone .survey-player .player-body { padding:12px 18px; }
+/* On laptop-height screens the field photo gives its room to the question and answers. */
+@media (max-height:1000px) { .demo-phone .survey-player .phone-field { display:none; } }
+.demo-phone .phone-stage figcaption { margin-top:10px; }
 @keyframes demo-in { from { opacity:0; transform:translateY(8px); } }
 @keyframes demo-pop { from { opacity:0; transform:scale(.92); } }
 @media (prefers-reduced-motion:reduce) { .demo-step,.demo-verdict,.demo-phone { animation:none; } .demo-step.active .demo-step-mark { animation-duration:3s; } }
-@media (max-width:1000px) { .demo-stage,.demo-controls { grid-template-columns:1fr; } .demo-controls button,.demo-verifier { grid-column:auto; grid-row:auto; } }
+@media (max-width:1360px) { .demo-stage { grid-template-columns:minmax(230px,270px) minmax(260px,1fr) 360px; gap:18px; } }
+@media (max-width:1100px) { .demo-stage { grid-template-columns:minmax(240px,300px) 1fr; } .demo-phone-col { grid-column:2; } }
+@media (max-width:1000px) { .demo-stage,.demo-controls { grid-template-columns:1fr; } .demo-phone-col { grid-column:auto; } }

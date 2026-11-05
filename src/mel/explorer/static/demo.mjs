@@ -13,7 +13,9 @@ export const DEMO_INSIGHTS = [
   'I-004743',  // buffalo, Hindi: vaccination, sent to the vet -> survey
   'I-001303',  // wheat, English: weather question only -> no survey (R3)
   'I-001333',  // gram, Hindi: still needs details -> no survey (R4)
+  'I-004256',  // lentil, Hindi: lodging advice that needs no check -> no survey (R5)
   'I-000090',  // a thank-you and goodbye -> no survey (R1)
+  'I-001180',  // asked for a cricket score -> no survey (R1)
 ];
 export const TIERS = [
   {id:'premium', label:'Most capable · Claude Opus 5.5', model:'global.anthropic.claude-opus-5-5', name:'Claude Opus 5.5'},
@@ -67,16 +69,18 @@ function render() {
       el('p',{class:'muted'},'Pick a farmer conversation and a model level. FarmerChat decides whether to follow up, then writes the survey the farmer would get.'))),
     el('form',{class:'demo-controls',onSubmit:e=>{e.preventDefault();start();}},
       el('label',{},'Conversation',insight),
-      el('label',{},'Model level',tier),
-      el('p',{class:'small muted demo-verifier'},`Every survey is checked by ${VERIFIER.name}.`),
+      el('label',{},el('span',{},'Model level ',el('span',{class:'muted demo-verifier'},`· checked by ${VERIFIER.name}`)),tier),
       go),
-    el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'})));
+    el('div',{class:'demo-stage'},el('section',{class:'demo-scenario',id:'demo-scenario'},...scenario()),
+      el('section',{class:'demo-flow',id:'demo-flow','aria-live':'polite'}),
+      el('section',{class:'demo-phone-col',id:'demo-phone','aria-label':'Survey on the farmer’s phone'})));
 }
 
 function reset() {
   runs.renew(); ++view.run;
   document.getElementById('demo-scenario').replaceChildren(...scenario());
   document.getElementById('demo-flow').replaceChildren();
+  document.getElementById('demo-phone').replaceChildren();
 }
 
 function scenario() {
@@ -115,7 +119,8 @@ const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function start() {
   runs.renew();
   const ticket=++view.run, tier=TIERS.find(t=>t.id===view.tier);
-  const flow=document.getElementById('demo-flow');
+  const flow=document.getElementById('demo-flow'), phoneCol=document.getElementById('demo-phone');
+  phoneCol.replaceChildren();
   const steps=el('ol',{class:'demo-steps'});
   flow.replaceChildren(el('h2',{},'What FarmerChat does next'),steps);
   const alive=()=>ticket===view.run;
@@ -145,7 +150,7 @@ async function start() {
     const revisions=r.attempts>1 ? ` after ${r.attempts-1} revision${r.attempts>2?'s':''}` : '';
     if (r.status==='accepted') finish(write,`Survey written by ${tier.name} and approved by ${VERIFIER.name}${revisions}`,`${seconds} s${r.relevance!=null?` · relevance ${Number(r.relevance).toFixed(2)}`:''}`);
     else finish(write,r.status==='failed'?'The survey could not be written':`${VERIFIER.name} did not approve this survey${revisions}`,r.error || `${seconds} s · showing the last draft`,'warn');
-    if (r.items?.length) flow.append(phone(r));
+    if (r.items?.length) phoneCol.append(phone(r));
   } catch (error) {
     if (error.name==='AbortError' || !alive()) return;
     flow.append(el('ol',{class:'demo-steps'},step('Something went wrong','warn',error.message)));
