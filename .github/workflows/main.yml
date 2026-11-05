@@ -1,0 +1,113 @@
+name: Field Echo main
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && 'fieldecho-main' || format('fieldecho-pr-{0}', github.ref) }}
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: farmerchat
+          POSTGRES_USER: mel
+          POSTGRES_PASSWORD: mel-local-only
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U mel -d farmerchat"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      AWS_EC2_METADATA_DISABLED: 'true'
+      MEL_TEST_DB_PORT: '5432'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2
+        with:
+          version: '0.10.12'
+      - run: uv sync --locked
+      - run: uv run ruff check src deploy
+      - run: uv run cfn-lint template.yaml infra/bootstrap.yaml deploy/*.yaml
+      - run: uv run playwright install --with-deps chromium
+      - run: uv run pytest -q
+      - run: node --test src/mel/explorer/static/*.test.mjs
+      - name: Check stdlib host paths on Python 3.9
+        run: |
+          uv python install 3.9
+          uv run --no-project --python 3.9 python -I deploy/fieldecho.py --help
+      - name: Build exact checkout with locked runtime dependencies
+        run: docker build --platform linux/amd64 --label org.opencontainers.image.revision="$GITHUB_SHA" -t fieldecho:tested .
+      - name: Smoke the built image offline
+        env:
+          FIELDECHO_BROWSER_URL: http://127.0.0.1:8879
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f fieldecho-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name fieldecho-smoke --network host \
+            -e AWS_EC2_METADATA_DISABLED=true -e MEL_DATABASE_HOST=127.0.0.1 \
+            -e MEL_DATABASE_SSLMODE=disable --entrypoint mel-explorer \
+            fieldecho:tested --host 127.0.0.1 --port 8879 --no-live
+          uv run pytest -q tests/test_fieldecho_browser.py
+      - name: Save the tested image
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        run: docker save fieldecho:tested -o /tmp/fieldecho-image.tar
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        with:
+          name: tested-image
+          path: /tmp/fieldecho-image.tar
+          retention-days: 1
+  release:
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Read the single committed delivery target
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from deploy.fieldecho import Target
+          t=Target.load(Path('deploy/target.json'))
+          with open(os.environ['GITHUB_ENV'],'a') as f:
+              for k,v in {'DEPLOY_ROLE':t.deploy_role_arn,'AWS_REGION':t.region,'REGISTRY':t.registry}.items():
+                  f.write(k+'='+v+'\n')
+          PY
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: tested-image
+          path: /tmp
+      - run: docker load -i /tmp/fieldecho-image.tar
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd
+        with:
+          role-to-assume: ${{ env.DEPLOY_ROLE }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-duration-seconds: 3600
+      - name: Publish immutable exact-SHA artifact
+        run: |
+          set -euo pipefail
+          registry_host="${REGISTRY%%/*}"
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry_host"
+          if ! aws ecr describe-images --repository-name "${REGISTRY#*/}" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            docker tag fieldecho:tested "$REGISTRY:$GITHUB_SHA"
+            docker push "$REGISTRY:$GITHUB_SHA"
+          fi
+      - name: Deploy only if this SHA is still main
+        run: python deploy/fieldecho.py deploy --target deploy/target.json --sha "$GITHUB_SHA" --sequence "$GITHUB_RUN_NUMBER"
