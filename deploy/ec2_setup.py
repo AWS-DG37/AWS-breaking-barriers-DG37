@@ -27,7 +27,7 @@ ORIGIN = r"https://[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z
 
 
 class SetupError(Exception):
-    """An operator-safe failure without subprocess output or private inputs."""
+    pass
 
 
 def require(pattern, value):

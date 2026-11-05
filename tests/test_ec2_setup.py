@@ -86,7 +86,6 @@ def test_foundation_uses_managed_policies_for_uncached_authenticated_requests():
     behavior = foundation()["Resources"]["Distribution"]["Properties"]["DistributionConfig"][
         "DefaultCacheBehavior"
     ]
-    # AWS-owned policy identities are an external contract, not template-local resources.
     assert behavior["CachePolicyId"] == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
     assert behavior["OriginRequestPolicyId"] == "b689b0a8-53d0-40ab-baf2-68738e2966ac"
 
