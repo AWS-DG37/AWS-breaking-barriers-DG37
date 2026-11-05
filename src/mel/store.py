@@ -721,6 +721,13 @@ class Store:
             )
         return self.job(job_id)
 
+    def acquire_hosted_lease(self, owner: str) -> None:
+        """Hold this hosted queue's session lock until this dedicated Store closes."""
+        with self.lock:
+            self.connection.execute("SELECT set_config('application_name', %s, false)", (owner,))
+            if not self.connection.execute("SELECT pg_try_advisory_lock(31890242)").fetchone()[0]:
+                raise RuntimeError("another hosted runner owns the queue")
+
     def claim_job(self, job_id: str | None = None, *, resume: bool = False) -> dict | None:
         """The next queued job, or one named job. `resume` also reclaims a named job
         that stopped running; its runs resume from their checkpoints."""

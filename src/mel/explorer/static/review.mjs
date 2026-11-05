@@ -2,6 +2,7 @@ import {budgetInput, capPanel} from './costs.mjs';
 import {el, skeleton} from './dom.mjs';
 import {api as globalApi, requestScope} from './api.mjs';
 import {lineDiff} from './domain.mjs';
+import {isReadOnly} from './auth.mjs';
 // Review: lists of generated surveys people flagged, each comment saying what was wrong
 // and what it should have been, and improvement loops that revise a configuration
 // against a list. Results anywhere in the console can be added with addToReviewList.
@@ -40,7 +41,7 @@ function layout(lists,selected,main) {
   const nav=el('nav',{class:'cfg-list','aria-label':'Review lists'},el('h2',{},'Review lists'),
     lists.map(l=>el('a',{class:'cfg-item',href:`#review/${l.list_id}`,'aria-current':String(l.list_id===selected)},
       el('strong',{},l.name),el('span',{class:'small muted'},`${plural(l.item_count,'comment')} · ${plural(l.insight_count,'insight')}`))),
-    create);
+    isReadOnly()?null:create);
   view.root.replaceChildren(el('div',{class:'cfg'},nav,main));
 }
 
@@ -54,6 +55,7 @@ async function renderList(id) {
     const main=el('div',{class:'cfg-main'});
     layout(lists,key,main);
     if (!key) {
+      if (isReadOnly()) { main.append(el('p',{class:'empty-note'},'No review lists have been saved yet.')); return; }
       main.append(el('div',{class:'gen-empty'},el('h1',{},'Collect questions to improve'),
         el('p',{},'Create a list, then open any result in Runs or Compare and use Add to review list. Say what was wrong with the survey or a question and what it should have been. A stronger model then revises a configuration against the list, and the console tests the revision.')));
       return;
@@ -90,7 +92,7 @@ function commentCard(item) {
     el('p',{},el('strong',{},item.question_id?`On question “${questionText(item.survey,item.question_id)}”: `:'On the whole survey: '),item.comment),
     item.should_be?el('p',{},el('strong',{},'Should have been: '),item.should_be):null,
     el('p',{class:'small muted rv-meta'},`${words(item.status)} in `,item.run_id?el('a',{href:`#runs/run/${item.run_id}/${encodeURIComponent(item.insight_id)}`},`run ${item.run_id.slice(0,8)}`):'a deleted run',` · ${when(item.updated_at)}`),
-    el('div',{class:'cfg-actions'},el('button',{type:'button',class:'quiet',onClick:edit},'Edit'),el('button',{type:'button',class:'quiet',onClick:remove},'Remove')));
+    isReadOnly()?null:el('div',{class:'cfg-actions'},el('button',{type:'button',class:'quiet',onClick:edit},'Edit'),el('button',{type:'button',class:'quiet',onClick:remove},'Remove')));
   async function remove() {
     if (!confirm('Remove this comment from the list?')) return;
     try { await api(`/review-items/${item.item_id}`,{method:'DELETE'}); showReview(view.root,location.hash); }
@@ -114,6 +116,7 @@ const commentFields=(item={})=>[
   el('label',{},'What it should have been (optional)',el('textarea',{name:'should_be',rows:2,maxlength:4000},item.should_be || ''))];
 
 function improveForm(list,{configs,active_config_id:active},settings) {
+  if (isReadOnly()) return null;
   const box=el('section',{class:'cfg-step'},el('div',{class:'cfg-step-head'},el('h2',{},'Improve a configuration'),
     el('span',{class:'small muted'},'A stronger model edits prompts and settings to address these comments. Each candidate runs on the commented insights and is judged against the comments; better ones are kept.')));
   if (!list.items.length) { box.append(el('p',{class:'muted'},'Add comments before improving.')); return box; }
@@ -208,9 +211,9 @@ function verdict(v,name,bestId) {
       el('div',{class:'metric'},el('span',{},'Comments addressed'),el('strong',{},`${v.best.addressed} vs ${v.compare.addressed}`))),
     el('p',{class:'small muted'},v.note),
     el('div',{class:'cfg-actions rv-verdict-actions'},
-      better?el('a',{class:'button primary',href:`#configure/${bestId}`},'Open the best version to save it'):null,
+      better?el('a',{class:'button primary',href:`#configure/${bestId}`},isReadOnly()?'View the best version':'Open the best version to save it'):null,
       el('a',{class:'button',href:`#compare/${v.best.experiment_id}`},'Inspect its surveys'),
-      el('a',{class:'button',href:'#compare'},'Compare on more insights')));
+      el('a',{class:'button',href:'#compare'},isReadOnly()?'View comparisons':'Compare on more insights')));
 }
 
 function evaluationLine(e,name) {
@@ -248,6 +251,7 @@ function judgementTable(items,rounds) {
 
 // "Add to review list" for any saved result's survey. Lists load when it opens.
 export function addToReviewList(runId,insightId,survey) {
+  if (isReadOnly()) return null;
   const body=el('div',{});
   const box=el('details',{class:'rv-add',onToggle:()=>{ if (box.open && !body.childElementCount) load(); }},el('summary',{},'Add to review list'),body);
   async function load() {

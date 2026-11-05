@@ -5,6 +5,9 @@ Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 The [MEL Console](docs/explorer.md) generates surveys, browses saved runs, compares
 configuration versions and inspects recorded decisions and question evidence. Run it
 locally with Docker or deploy the authenticated console to AWS.
+To test with your own workshop account and credits before a PR, follow
+[Run locally with your own workshop AWS account](docs/local-bedrock.md).
+
 The [voice survey](voice/README.md) reads a survey the MEL agent wrote aloud in an
 ElevenLabs voice. The farmer taps each answer, and the page builds a `response.schema.json`
 record.
@@ -13,6 +16,9 @@ maps these extensions to the team documents and module boundaries.
 
 - System diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/system-diagram.html
   (source: [docs/system-diagram.html](docs/system-diagram.html), published by GitHub Pages from `main` `/docs`)
+- AWS deployment diagram: https://aws-dg37.github.io/AWS-breaking-barriers-DG37/aws-deployment.html
+  (source: [docs/aws-deployment.html](docs/aws-deployment.html), slide export [docs/aws-deployment.png](docs/aws-deployment.png);
+  update steps are in a comment at the top of the source)
 
 ## What runs today
 

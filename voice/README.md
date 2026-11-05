@@ -173,6 +173,12 @@ output is preserved.
 
 - **Voice:** "Mahi", a warm Indian female voice, with `eleven_multilingual_v2` for Hindi
   and English.
+- **Loudness:** ElevenLabs returns this voice at about -24 LUFS, and a page cannot play
+  audio above volume 1.0. `louder()` in `src/mel/voice.py` sets every new clip to about
+  -16 LUFS, with peaks below -1.5 dBTP, before it is stored. It uses the ffmpeg binary in
+  the `imageio-ffmpeg` package, so no system ffmpeg is needed. `tests/test_voice_audio.py`
+  fails when a committed clip is not at that loudness. Clips that the worker stored in
+  S3 before this change stay quiet until you empty `s3://<DataBucket>/voice/audio/`.
 - **Cost:** recording all 37 current lines took about 3,000 characters, once. Playing
   them costs nothing.
 - **Not built:** answers stay in the page and are not sent to a store.

@@ -13,11 +13,13 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+import imageio_ffmpeg
 import pytest
 from botocore.exceptions import ClientError
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
+from mel import voice as voice_module
 from mel.bundle import Bundle
 from mel.clock import IST
 from mel.config import Settings
@@ -26,10 +28,12 @@ from mel.handoff import without_channel
 from mel.models import Review, SurveyDraft
 from mel.voice import (
     S3_PREFIX,
+    ElevenLabs,
     S3Clips,
     VoiceOff,
     VoiceRecorder,
     VoiceRecordingFailed,
+    louder,
     recorder,
     spoken_lines,
     survey_clips,
@@ -173,6 +177,70 @@ def test_recording_stops_when_its_time_budget_is_spent():
 def test_empty_audio_is_a_failure():
     with pytest.raises(VoiceRecordingFailed, match="no audio"):
         voice(speaker=lambda text: b"").record(SURVEY)
+
+
+# ---- Loudness ----------------------------------------------------------------------------
+
+FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
+
+
+def quiet_mp3(seconds=5) -> bytes:
+    """A tone about as quiet as ElevenLabs speech (-24 LUFS) would be, at -36 LUFS."""
+    return subprocess.run(
+        [FFMPEG, "-loglevel", "error", "-f", "lavfi", "-i",
+         f"sine=frequency=220:duration={seconds},volume=0.02",
+         "-ac", "1", "-c:a", "libmp3lame", "-b:a", "128k", "-f", "mp3", "pipe:1"],
+        capture_output=True, check=True,
+    ).stdout  # fmt: skip
+
+
+def loudness(mp3: bytes) -> tuple[float, float]:
+    """Integrated loudness (LUFS) and true peak (dBTP), as ffmpeg's EBU R128 meter reads them."""
+    log = subprocess.run(
+        [FFMPEG, "-hide_banner", "-nostats", "-f", "mp3", "-i", "pipe:0",
+         "-af", "ebur128=peak=true", "-f", "null", "-"],
+        input=mp3, capture_output=True, check=True,
+    ).stderr.decode()  # fmt: skip
+    summary = log[log.rindex("Summary:") :].split()
+    return float(summary[summary.index("I:") + 1]), float(summary[summary.index("Peak:") + 1])
+
+
+def test_a_quiet_recording_comes_out_at_speech_loudness():
+    assert loudness(quiet_mp3())[0] < -30
+    integrated, peak = loudness(louder(quiet_mp3()))
+    assert -17 <= integrated <= -15
+    assert peak <= -1.0
+
+
+def test_audio_that_does_not_decode_is_an_error():
+    with pytest.raises(RuntimeError, match="ffmpeg"):
+        louder(b"not audio")
+
+
+def test_text_to_speech_returns_the_normalized_clip(monkeypatch):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return quiet_mp3()
+
+    monkeypatch.setattr(voice_module.urllib.request, "urlopen", lambda *a, **k: Response())
+    assert -17 <= loudness(ElevenLabs(lambda: "key").speak("Hello"))[0] <= -15
+
+
+def test_every_committed_demo_clip_is_at_speech_loudness():
+    clips = sorted((ROOT / "docs/voice/audio").glob("*.mp3"))
+    assert clips
+    quiet = {}
+    for clip in clips:
+        integrated, peak = loudness(clip.read_bytes())
+        if not (-17 <= integrated <= -15 and peak <= -1.0):
+            quiet[clip.name] = (integrated, peak)
+    assert not quiet, f"Not at -16 LUFS: {quiet}"
 
 
 def test_without_configuration_every_survey_lacks_audio():

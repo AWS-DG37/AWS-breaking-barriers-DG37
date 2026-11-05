@@ -80,11 +80,14 @@ Review and verify that one-time setup separately; ordinary releases retain it.
 The handler never edits `explorer.env`, `database.env`, passwords, nginx, Basic auth,
 project identity, database service or existing volumes. It renders Compose as JSON
 (valid YAML) through the installed Docker Compose parser, keeping env-file
-references unexpanded. Only the explorer image, offline entrypoint and obsolete
-build/healthcheck settings change. It refuses extra compose services or any
-`mel-worker` container, including a stopped one. Operators must remove a worker
-container before delivery. The committed boot compose has only explorer/postgres;
-the explorer always starts explicitly with `--no-live`, including rollback.
+references unexpanded. Only the explorer image, execution entrypoint, stop grace
+period and obsolete
+build/healthcheck settings change. It refuses extra compose services, `mel-worker`
+containers (including stopped ones), stray integrated runners, and native queue
+workers. Operators resolve these inventories before delivery. The boot Compose
+has only explorer/postgres. Missing host policy means explicit `--no-live`;
+normal candidates honor retained live policy. Previous-image checks, rehearsal and
+recovery always use explicit offline arguments supported by the previous image.
 
 The existing explorer must already use host networking, without attached networks
 or published ports. Its effective `MEL_*` settings, resolved by Docker Compose, must
@@ -100,8 +103,10 @@ Workflow-level serialization has cancellation disabled. The CLI checks current
 main immediately before SSM dispatch. A host flock and atomically written
 `delivery-state.json` bind the highest admitted workflow sequence to its exact SHA
 and image digest, including failed attempts. An exact active replay verifies serving
-readiness and returns `ALREADY_DEPLOYED`; an exact failed or recovered release can
-retry. Lower sequences and same-sequence identity changes are refused.
+readiness and execution mode before
+returning `ALREADY_DEPLOYED`; a mode mismatch is reconciled through the transition
+journal. An exact failed or recovered release can retry. Lower sequences and
+same-sequence identity changes are refused.
 The workflow path is persisted: renaming the workflow requires an explicit operator
 state migration rather than quietly resetting the sequence. Replaying an older run
 cannot replace a newer release, even when that newer release rolled back.
@@ -124,7 +129,11 @@ and transition.
    Start the previous image from the rendered healthy Compose and prove readiness
    before taking a snapshot or migrating. Only then update the persisted boot
    snapshot and boot file to that proven healthy Compose.
-2. Stop the explorer; leave PostgreSQL running. Capture the migration ledger,
+2. Stop and wait for the explorer; leave PostgreSQL running. Verify Docker reports
+   it stopped, no scoped native/container runner remains, and no hosted queue lease
+   remains in this database, waiting up to five seconds for backend disconnect.
+   Perform the same stop proof before every replacement,
+   including stopping a candidate before rollback. Capture the migration ledger,
    original column names, counts and hashes of all existing public-table rows,
    and a root-readable SQL dump under a unique `backups/<sequence>-<sha>/attempt-*/` directory. Earlier dumps are retained.
 3. Restore a separate rehearsal database. Apply the candidate's packaged migrations
@@ -137,8 +146,10 @@ and transition.
 5. Explicitly call the candidate's `Store.initialize` against production, then verify
    the same preservation invariants before switching the application.
 6. Switch only the explorer, prove its actual image ID, DB connection, static page
-   and asset, unauthenticated health behavior, explicit offline arguments and worker
-   absence. Auth requires 401; without auth, health requires HTTP 200 with
+   and asset, unauthenticated health behavior, expected execution arguments and stray
+   worker absence. Live mode also requires complete Cognito settings and the advisory
+   lease owned by this exact container's PID 1 connection. Auth requires 401;
+   without auth, offline health requires HTTP 200 with
    `database == "connected"`. A 200 with an unavailable DB fails.
 7. Commit healthy compose and state. On an ordinary failure restore the prior image
    and healthy compose. On interruption, recover that saved compose before admitting
@@ -235,3 +246,140 @@ admission, journal recovery windows, rollback, malformed inputs and health seman
 they do not prove the actual EC2 rollout or real-data migration. Live rehearsal,
 Cognito sign-in, host recovery and deployed identity need independent target evidence
 before claiming end-to-end delivery.
+
+## Hosted queue opt-in and shutdown
+
+The host file `/opt/dg37/live-policy.json` contains one JSON boolean. A missing file
+means `false`. Malformed values, symlinks, a different owner, or group/world writable
+files refuse activation. The host handler runs as root and atomically writes this
+file under the existing delivery flock. It is outside the image, release tree and
+`delivery-state.json`; older handlers continue to read the existing state schema.
+Do not hand-edit the policy or Compose to enable execution.
+
+Install a healthy image containing `--run-jobs` while offline first. On the EC2 host,
+use the successfully activated handler and target under `/opt/dg37/delivery/current`.
+These are host-local operator commands, outside the fixed CI SSM deploy/status API.
+
+```sh
+sudo python3 /opt/dg37/delivery/current/handler.py host-mode --mode live \
+  --target /opt/dg37/delivery/current/target.json
+sudo python3 /opt/dg37/delivery/current/handler.py host-status \
+  --target /opt/dg37/delivery/current/target.json
+sudo python3 /opt/dg37/delivery/current/handler.py host-mode --mode offline \
+  --target /opt/dg37/delivery/current/target.json
+```
+
+Live opt-in validates complete Cognito authentication, absence of ECS dispatch,
+instance-role credentials obtained through IMDS, the expected account and existing
+workshop host role, and the current cap record. These checks make no inference call,
+add no IAM grant, and never alter the cap. An unset cap stays unset and existing cost
+guards refuse paid console jobs until an operator deliberately sets it.
+
+Initial opt-in brings the previous image up offline, checks that both queued and
+running job inventories are empty, and refuses any unexpected backlog without
+changing its rows or the policy. It uses the same snapshot, migration rehearsal,
+readiness and transition journal as a release, even for the same image. Host mode
+changes retain the highest admitted release identity and workflow sequence fence.
+An already authorized live restart may execute queued jobs. Running, failed and
+completed-with-errors rows are never automatically resumed or rewritten.
+
+Normal later CI candidates honor the retained boolean. Recovery always restores the
+previous image offline and preserves the desired policy. Status therefore reports
+`desired_mode`, `applied_mode` and `ready` separately. A desired-live/applied-offline
+result is a hold after recovery, not successful live activation. After checking the
+failure and outstanding rows, deliberately reconcile with `host-mode --mode live`,
+or select offline to revoke the policy. A subsequent successful release also
+reconciles retained live policy. Reboot starts the last committed Compose.
+
+`mel-explorer --run-jobs` starts one queue task in the authenticated API process with
+its own Store connection. Startup waits for initialization and a nonblocking exclusive
+session advisory lease. Its `application_name` includes this container hostname and
+PID; a lock held by another container cannot satisfy readiness. The task's return,
+exception or connection failure closes job admission and stops the actual Uvicorn
+server with a nonzero process result. Docker's existing restart policy restarts the
+whole application. There is no worker reconnect loop or automatic resume. Readiness
+proves initialization and owned connection, not provider execution or uninterrupted
+progress during a long model request.
+
+SIGTERM closes admission and requests cooperative stop before another claim. An
+in-flight threaded claim is awaited before Store closure; a committed claim observed
+after stop remains running without starting its provider. Existing active work gets
+a 25-second drain after the HTTP shutdown phase (bounded to five seconds), followed
+by one cancellation and awaited unwind. Existing cost accounting retains unknown
+request reservations and checkpoints. Docker stop uses a 40-second outer termination
+bound and Compose retains a 45-second stop grace period. A forced outer termination
+can leave running rows and unresolved reservations for explicit operator review.
+
+New offline normalization strips `--run-jobs`. If the older 426 handler retains that
+flag when normalizing a new image, the new CLI accepts both flags and gives
+`--no-live` precedence, so it starts no runner. No new flag is passed to an old image.
+The policy file adds no dependency to old-image rollback.
+
+## AgentCore code releases
+
+The same workflow checks an AgentCore CodeZip on a credentialless Linux ARM64
+Python 3.12 runner. `agents/requirements.lock` pins every transitive dependency and
+its allowed hashes; wheel-only installation rejects a source build. The package
+contains the runtime Python modules and skill prompts, schemas and reference
+examples. Workshop datasets, caches and local runtime state are excluded. The
+unpacked package imports the real entry point and exercises options and invalid
+rules input without model calls. Its embedded `release.json` records the tested
+commit. Only a main push or main dispatch uploads the tested artifact for release.
+
+`deploy/agentcore-target.json` records the existing runtime, execution role and
+versioned package bucket in account `047640882913`, `us-east-1`. No toolkit state or
+inherited account defaults are used. An operator applies
+`deploy/agentcore-policy.yaml` to the existing `dg37-main-deploy` role with those
+exact target values. The additive policy permits only that runtime's Get/Update,
+DEFAULT endpoint read and invocation, pass-role to its existing execution role,
+and package read/write under the declared S3 prefix. CI cannot create IAM roles or
+runtimes. The runtime execution role separately needs read access to that prefix.
+
+Before mutation, `deploy/agentcore.py` validates caller account, runtime identity,
+execution role, package revision and bucket versioning. Packages use
+`<prefix>/<commit>/<sha256>.zip`, conditional creation, SHA-256 checksums and a
+required non-null S3 version ID; retrying an existing package verifies its length,
+metadata and checksum before reusing that version. The update preserves the
+runtime's existing network, environment, protocol and other configuration. A
+fresh remote-main check immediately precedes the update. Superseded runs perform
+no runtime update. A same-package rerun verifies the running endpoint and returns
+`ALREADY_DEPLOYED` without another upload or runtime version. A runtime in
+`UPDATE_FAILED` is eligible for a fix-forward update after its underlying problem
+has been corrected, including when the tested package is unchanged. Other failed
+states and in-progress transitions are refused. The [UpdateAgentRuntime API](https://docs.aws.amazon.com/bedrock-agentcore-control/latest/APIReference/API_UpdateAgentRuntime.html)
+documents no READY-only prerequisite; the service remains the authority and any
+rejection exits nonzero. Failed-state recovery is covered at the client boundary,
+without deliberately breaking a live runtime to exercise the service.
+
+The release job allows 60 minutes for the aggregate agent, endpoint and console
+polling windows plus command overhead. Release logs record the prior runtime
+version before an update. The new version must become READY, match the exact versioned package, and be served by the READY
+DEFAULT endpoint. A new-session `options` invocation must return a successful
+application response. Any failed state, timeout or smoke exits nonzero and blocks
+console delivery. Prior runtime versions and immutable packages are retained for
+operator recovery; this does not claim an automatic rollback of DEFAULT after a
+failed smoke. AWS automatically advances DEFAULT to the new version on update
+([runtime versioning](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agent-runtime-versioning.html)).
+
+After this gate, the existing console release resolves its tested image digest,
+checks current main again and uses the existing fixed SSM document. Ordinary agent
+updates retain the runtime ARN, so the operator-owned `/opt/dg37/explorer.env`
+requires no change. Runtime provisioning, first-time environment configuration and
+behavior verification remain operator-owned actions.
+
+To refresh locked dependencies deliberately, run:
+
+```sh
+uv pip compile agents/requirements.txt --generate-hashes --python-version 3.12 \
+  --python-platform aarch64-manylinux2014 -o agents/requirements.lock
+```
+
+Review the dependency changes and let both workflow check jobs pass before main
+release. The console image and CodeZip must always come from that same tested SHA.
+
+## Public talk
+
+The team presentation is static files in `src/mel/explorer/talk/`, served without
+sign-in at `https://fieldecho.org/talk/`. To change it, edit those files and merge to
+`main`. The ordinary release ships it. Keep its links relative, because the page lives
+under `/talk/`.

@@ -54,12 +54,14 @@ so the console's Agents tab can tell prompt versions apart. Only compare rows wi
 AgentCore HTTP agent. `service.py` holds the model allowlist; the runtime's IAM role allows only those
 models. The deployed generator runs without the AWS MCP documentation tools, like the sweep.
 
+Main pushes automatically deploy the exact tested CodeZip through
+[Field Echo delivery](../docs/fieldecho-deployment.md#agentcore-code-releases).
+The existing runtime ARN, execution role and package bucket are recorded in
+[`deploy/agentcore-target.json`](../deploy/agentcore-target.json). Runtime provisioning
+and IAM changes remain operator-owned; ordinary updates go through the main workflow.
+
 ```bash
-# deploy or update (direct code deploy: no Docker; config in .bedrock_agentcore.yaml)
-.venv/bin/agentcore deploy --env AWS_REGION=us-east-1 --env MEL_CACHE_DIR=/tmp/mel-cache
-.venv/bin/agentcore status
-.venv/bin/agentcore invoke '{"action": "options"}'
-# local copy of the same entry point
+# local copy of the same entry point, from agents/
 PORT=8081 .venv/bin/python main.py
 ```
 
@@ -67,14 +69,16 @@ Payload: `{"insight": {...}, "generator": "...", "verifier": "...", "pipeline": 
 "max_retries": 0-2}`. Reply: `{"ok": true, "result": {...one sweep result...}}` or `{"ok": false, "error": ...}`.
 
 If you add a model to `service.GENERATORS`, also add it to the `BedrockModelInvocation` statement of the
-runtime role (`AmazonBedrockAgentCoreSDKRuntime-us-east-1-*`), then redeploy.
+execution role recorded in `deploy/agentcore-target.json`, then release through main.
 
 ### MEL console
 
 The console's **Agents** tab calls the deployed agent. Start it with:
 
 ```bash
-MEL_AGENT_RUNTIME_ARN=<agent arn from agentcore status> uv run mel-explorer --port 8765
+# From the repository root; read the managed nonsecret target.
+MEL_AGENT_RUNTIME_ARN="$(python3 -c 'import json; print(json.load(open("deploy/agentcore-target.json"))["runtime_arn"])')" \
+  uv run mel-explorer --port 8765
 ```
 
 Open `http://127.0.0.1:8765/#agents`, pick a golden insight and one or more generator models, and

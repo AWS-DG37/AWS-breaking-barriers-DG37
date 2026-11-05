@@ -8,6 +8,9 @@ The [architecture walkthrough](architecture-walkthrough.html) explains the flow.
 The [mac-mini handoff](handoffs/mac-mini-setup.md) preserves historical setup and
 visual direction; use this guide for the current commands and navigation.
 
+For teammate setup with your own AWS account and credits, follow
+[Run locally with your own workshop AWS account](local-bedrock.md).
+
 ## Start the recorded demo with Docker
 
 From the repository root, with a running Docker engine:

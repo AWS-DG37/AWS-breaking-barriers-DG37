@@ -13,8 +13,8 @@ from threading import Lock
 from typing import Annotated, Literal
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import Field, ValidationError, model_validator
 
@@ -256,11 +256,13 @@ def create_app(
     dispatcher=dispatch,
     auth_verifier=None,
     auth_exchange=None,
+    admission_check=None,
+    lifespan=None,
     agent_invoker=None,
 ) -> FastAPI:
     settings = settings or Settings()
     demo_path = demo_path or Path(__file__).parent / "demo" / "recorded-run.json"
-    app = FastAPI(title="FarmerChat MEL console")
+    app = FastAPI(title="FarmerChat MEL console", lifespan=lifespan)
     auth.install(app, settings, verifier=auth_verifier, exchange=auth_exchange)
     agent_runtime.install(app, settings, invoker=agent_invoker)
 
@@ -313,9 +315,16 @@ def create_app(
                 db.close()
             raise HTTPException(503, f"Database unavailable ({type(error).__name__})") from None
 
+    def require_live():
+        if not live_enabled:
+            raise HTTPException(403, "Live execution is disabled")
+        if admission_check is not None and not admission_check():
+            raise HTTPException(503, "Hosted job runner is unavailable")
+
     def queue(db, kind: str, spec: dict, job_id: str | None = None) -> dict:
         """Create a job and start its runner. A runner that cannot start fails the job,
         so nothing waits in the queue for a task that will never come."""
+        require_live()
         job = db.create_job(job_id or str(uuid4()), kind, spec)
         try:
             dispatcher(settings, job["job_id"])
@@ -348,13 +357,16 @@ def create_app(
             return {"status": "ok", "database": "unavailable", "detail": error.detail}
 
     @app.get("/api/config")
-    def configuration():
+    def configuration(request: Request):
         try:
-            config_id, _ = database_call(lambda db: active_config(db, settings))
+            read_only = getattr(request.state, "read_only", False)
+            config_id = database_call(
+                lambda db: db.active_config_id() if read_only else active_config(db, settings)[0]
+            )
             return {
                 "active_config_id": config_id,
                 "flow": FLOW,
-                "live_enabled": live_enabled,
+                "live_enabled": live_enabled and not read_only,
                 "allowed_models": [m.model_dump() for m in settings.allowed_models],
             }
         except HTTPException:
@@ -611,8 +623,7 @@ def create_app(
 
     @app.post("/api/jobs/batch", status_code=202)
     def start_batch(value: NewBatchJob):
-        if not live_enabled:
-            raise HTTPException(403, "Live execution is disabled")
+        require_live()
 
         def enqueue(db):
             spec = batch_spec(db, value)
@@ -701,8 +712,7 @@ def create_app(
     def start_improvement(list_id: UUID, value: NewImprovement):
         """Queue the improvement loop. The list's comments are frozen into its spec, so
         later edits to the list do not change a running or finished loop."""
-        if not live_enabled:
-            raise HTTPException(403, "Live execution is disabled")
+        require_live()
         allowed = {(m.model_id, m.api) for m in settings.allowed_models}
         if allowed and (value.improver.model_id, value.improver.api) not in allowed:
             raise HTTPException(422, "The improver model is not enabled for this deployment")
@@ -819,8 +829,7 @@ def create_app(
 
     @app.post("/api/experiments", status_code=202)
     def start_experiment(value: NewExperiment):
-        if not live_enabled:
-            raise HTTPException(403, "Live execution is disabled")
+        require_live()
         if (value.selection.limit or 51) > 50:
             raise HTTPException(422, "An experiment compares at most 50 insights")
 
@@ -884,6 +893,17 @@ def create_app(
             raise HTTPException(503, "Configured recorded artifact is unavailable")
         return {"experiment_id": database_call(lambda db: import_recorded(demo_path, db))}
 
+    # The public talk: sign-in guards only /api, so these pages need no session.
+    talk = Path(__file__).parent / "talk"
+    if talk.exists():
+
+        @app.get("/talk", include_in_schema=False)
+        def talk_root():
+            # Relative, so the redirect never names the origin host behind CloudFront.
+            return RedirectResponse("/talk/", status_code=307)
+
+        app.mount("/talk", StaticFiles(directory=talk, html=True), name="talk")
+
     static = Path(__file__).parent / "static"
     if static.exists():
         app.mount("/static", StaticFiles(directory=static), name="explorer-assets")
@@ -902,5 +922,13 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--no-live", action="store_true", help="Disable live model execution")
+    parser.add_argument("--run-jobs", action="store_true", help="Run the hosted job queue")
     args = parser.parse_args()
+    if args.run_jobs and not args.no_live:
+        import asyncio
+
+        from mel.explorer.hosted import serve
+
+        asyncio.run(serve(Settings(), host=args.host, port=args.port))
+        return
     uvicorn.run(create_app(live_enabled=not args.no_live), host=args.host, port=args.port)

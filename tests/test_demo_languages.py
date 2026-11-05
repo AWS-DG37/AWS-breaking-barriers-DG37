@@ -164,15 +164,16 @@ def test_console_demo_preserves_progress_and_cancels_previous_audio(demo_page):
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
     page.get_by_role("radio", name="हाँ", exact=True).check()
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     expect(page.get_by_role("radio", name="Yes", exact=True)).to_be_checked()
     page.get_by_role("button", name="Next", exact=True).click()
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
     page.get_by_role("button", name="Read aloud", exact=True).click()
     assert page.evaluate("window.spoken.at(-1).lang") == "en-IN"
     cancelled = page.evaluate("window.cancelled")
-    page.get_by_role("checkbox", name="English audio", exact=True).uncheck()
+    page.get_by_role("button", name="हिंदी", exact=True).click()
     assert page.evaluate("window.cancelled") > cancelled
+    assert page.evaluate("window.spoken.at(-1).lang") == "hi-IN"
+    page.get_by_role("button", name="English", exact=True).click()
     assert page.evaluate("window.session.question") == 1
     assert page.evaluate("window.session.answers") == {"q1": "yes"}
     expect(page.locator(".player-body h3")).to_have_text(
@@ -185,11 +186,7 @@ def test_unknown_survey_does_not_offer_an_incorrect_translation(demo_page):
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     survey["items"][0]["prompt"] = "नया सवाल"
     mount_console_player(page, base, survey)
-    expect(page.get_by_role("checkbox", name="English text", exact=True)).to_be_disabled()
-    expect(page.get_by_role("checkbox", name="English audio", exact=True)).to_be_disabled()
-    expect(page.get_by_text(
-        "English demo translation is unavailable for this survey."
-    )).to_be_visible()
+    expect(page.get_by_role("group", name="Survey language")).to_have_count(0)
     expect(page.locator(".player-body h3")).to_have_text("नया सवाल")
 
 
@@ -223,8 +220,7 @@ def test_console_can_read_the_completion_in_english(demo_page):
     page, base = demo_page
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
-    page.get_by_role("checkbox", name="English text", exact=True).check()
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("radio", name="Yes", exact=True).check()
     page.get_by_role("button", name="Next", exact=True).click()
     page.get_by_role("radio", name="Fewer", exact=True).check()
@@ -238,17 +234,16 @@ def test_console_follow_up_reaction_switches_language_with_the_answer(demo_page)
     page, base = demo_page
     survey = json.loads((ROOT / "docs/voice/generated" / GENERATED).read_text())
     mount_console_player(page, base, survey)
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("radio", name="Could not get the insecticide", exact=True).check()
     expect(page.locator(".player-hint")).to_contain_text("follow-up")
-    page.get_by_role("checkbox", name="English text", exact=True).uncheck()
+    page.get_by_role("button", name="हिंदी", exact=True).click()
     expect(page.locator(".player-hint")).to_contain_text("आगे संपर्क")
-    page.get_by_role("checkbox", name="English text", exact=True).check()
+    page.get_by_role("button", name="English", exact=True).click()
     page.get_by_role("button", name="Next", exact=True).click()
     page.get_by_role("radio", name="Fewer", exact=True).check()
     page.get_by_role("button", name="Finish", exact=True).click()
     expect(page.locator(".player-body")).to_contain_text("follow-up")
-    page.get_by_role("checkbox", name="English audio", exact=True).check()
     page.get_by_role("button", name="Read aloud", exact=True).click()
     assert "follow-up" in page.evaluate("window.spoken.at(-1).text")
     cancelled = page.evaluate("window.cancelled")
