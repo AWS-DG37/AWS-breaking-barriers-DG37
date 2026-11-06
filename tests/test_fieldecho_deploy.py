@@ -682,7 +682,11 @@ def test_main_release_artifacts_and_serialization_share_admission(event, ref, ad
     save, upload = workflow["jobs"]["check"]["steps"][-2:]
     assert "docker save" in save["run"]
     assert upload["uses"].startswith("actions/upload-artifact@")
-    for gate in (workflow["jobs"]["release"]["if"], save["if"], upload["if"]):
+    # The AWS account is gone: release also needs this repository variable to be switched on.
+    switch = "vars.FIELDECHO_AWS_DEPLOY == 'true' && "
+    release = workflow["jobs"]["release"]["if"]
+    assert release.startswith(switch)
+    for gate in (release.removeprefix(switch), save["if"], upload["if"]):
         assert workflow_expression(gate, event, ref) is admitted
     group = workflow_expression(workflow["concurrency"]["group"], event, ref)
     assert (group == "fieldecho-main") is admitted

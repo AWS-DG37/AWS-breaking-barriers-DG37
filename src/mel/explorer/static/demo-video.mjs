@@ -13,7 +13,7 @@ function build() {
   const bar = document.createElement('div');
   bar.className = 'demo-video-bar';
   const title = document.createElement('span');
-  title.textContent = 'FarmerChat follow-up survey agent · 2:17';
+  title.textContent = 'FarmerChat follow-up survey agent · 2:21';
   const close = document.createElement('button');
   close.type = 'button';
   close.textContent = 'Close';
@@ -25,7 +25,7 @@ function build() {
   // Focus the video instead, so Space pauses and plays it.
   video.autofocus = true;
   const note = document.createElement('p');
-  note.textContent = 'Recorded live on Amazon Bedrock with synthetic data. '
+  note.textContent = 'Recorded on Amazon Bedrock with synthetic data, built in 2 days at the AWS Breaking Barriers hackathon. '
     + 'Near the end, the survey is read aloud in Hindi and then in English.';
   box.append(bar, video, note);
   dialog.append(box);

@@ -111,7 +111,10 @@ jobs:
           path: /tmp/agentcore.zip
           retention-days: 1
   release:
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+    # The hackathon AWS account is gone, so this stays off unless the repository variable
+    # FIELDECHO_AWS_DEPLOY is 'true'. fieldecho.org is now a static snapshot; see
+    # scripts/build_static_talk.py. No workflow deploys to it.
+    if: vars.FIELDECHO_AWS_DEPLOY == 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
     needs: [check, agent-check]
     runs-on: ubuntu-24.04
     timeout-minutes: 60
