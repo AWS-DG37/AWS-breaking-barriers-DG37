@@ -1,0 +1,14 @@
+# The one-time fieldecho.org snapshot. No workflow uses this file; see
+# scripts/build_static_talk.py for the commands.
+name = "fieldecho"
+main = "range-worker.js"
+compatibility_date = "2026-11-01"
+routes = [
+  { pattern = "fieldecho.org", custom_domain = true },
+  { pattern = "www.fieldecho.org", custom_domain = true },
+]
+
+[assets]
+directory = "../../dist/talk-site"
+binding = "ASSETS"
+run_worker_first = ["/static/assets/*.mp4"]

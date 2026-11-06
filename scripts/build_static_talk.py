@@ -8,8 +8,7 @@ video instead (talk/demo-card.js).
 No workflow runs this, so commits never change the site. To publish a new snapshot by hand:
 
     uv run python scripts/build_static_talk.py dist/talk-site
-    npx wrangler deploy --name fieldecho --assets dist/talk-site \
-      --compatibility-date 2026-11-01 --domain fieldecho.org --domain www.fieldecho.org
+    npx wrangler deploy --config deploy/static-talk/wrangler.toml
 """
 
 import shutil
