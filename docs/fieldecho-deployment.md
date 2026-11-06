@@ -1,5 +1,11 @@
 # Field Echo delivery to the existing EC2 host
 
+**Retired after the hackathon.** The AWS account is gone, so the `release` job runs only when
+the repository variable `FIELDECHO_AWS_DEPLOY` is `true`. fieldecho.org is now a static snapshot
+of the talk deck and demo video on Cloudflare, deployed once by hand with
+`scripts/build_static_talk.py`. Commits to this repository do not change it. The rest of this
+document records how the hosted console was delivered during the event.
+
 A push or `workflow_dispatch` on `main` runs credentialless application checks,
 real PostgreSQL 16 tests, Node tests and a Chromium smoke of an amd64 image built
 from the complete checkout. Only those events on `refs/heads/main` can obtain AWS

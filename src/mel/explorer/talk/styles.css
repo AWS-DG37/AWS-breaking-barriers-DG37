@@ -234,6 +234,12 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   letter-spacing:.06em;text-transform:uppercase}
 .foot kbd{background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:var(--font)}
 .brand-mini{color:var(--g);font-weight:800}
+.foot-end{display:flex;align-items:center;gap:18px}
+.gh-link{color:var(--mut);text-decoration:none;white-space:nowrap}
+.gh-link:hover,.gh-link:focus-visible{color:var(--g)}
+.built{margin-top:clamp(12px,2vh,18px);color:var(--mut);font-size:.9rem}
+.credit{margin-top:clamp(10px,1.6vh,14px);color:var(--mut);font-size:.82rem;overflow-wrap:anywhere}
+.credit a{color:var(--g)}
 #dots{display:flex;gap:8px}
 #dots button{width:9px;height:9px;border-radius:50%;border:0;background:var(--line2);cursor:pointer;padding:0;
   transition:.4s var(--ease)}
@@ -308,7 +314,7 @@ h2{font-size:clamp(1.7rem,3.4vw,3.1rem);font-weight:900;line-height:1.07;letter-
   .byline{margin-left:0;margin-right:0;gap:6px 18px}
   .byline li+li::before{display:none}
   .wordmark{white-space:nowrap}
-  .demo-len,.demo-key{display:none}
+  .demo-len,.keys,.foot-end .brand-mini{display:none}
   .scene{padding:40px 22px}
 }
 @media(prefers-reduced-motion:reduce){
