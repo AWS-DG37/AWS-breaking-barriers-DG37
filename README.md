@@ -2,6 +2,20 @@
 
 Digital Green FarmerChat MEL Survey Agent, AWS Breaking Barriers 2026.
 
+Built in 2 days at the hackathon. See the talk and demo video at <https://fieldecho.org>.
+
+## License
+
+The team's work is under the [MIT License](LICENSE). These parts keep their own terms:
+
+- `docs/participant-pack/`: Digital Green's synthetic data pack and contracts.
+- `src/mel/explorer/static/assets/figtree-latin.woff2`: the Figtree font, under the
+  [SIL Open Font License](src/mel/explorer/static/assets/OFL.txt).
+- `src/mel/explorer/static/assets/mustard-field.webp` and its derivatives: Unsplash License,
+  see [PHOTOS.md](src/mel/explorer/static/assets/PHOTOS.md).
+- AWS service icons in `docs/assets/aws-icons/` and `src/mel/explorer/talk/aws-icons/`: AWS's
+  terms for its architecture icons.
+
 The [MEL Console](docs/explorer.md) generates surveys, browses saved runs, compares
 configuration versions and inspects recorded decisions and question evidence. Run it
 locally with Docker or deploy the authenticated console to AWS.
